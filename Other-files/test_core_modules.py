@@ -1,7 +1,9 @@
 """Compatibility and isolated regression tests for the extracted core code."""
 
+import datetime
 import json
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,6 +22,22 @@ class CoreImportsTests(unittest.TestCase):
         self.assertEqual(app.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
         self.assertEqual(app.ppms_scan_axis(1, 1, 0.1), (1,))
         self.assertEqual(app.lakeshore_ramp_seconds([0, 2, -1], 1), 5)
+
+    def test_legacy_json_log_uses_application_clock(self):
+        # The historical app datetime module is patchable, and the recorder
+        # must continue to use that same clock after moving to core.
+        class FixedClock(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.datetime(2026, 10, 18, 12, 34, 56, 789012)
+
+        fake = types.SimpleNamespace(datetime=FixedClock)
+        with mock.patch.object(app, "datetime_module", fake):
+            actual = json.loads(app.scan_log_line("point_saved", {"index": 1}))
+        direct = json.loads(scan_recording.scan_log_line("point_saved", {"index": 1},
+                                                       datetime_class=FixedClock))
+        self.assertEqual(actual, direct)
+        self.assertTrue(actual["timestamp"].startswith("2026-10-18T12:34:56.789"))
 
     def test_file_name_rule_shared(self):
         self.assertEqual(app.scan_file_stem(" B1.csv "), "B1")

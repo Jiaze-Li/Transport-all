@@ -53,11 +53,16 @@ def make_scan_run_folder(parent: Path, stem: str) -> Path:
         return directory
 
 
-def scan_log_line(name: str, details: dict) -> str:
-    """One line of a scan's run log, JSON: {timestamp, event, ...details};
-    STFMR's format, shared by every ScanRunRecorder (2026-10-18)."""
+def scan_log_line(name: str, details: dict, *, datetime_class=None) -> str:
+    """One JSON log record. Optionally use the caller's clock for compatibility.
+
+    The original application allows tests to replace app.datetime_module.
+    Its legacy wrapper passes that clock here; standalone core users default
+    to Python's normal datetime.datetime.
+    """
+    clock = datetime_class if datetime_class is not None else datetime_module.datetime
     record = {
-        "timestamp": datetime_module.datetime.now().astimezone().isoformat(timespec="milliseconds"),
+        "timestamp": clock.now().astimezone().isoformat(timespec="milliseconds"),
         "event": name,
         **details,
     }

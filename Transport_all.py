@@ -15911,8 +15911,8 @@ def make_scan_run_folder(parent: Path, stem: str) -> Path:
 
 
 def scan_log_line(name: str, details: dict) -> str:
-    """Legacy API for JSON-line event formatting."""
-    return _scan_log_line(name, details)
+    """Legacy API: preserve the application clock, including test overrides."""
+    return _scan_log_line(name, details, datetime_class=datetime_module.datetime)
 
 
 # How every scan page saves and ends a run: PPMS, SHV, ST-FMR, FMR, Non-local
