@@ -67,3 +67,27 @@ def build_round_trip_values(
     if len(cycle) > max_total_points:
         raise ValueError(too_many_message)
     return [float(value) for value in cycle]
+
+
+def ppms_scan_axis(start, end, step):
+    start, end, step = float(start), float(end), abs(float(step))
+    if not all(math.isfinite(v) for v in (start, end, step)) or step <= 0:
+        raise ValueError("Scan range must be finite and the step must be greater than 0")
+    # 1e-9: (0.4 - 0.1) / 0.1 is 3.0000000000000004, which repeated the end.
+    count = int(math.ceil(abs(end-start)/step - 1e-9))
+    if count > 10000:
+        raise ValueError("A single-axis scan allows at most 10001 points")
+    direction = 1 if end >= start else -1
+    return tuple(start + direction*step*i for i in range(count)) + (end,)
+
+
+def lakeshore_ramp_seconds(currents, rate_a_s) -> float:
+    """The ramping time of the setpoints ``currents`` (A), in order, at
+    ``rate_a_s``: sum |dI| / rate.  The Yes/No time estimates add it."""
+    values = [float(value) for value in currents]
+    rate = float(rate_a_s)
+    if not math.isfinite(rate) or rate <= 0 or len(values) < 2:
+        return 0.0
+    return sum(abs(b - a) for a, b in zip(values, values[1:])) / rate
+
+
