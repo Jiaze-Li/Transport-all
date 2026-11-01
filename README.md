@@ -115,6 +115,7 @@ Default VISA addresses are set in the code and editable in the interface.
 | Path | Contents |
 | --- | --- |
 | `Transport_all.py` | The application |
+| `transport/core/scan_sequences.py` | Pure scan sequence builder (re-exported by `Transport_all.py` for existing callers) |
 | `Other-files/test*.py`, `Other-files/test/` | Offline regression tests |
 | `Other-files/README.md` | Dated change log, newest first |
 | `Other-files/docs/` | Generated user manual |
