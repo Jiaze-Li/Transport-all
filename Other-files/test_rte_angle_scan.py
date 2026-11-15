@@ -1591,6 +1591,8 @@ class AngleStartTests(unittest.TestCase):
         self.assertEqual([p[2] for p in args[2]], [0., 5., 10., 5., 0.])
         self.assertEqual((args[4], args[7]), (5., 1.5), "voltage limit, then the held KEPCO current")
         self.assertEqual(run.panel.ppms_plot_axis, "angle")
+        # The plots' x axis is the scan's own range (user, 2026-11-15).
+        self.assertEqual(run.panel.ppms_plot_angle_range, (0., 10.))
         self.assertFalse(run.panel.rte_stage_stop_event.is_set(), "an old Stop stage does not stop the new scan")
         # Without "stage turns sample and wires" (the Yes/No says it): the full
         # line did not fit the status label on the CI (user, 2026-10-13).
@@ -1821,9 +1823,12 @@ class AnglePageTests(unittest.TestCase):
         panel.ppms_field_scan_rows = [
             {"loop": 1, "stage_angle_deg": 0., "measured_field_g": 100., "6221_current_rms_ma": .1, "sr830_8_x_v": 1.},
             {"loop": 1, "stage_angle_deg": 5., "measured_field_g": 101., "6221_current_rms_ma": .1, "sr830_8_x_v": 2.}]
-        for axis, label, xs in (("angle", "Sample angle (°)", [0., 5.]),
-                                ("field", "Measured magnetic field (G)", [100., 101.]),
-                                ("current", "Applied AC current (mA RMS)", [.1, .1])):
+        # The scan's angle range, kept at Start: the angle axis spans it
+        # (user, 2026-11-15); the other axes do not get it.
+        panel.ppms_plot_angle_range = (-360., 0.)
+        for axis, label, xs, limits in (("angle", "Sample angle (°)", [0., 5.], (-360., 0.)),
+                                        ("field", "Measured magnetic field (G)", [100., 101.], None),
+                                        ("current", "Applied AC current (mA RMS)", [.1, .1], None)):
             with self.subTest(axis=axis):
                 panel.ppms_plot_axis = axis
                 panel._draw_nonlocal_series.reset_mock()
@@ -1832,6 +1837,7 @@ class AnglePageTests(unittest.TestCase):
                 self.assertIs(drawn, canvas)
                 self.assertEqual(x_label, label)
                 self.assertEqual([x for x, _y in series["SR830-1 P1 L1"]], xs)
+                self.assertEqual(panel._draw_nonlocal_series.call_args.kwargs["angle_x_range"], limits)
 
     def test_the_ppms_page_has_no_angle_stage(self):
         source = inspect.getsource(app.PPMSPanel)

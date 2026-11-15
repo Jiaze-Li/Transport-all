@@ -233,6 +233,16 @@ picture is saved and the run log's `plot_snapshots` entry says why; the CSV
 and the log are not affected. The CIDWM pulse scan has no axis plot and
 saves camera images instead.
 
+**Angle scans.** The plots of an angle scan (SHV: Angle, Angle+Field,
+Angle+Current; PPMS: Angle, Angle+Temperature, Angle+Field) span exactly the
+scan's own angles from the first point on, with ticks at round angles: a
+scan from 0° to 360° is drawn on 0 to 360 with a tick every 90°, one from 0°
+to −360° on −360 to 0 (since 2026-11-15; the limits were rounded out to the
+tick step, so −360 to 0 was drawn on −400 to 0, and they grew with the
+points). The angles are shown as the stage or rotator reports them, and a
+point read back a little outside the range widens the axis rather than
+being left off.
+
 **Choosing a folder.** Every folder choice (a run's folder, an image folder)
 opens the program's own folder window (since 2026-11-15; it was Tk's, which
 could only choose). It lists the folders of the Directory shown; a

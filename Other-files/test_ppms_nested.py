@@ -148,10 +148,14 @@ class NestedTests(unittest.TestCase):
         obj.ppms_field_scan_rows = [dict(sr830_8_r_v=2, sr830_8_x_v=1, sr830_8_y_v=2,
             measured_angle_deg=angle, temperature_index=ti, target_temperature_k=temp)
             for ti, temp in ((1, 300), (2, 290)) for angle in (-5, 0)]
-        calls = []
-        obj._draw_nonlocal_series = lambda *args, **kwargs: calls.append(args)
+        # The scan's angles, kept at Start: the x axis spans them (user,
+        # 2026-11-15).
+        obj.ppms_plot_angle_range = (-5, 355)
+        calls, options = [], []
+        obj._draw_nonlocal_series = lambda *args, **kwargs: (calls.append(args), options.append(kwargs))
         obj._redraw_ppms_transport_plot()
         series = calls[-1][1]
+        self.assertEqual(options[-1].get("angle_x_range"), (-5, 355))
         self.assertEqual(len(series), 4)  # Two temperatures, X/Y each.
         self.assertTrue(all(len(points) == 2 for points in series.values()))
         self.assertTrue(any('300 K' in name for name in series))

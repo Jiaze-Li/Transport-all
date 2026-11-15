@@ -171,6 +171,7 @@ class ModeTests(unittest.TestCase):
     def test_temperature_field_launch(self):
         obj, sequence, settings = self.launch("Field+Temperature", (-100, 100, 100))
         self.assertEqual(obj.ppms_plot_axis, "field")
+        self.assertIsNone(obj.ppms_plot_angle_range, "only an angle axis gets the scan's range")
         self.assertEqual(obj.ppms_field_scan_total, 15)
         self.assertEqual([point[3] for point in sequence], [-100, 0, 100, 0, -100])
         self.assertEqual(settings["nested"]["temperature"], (300, 295, 290))
@@ -180,6 +181,7 @@ class ModeTests(unittest.TestCase):
     def test_temperature_outer_angle_launch(self):
         obj, sequence, settings = self.launch("Angle+Temperature", (-5, 355, 5))
         self.assertEqual(obj.ppms_plot_axis, "angle")
+        self.assertEqual(obj.ppms_plot_angle_range, (-5, 355), "the plots' x axis (user, 2026-11-15)")
         self.assertEqual(obj.ppms_field_scan_total, 73 * 3)
         self.assertEqual([p[3] for p in sequence], [100])
         self.assertEqual(settings["nested"]["temperature"], (300, 295, 290))

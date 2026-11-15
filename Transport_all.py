@@ -8726,6 +8726,30 @@ def nice_magnitude_ticks(values, target_intervals: int = 6):
     return 0.0, axis_max, non_negative_ticks, step
 
 
+def angle_axis_ticks(low: float, high: float):
+    """An angle axis over exactly low..high degrees, an angle scan's own
+    range (user, 2026-11-15: "when scan angle, can the xlim auto set to
+    0-360?"; a -360..0 scan was drawn on -400..0, the limits rounded out
+    to the tick step).  The ticks are at round angles inside it: every 90
+    for a full turn, 30 for a half, 15 for a quarter.  Returns what
+    nice_linear_ticks returns: (axis_min, axis_max, ticks, step)."""
+    low, high = float(low), float(high)
+    if low > high:
+        low, high = high, low
+    span = high - low
+    if not math.isfinite(span) or span <= 0.0:
+        return nice_linear_ticks(low, high)
+    if span >= 4.0:
+        step = next((step for step in (1, 2, 5, 10, 15, 30, 45, 90, 180) if span / step <= 6), 360)
+        epsilon = step * 1e-9
+        ticks = [float(index * step) for index in range(math.ceil((low - epsilon) / step),
+                                                         math.floor((high + epsilon) / step) + 1)]
+        if len(ticks) >= 2:
+            return low, high, ticks, float(step)
+    # A few degrees only: the usual round steps, between the same limits.
+    return nice_linear_ticks(low, high, expand_limits=False)
+
+
 def format_nice_tick(value: float, step: float) -> str:
     if abs(value) < abs(step) * 1e-9:
         return "0"
@@ -42206,7 +42230,10 @@ class CombinedControlApp:
         marker_radius=3.0,
         series_markers=None,
         symmetric_x_extent=None,
+        angle_x_range=None,
     ) -> None:
+        # angle_x_range: an angle scan's (lowest, highest) angle; the x axis
+        # then spans exactly that, from the first point on (angle_axis_ticks).
         canvas.delete("all")
         width = max(canvas.winfo_width(), 330)
         # The two-row layout may shrink each canvas below its requested
@@ -42288,6 +42315,11 @@ class CombinedControlApp:
             extent = max(abs(float(symmetric_x_extent)), max(abs(x) for x in xs))
             extent = extent if extent > 0 else 1.0
             x_min, x_max, x_ticks, x_tick_step = nice_linear_ticks(-extent, extent)
+        elif angle_x_range is not None and float(angle_x_range[0]) != float(angle_x_range[1]):
+            # Wider only for a point outside the range (a read-back a little
+            # off its target): no point is ever left off the plot.
+            x_min, x_max, x_ticks, x_tick_step = angle_axis_ticks(
+                min(float(min(angle_x_range)), min(xs)), max(float(max(angle_x_range)), max(xs)))
         else:
             x_min, x_max, x_ticks, x_tick_step = nice_linear_ticks(min(xs), max(xs))
         y_min, y_max, y_ticks, y_tick_step = nice_linear_ticks(
@@ -49541,6 +49573,7 @@ class CombinedControlApp:
                     "Phase θ (°)" if channel == "theta" else f"{channel.upper()} voltage",
                     "Waiting for scan data", markers=True, auto_voltage_unit=channel != "theta",
                     symmetric_x_extent=x_extent,
+                    angle_x_range=self.__dict__.get("ppms_plot_angle_range") if axis == "angle" else None,
                     show_legend=False, color_override=None if temperature_colors else base_color,
                     series_colors=temperature_colors, series_labels={name: name.split(" | ")[-1] for name in selected})
             return
@@ -49552,6 +49585,7 @@ class CombinedControlApp:
             "Connect the PPMS, the 6221 and at least one SR830 at address 8/9/10",
             markers=True,
             auto_voltage_unit=True,
+            angle_x_range=self.__dict__.get("ppms_plot_angle_range") if axis == "angle" else None,
         )
 
     @staticmethod
@@ -50917,6 +50951,9 @@ class CombinedControlApp:
         self.ppms_active_scan_mode = mode
         self.ppms_plot_addresses = dict(zip(active_lockins, addresses))
         self.ppms_plot_axis = PPMS_SCAN_PLOT_AXES[mode]
+        # An angle scan's plots span its own angles (user, 2026-11-15).
+        self.ppms_plot_angle_range = (
+            (min(nested["angle"]), max(nested["angle"])) if self.ppms_plot_axis == "angle" else None)
         self.ppms_field_scan_rows = []
         self._redraw_ppms_transport_plot()
         self.ppms_field_scan_started_at = time.monotonic()
@@ -55167,6 +55204,7 @@ class PPMSPanel(CombinedControlApp):
                     # No in-plot legend: the frame title names the meters and the
                     # markers (filled SR830, open Zurich) tell the series apart.
                     symmetric_x_extent=x_extent, show_legend=False,
+                    angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     series_colors=colors[channel], series_labels=labels[channel],
                     series_markers=markers[channel])
 
@@ -58787,6 +58825,9 @@ class RTEPanel(PPMSPanel):
             self.ppms_field_scan_running = True
             self.ppms_active_scan_mode = mode
             self.ppms_plot_axis = 'field' if mode == 'Field' else 'angle' if angle else 'current'
+            # An angle scan's plots span its own stage angles (user, 2026-11-15).
+            self.ppms_plot_angle_range = ((min(p[2] for p in plan), max(p[2] for p in plan))
+                                          if angle else None)
             self.ppms_plot_addresses = {key: self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name) for key in settings['active_lockins']}
             self.ppms_field_scan_rows = []
             self.ppms_field_scan_total = per_pass * len(passes)
@@ -59674,6 +59715,7 @@ class RTEPanel(PPMSPanel):
                     'Phase (degrees)' if channel == 'theta' else channel.upper() + ' voltage',
                     'Waiting for scan data', markers=True, auto_voltage_unit=channel != 'theta',
                     show_legend=False, series_colors=colors[channel], series_markers=markers[channel],
+                    angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     **({'series_labels': labels[channel]} if labels[channel] else {}))
 
     def save_ppms_field_scan_csv(self):

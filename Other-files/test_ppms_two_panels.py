@@ -606,6 +606,7 @@ class TwoPanelTests(unittest.TestCase):
         for key in ('830_a', '830_b', '830_c'):
             panel.ppms_lockin_selection[key].set(False)
         panel.ppms_plot_axis = 'angle'
+        panel.ppms_plot_angle_range = (0., 360.)
         panel.ppms_field_scan_rows = [dict(measured_angle_deg=30, temperature_index=1,
             zurich_x_v=1e-6, zurich_y_v=-2e-6, zurich_theta_deg=-63, zurich_r_v=2.2e-6)]
         panel._draw_nonlocal_series = Mock()
@@ -614,6 +615,14 @@ class TwoPanelTests(unittest.TestCase):
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         self.assertEqual(len(drawn), 3)
         self.assertEqual(list(drawn[0].args[1].values()), [[(30., 1e-6)]])
+        # The angle axis spans the scan's angles (user, 2026-11-15).
+        self.assertEqual([c.kwargs['angle_x_range'] for c in drawn], [(0., 360.)] * 3)
+        panel.ppms_plot_axis = 'field'
+        panel._draw_nonlocal_series.reset_mock()
+        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
+            panel._redraw_ppms_transport_plot()
+        self.assertEqual({c.kwargs['angle_x_range'] for c in panel._draw_nonlocal_series.call_args_list}, {None})
+        panel.ppms_plot_axis = 'angle'
         panel.ppms_harmonic_plot_frames = {key: Mock() for key in panel.ppms_harmonic_plot_frames}
         panel._display_zurich_sample(dict(X=1, Y=2, R=3, phase_deg=4,
             reference_frequency_hz=317.3, reference_valid=True, status_text='OK'))

@@ -1,5 +1,26 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## An angle scan's plots span the scan's own angles (user, 2026-11-15)
+
+- **Request:** "when scan angle, can the xlim auto set to 0-360?", with a picture of an SHV Angle+Current scan from
+  0 to -360 deg drawn on -400 to 0.
+- **Cause:** every plot's x limits came from the points so far, rounded out to the tick step
+  (`nice_linear_ticks`): 360 deg in 100 deg ticks gives -400 to 0, and the axis grew while the scan ran.
+- **Now** an angle scan keeps its range at Start (`ppms_plot_angle_range`: the lowest and highest angle of SHV's
+  stage plan, or of PPMS's rotator angles) and its plots are drawn on exactly that (`_draw_nonlocal_series`,
+  `angle_x_range`), from the first point on. The ticks are at round angles inside the range (`angle_axis_ticks`):
+  every 90 deg for a full turn, 30 for a half, 15 for a quarter; a range of a few degrees keeps the usual steps.
+- **What "0-360" means here:** the scan's own range. A scan typed as 0 to 360 is drawn on 0 to 360; the SHV page's
+  default, 0 to -360, on -360 to 0. The angles stay as the stage or rotator reports them (the CSV's
+  `stage_angle_deg` / `measured_angle_deg`); nothing is folded or mirrored.
+- **Never clipped:** a point outside the range (PPMS's measured angle a little off its target) widens the axis.
+  A scan of one angle, and every axis that is not an angle, is drawn as before.
+- **Pages:** SHV (Angle, Angle+Field, Angle+Current) and PPMS (Angle, Angle+Temperature, Angle+Field), in the
+  harmonic rows and the PPMS page's own plots. ST-FMR's angle scans plot against the field and are unchanged.
+- **Tests:** `test_angle_plot_xlim.py` (the ticks and the drawn axis), and the kept range and its hand-over in
+  `test_rte_angle_scan`, `test_ppms_angle_field`, `test_ppms_simple_modes`, `test_ppms_two_panels` and
+  `test_ppms_nested`.
+
 ## A connected SR830 shows X and Y (user, 2026-11-15)
 
 - **Request:** "when the SR830 connect, it should display X and Y in its font panel instead of R and theta".

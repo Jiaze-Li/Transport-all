@@ -273,6 +273,8 @@ class StartTests(unittest.TestCase):
         self.assertEqual(settings["currents"], (1.0,))
         self.assertEqual(page.ppms_field_scan_total, 9)
         self.assertEqual(page.ppms_plot_axis, "angle")
+        # The plots' x axis is the scan's own angles (user, 2026-11-15).
+        self.assertEqual(page.ppms_plot_angle_range, (0.0, 10.0))
         self.assertEqual(page.ppms_active_scan_mode, "Angle+Field")
         self.assertTrue(page.ppms_field_scan_status_var.get().startswith(
             "Angle+Field scan: 3 fields x 3 angles; 9 points, settle 1 s; estimated about "))
