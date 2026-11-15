@@ -1,5 +1,46 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## The folder window can make, rename and delete folders (user, 2026-11-15)
+
+- **Request** ("can you make the file folder in our program editable? e.g. delete folder, rename folder and create
+  folder", with a picture of the SHV live CSV folder dialog). That dialog was Tk's own (`tk_chooseDirectory`, used
+  since 2026-10-12 for its English text), which can only choose.
+- **The program's own dialog** (`EditableFolderDialog`, opened by `editable_folder_dialog`): `use_english_tk_dialogs`
+  puts it in place of `tkinter.filedialog.askdirectory`, so all seven folder choices of the main program and those
+  of `MS-fourState.py` and `Test_Microwave_NH_dev.py` (copied by the tool) open it. Tk's own stays behind it for a
+  parent that is not a Tk window and for a failure building the dialog.
+  - Directory (a box with the folders above and the drives), "Up", the list of folders in Tk's order (SRO2 before
+    SRO14; hidden ones left out), Selection, OK / Cancel, and New folder / Rename / Delete for the folder picked in
+    the list (F2 and Del in the list). The result is as Tk's: "/" between the parts, "" when cancelled.
+  - With no folder named by the caller it opens where the last one was, as Tk's did; a folder that is gone
+    (renamed, deleted) opens at the nearest one above it.
+  - A typed Selection that does not exist: refused with `mustexist`, else "Make it?".
+- **The file operations** are plain functions, tested without a window: `make_subfolder`, `rename_subfolder`
+  (never onto a name that is there; a change of capitals only is allowed), `folder_delete_question` (what will be
+  done and the question) and `delete_subfolder`.
+- **Delete never loses data by the program's own doing.** An empty folder: `os.rmdir`. Anything else:
+  `SHFileOperationW` with `FOF_ALLOWUNDO` (the Recycle Bin), after the checks of `recycle_bin_refusal`: a fixed
+  local drive with a bin (`GetDriveTypeW`, `SHQueryRecycleBinW`), the bin not switched off (`NukeOnDelete`, the
+  `NoRecycleFiles` policy) and the folder under 90 % of the bin's size (`MaxCapacity`, or 5 % of the drive when
+  never set). `FOF_WANTNUKEWARNING` stays as a last net (Windows itself asks before deleting for good), and after
+  the move the bin's item count must have risen, or the dialog says that Windows may have deleted it for good.
+- **Running scans.** `ScanRunRecorder` keeps its open runs (`_OPEN_SCAN_RUNS`, weak) and the MOKE magnet and
+  MOKE-24 scans add their image-session folder (`also_saves_into`). A folder a scan is saving into, or one above
+  it, is not renamed or deleted (compared by real path), and while any run is open no folder with data is deleted.
+- **From the review, before it shipped:** the bin checks above (a folder larger than the bin, or a bin switched
+  off, would have been deleted for good after Windows' own question); no data delete while a scan runs (Windows
+  moves the folder on the Tk thread, which a scan's steps need); the image-session folders; real paths; a folder
+  that could not be read was called empty (now refused, as is a link inside it and more than
+  `FOLDER_DIALOG_COUNT_LIMIT` entries); a name ending in a dot or space is left alone on Windows; the dialog
+  destroyed from outside left `show()` waiting for ever; the focus goes back to the list after a prompt.
+- **Not changed:** the save-as and open-file dialogs (Tk's own). MS-fourState cannot open a folder dialog during
+  a run, so it needs no guard of its own.
+- **Tests:** `test_folder_dialog.py` (`FolderRuleTests` without a window; `RecycleBinTests` on Windows only, a
+  real folder into the real Recycle Bin; `FolderDialogWindowTests` with the real dialog, including the real name
+  prompt and Yes/No box) and one in `test_moke_cidwm_runs.py` (the image folder held).
+- **Not tested on the lab PC.** The Recycle Bin path runs on GitHub's Windows machine only; try Delete first on a
+  folder that does not matter.
+
 ## Set field keeps regulating, and stops when the field does not respond (user, 2026-11-14)
 
 - **Holding** (user: "keep regulating the field after it reaches the target"). Set field on FMR, SHV and ST-FMR no

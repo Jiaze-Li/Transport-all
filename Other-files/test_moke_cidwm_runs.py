@@ -317,6 +317,28 @@ class MagnetStartTests(Folder):
         self.assertRegex(recorder.directory.name, r"^MOKE_\d{8}_\d{6}$")
         self.assertEqual(log_events(recorder)[0]["event"], "run_prepared")
 
+    def test_the_scan_images_folder_is_held_while_the_scan_saves(self):
+        """2026-11-15: the folder dialog can rename and delete folders; the
+        images' folder of a running scan is left alone, as its run folder."""
+        a = self.stand_in()
+        a.magnet_save_images_var = Var(True)
+        a.magnet_image_directory = self.folder / "images"
+        a.create_scan_image_session = C.create_scan_image_session
+        with mock.patch.object(app.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(app.filedialog, "askdirectory", return_value=str(self.folder)), \
+                mock.patch.object(app.simpledialog, "askstring", return_value=""):
+            C.start_magnet_scan(a)
+        recorder = a.magnet_scan_recorder
+        self.addCleanup(recorder.close, "test")
+        session = a.magnet_scan_image_session_dir
+        self.assertTrue(session.is_dir())
+        self.assertEqual(recorder.other_folders, [session])
+        self.assertEqual(app.scan_run_using_folder(self.folder / "images"), session)
+        with self.assertRaisesRegex(ValueError, "A running scan is saving into"):
+            app.rename_subfolder(session, "renamed")
+        recorder.close("completed")
+        self.assertIsNone(app.scan_run_using_folder(self.folder / "images"))
+
     def test_the_next_start_opens_beside_the_last_run(self):
         self.assertEqual(C._scan_run_parent(self.folder / "MOKE_1", "x"), self.folder)
         self.assertEqual(C._scan_run_parent(None, self.folder), self.folder)

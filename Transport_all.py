@@ -17,6 +17,7 @@ import traceback
 import threading
 import time
 import tkinter as tk
+import weakref
 from contextlib import contextmanager
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -225,12 +226,812 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
     return value
 
 
+# The folder dialog (user, 2026-11-15: "make the file folder in our program
+# editable? e.g. delete folder, rename folder and create folder").  Tk's own
+# folder dialog, used for its English text, can only choose a folder, so
+# every folder choice in the program (filedialog.askdirectory) opens the
+# program's own dialog instead: the same Directory / list / Selection / OK /
+# Cancel, plus New folder, Rename and Delete for the folder picked in the
+# list.  The rules, for the data's sake:
+# - A name must be a valid Windows folder name, and never one that is taken.
+# - Delete asks first (No is the default) and says what the folder holds.
+#   An empty folder is removed; one that holds anything goes to the Windows
+#   Recycle Bin, where it can be restored.  The program itself never deletes
+#   data for good, so a folder with data is refused where Windows would not
+#   recycle it (review, 2026-11-15): no Recycle Bin for its drive (a network
+#   or removable drive, or not Windows), the bin switched off, the folder
+#   larger than the bin, more in it than is counted here, or a part of it
+#   that cannot be read or is a link.  Such a folder is for the Explorer.
+# - A folder that a running scan is saving into (or one above it) is not
+#   renamed or deleted: the scan writes each point by the folder's path.
+#   While any scan runs, no folder with data is deleted at all: Windows
+#   moves it on the Tk thread, which the scan's steps need.
+# - A link to another folder is not deleted here.
+FOLDER_DIALOG_NAME_RULE = "Use a valid Windows folder name without a path."
+# Counting what a folder holds stops here, so the question never waits long.
+FOLDER_DIALOG_COUNT_LIMIT = 20000
+# The scans' open run recorders (ScanRunRecorder adds itself), held weakly.
+_OPEN_SCAN_RUNS = weakref.WeakSet()
+# The directory the dialog last showed: where the next one opens when its
+# caller names no folder, as Tk's own dialog did.
+_FOLDER_DIALOG_LAST_DIRECTORY = ""
+# tkinter.filedialog's own askdirectory, kept for a parent that is not a Tk
+# window (a stand-in in the tests) and for a failure building the dialog.
+_NATIVE_ASK_DIRECTORY = None
+
+
+def folder_name_problem(name: str) -> str:
+    """Why the typed folder name cannot be used; "" when it can."""
+    text = str(name)
+    if not text.strip():
+        return "Type a name."
+    # A leading dot: the list leaves such folders out.
+    if (text != text.strip() or text.startswith(".") or text.endswith(".") or len(text) > 255
+            or re.search(r'[<>:"/\\|?*\x00-\x1f]', text)
+            or text.split(".")[0].upper() in WINDOWS_RESERVED_FILE_NAMES):
+        return FOLDER_DIALOG_NAME_RULE
+    return ""
+
+
+def folder_name_sort_key(name: str) -> list:
+    """SRO2 before SRO14, and no difference between capitals and small
+    letters: the order of Tk's own folder dialog."""
+    return [(0, int(part), "") if part.isdigit() else (1, 0, part.casefold())
+            for part in re.split(r"(\d+)", str(name)) if part]
+
+
+def list_subfolders(directory) -> list[str]:
+    """The names of the folders in directory, in the dialog's order.  Hidden
+    ones (a leading dot, or hidden on Windows) are left out.  OSError when
+    the directory cannot be read."""
+    names = []
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            try:
+                if entry.name.startswith(".") or not entry.is_dir():
+                    continue
+                if getattr(entry.stat(follow_symlinks=False), "st_file_attributes", 0) & 0x2:
+                    continue
+            except OSError:
+                continue
+            names.append(entry.name)
+    return sorted(names, key=folder_name_sort_key)
+
+
+def _folder_key(path) -> str:
+    # The real path: the same folder through a link, a junction, a mapped
+    # drive or a short Windows name is the same folder (review, 2026-11-15).
+    return os.path.normcase(os.path.realpath(str(path)))
+
+
+def open_scan_runs() -> list:
+    """The recorders of the scans that are saving now."""
+    return [recorder for recorder in list(_OPEN_SCAN_RUNS) if not getattr(recorder, "closed", True)]
+
+
+def scan_run_using_folder(folder) -> Path | None:
+    """The folder a scan is still saving into, when that is folder itself or
+    one inside it (its run folder, or its images' folder); else None."""
+    target = _folder_key(folder)
+    for recorder in open_scan_runs():
+        for used in (recorder.directory, *getattr(recorder, "other_folders", ())):
+            key = _folder_key(used)
+            if key == target or key.startswith(target.rstrip("\\/") + os.sep):
+                return Path(used)
+    return None
+
+
+def folder_is_link(folder) -> bool:
+    """A symbolic link or a Windows junction: another folder under this name."""
+    try:
+        if os.path.islink(folder):
+            return True
+        return getattr(os.lstat(folder), "st_reparse_tag", 0) in (0xA000000C, 0xA0000003)
+    except OSError:
+        return False
+
+
+def folder_contents(folder, limit: int | None = None) -> tuple[int, int, int, bool]:
+    """(files, folders, bytes, all of it counted) of everything in folder.
+    Not all of it: the count stopped after ``limit`` entries
+    (FOLDER_DIALOG_COUNT_LIMIT by default), a part could not be read, or a
+    folder in it is a link to another folder (not entered)."""
+    if limit is None:
+        limit = FOLDER_DIALOG_COUNT_LIMIT
+    files = folders = size = 0
+    unread = []
+    for root, directory_names, file_names in os.walk(folder, onerror=unread.append):
+        folders += len(directory_names)
+        for name in list(directory_names):
+            if folder_is_link(os.path.join(root, name)):
+                directory_names.remove(name)
+                unread.append(name)
+        for name in file_names:
+            files += 1
+            try:
+                size += os.lstat(os.path.join(root, name)).st_size
+            except OSError as error:
+                unread.append(error)
+        if files + folders > limit:
+            return files, folders, size, False
+    return files, folders, size, not unread
+
+
+def _folder_size_text(size: int) -> str:
+    for unit, scale in (("GB", 1024 ** 3), ("MB", 1024 ** 2), ("kB", 1024)):
+        if size >= scale:
+            return f"{size / scale:.1f} {unit}"
+    return f"{size} bytes"
+
+
+def _folder_edit_refusal(folder: Path, action: str) -> str:
+    """Why folder may not be renamed or deleted at all; "" when it may."""
+    if not folder.is_dir():
+        return f"{folder.name} is not a folder any more."
+    if sys.platform == "win32" and folder.name != folder.name.rstrip(". "):
+        # Windows drops a last dot or space, and would act on another folder.
+        return f"Windows cannot address the name {folder.name!r}; it is left alone here."
+    run = scan_run_using_folder(folder)
+    if run is not None:
+        return (f"A running scan is saving into {run.as_posix()}; {folder.name} cannot be "
+                f"{action} until that scan has ended.")
+    return ""
+
+
+def make_subfolder(directory, name: str) -> Path:
+    """Make <directory>/<name> and return it.  ValueError (the text for the
+    user) when the name is refused or taken; OSError when it cannot be made."""
+    problem = folder_name_problem(name)
+    if problem:
+        raise ValueError(problem)
+    folder = Path(directory) / name
+    if os.path.lexists(folder):
+        raise ValueError(f"{name} is already there.")
+    folder.mkdir()
+    return folder
+
+
+def rename_subfolder(folder, name: str) -> Path:
+    """Rename folder to <its directory>/<name> and return the new path.
+    ValueError (the text for the user) when it is refused."""
+    folder = Path(folder)
+    refusal = _folder_edit_refusal(folder, "renamed")
+    if refusal:
+        raise ValueError(refusal)
+    problem = folder_name_problem(name)
+    if problem:
+        raise ValueError(problem)
+    if name == folder.name:
+        return folder
+    target = folder.with_name(name)
+    if os.path.lexists(target):
+        # A change of capitals only is the same folder on Windows.
+        same = name.casefold() == folder.name.casefold() and os.path.samefile(folder, target)
+        if not same:
+            raise ValueError(f"{name} is already there.")
+    os.rename(folder, target)
+    return target
+
+
+class _RecycleBinInfo(ctypes.Structure):
+    """Windows' SHQUERYRBINFO (packed on 32-bit Windows only)."""
+    if ctypes.sizeof(ctypes.c_void_p) == 4:
+        _pack_ = 1
+    _fields_ = [("cbSize", ctypes.c_uint32), ("i64Size", ctypes.c_int64),
+                ("i64NumItems", ctypes.c_int64)]
+
+
+class _ShellFileOperation(ctypes.Structure):
+    """Windows' SHFILEOPSTRUCTW (packed on 32-bit Windows only)."""
+    if ctypes.sizeof(ctypes.c_void_p) == 4:
+        _pack_ = 1
+    _fields_ = [("hwnd", ctypes.c_void_p), ("wFunc", ctypes.c_uint), ("pFrom", ctypes.c_void_p),
+                ("pTo", ctypes.c_void_p), ("fFlags", ctypes.c_uint16),
+                ("fAnyOperationsAborted", ctypes.c_int), ("hNameMappings", ctypes.c_void_p),
+                ("lpszProgressTitle", ctypes.c_void_p)]
+
+
+def _windows_drive_root(folder) -> str:
+    """The drive of folder with a backslash ("C:" + "\\"), when it is on a
+    drive letter of this computer; "" for a network share (a mapped drive's
+    real path is one) or no drive at all."""
+    drive = os.path.splitdrive(os.path.realpath(str(folder)))[0]
+    if len(drive) != 2 or not drive.endswith(":"):
+        return ""
+    return drive + "\\"
+
+
+def recycle_bin_item_count(folder) -> int | None:
+    """How many items the Windows Recycle Bin of folder's drive holds; None
+    when that drive has none (a network share, or not Windows) or it cannot
+    be asked."""
+    if sys.platform != "win32":
+        return None
+    try:
+        root = _windows_drive_root(folder)
+        if not root:
+            return None
+        info = _RecycleBinInfo()
+        info.cbSize = ctypes.sizeof(_RecycleBinInfo)
+        query = ctypes.windll.shell32.SHQueryRecycleBinW
+        query.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(_RecycleBinInfo)]
+        query.restype = ctypes.c_long
+        if query(root, ctypes.byref(info)) != 0:
+            return None
+        return int(info.i64NumItems)
+    except Exception:
+        return None
+
+
+def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
+    """(switched off, largest size in bytes or None when Windows' default)
+    of the Recycle Bin of the drive ``root`` (_windows_drive_root), from the registry
+    where Windows keeps the bin's Properties."""
+    import winreg
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer") as key:
+                if int(winreg.QueryValueEx(key, "NoRecycleFiles")[0]):
+                    return True, None
+        except OSError:
+            pass
+    volume = ctypes.create_unicode_buffer(64)
+    name = ctypes.windll.kernel32.GetVolumeNameForVolumeMountPointW
+    name.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+    name.restype = ctypes.c_int
+    if not name(root, volume, 64):
+        raise OSError("the drive's volume name could not be read")
+    # "\\?\Volume{...}\" -> "{...}"
+    guid = volume.value[volume.value.index("{"):volume.value.rindex("}") + 1]
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume"
+                            + "\\" + guid) as key:
+            def value(entry):
+                try:
+                    return int(winreg.QueryValueEx(key, entry)[0])
+                except OSError:
+                    return None
+            megabytes = value("MaxCapacity")
+            return bool(value("NukeOnDelete")), None if megabytes is None else megabytes * 1024 * 1024
+    except OSError:
+        return False, None  # never set: the bin is on, at Windows' default size
+
+
+def recycle_bin_refusal(folder, size: int = 0) -> str:
+    """Why Windows would not put folder (``size`` bytes) into the Recycle
+    Bin, so that deleting it would be for good; "" when it would."""
+    if sys.platform != "win32":
+        return "There is no Recycle Bin for it here"
+    try:
+        root = _windows_drive_root(folder)
+        drive_type = ctypes.windll.kernel32.GetDriveTypeW
+        drive_type.argtypes = [ctypes.c_wchar_p]
+        drive_type.restype = ctypes.c_uint
+        # 3: DRIVE_FIXED.  A removable or network drive has no bin.
+        if not root or drive_type(root) != 3 or recycle_bin_item_count(folder) is None:
+            return "There is no Recycle Bin for it here"
+        switched_off, largest = _recycle_bin_settings(root)
+        if switched_off:
+            return "The Recycle Bin is switched off for its drive"
+        if largest is None:
+            # Windows' default is 5 % of the drive or more.
+            largest = int(0.05 * _windows_drive_size(root))
+        if size > 0.9 * largest:
+            return (f"It is larger than the Recycle Bin of its drive "
+                    f"({_folder_size_text(largest)})")
+        return ""
+    except Exception as error:
+        return f"The Recycle Bin of its drive could not be checked ({error})"
+
+
+def _windows_drive_size(root: str) -> int:
+    total = ctypes.c_uint64(0)
+    size = ctypes.windll.kernel32.GetDiskFreeSpaceExW
+    size.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64), ctypes.c_void_p]
+    size.restype = ctypes.c_int
+    if not size(root, None, ctypes.byref(total), None):
+        raise OSError("the drive's size could not be read")
+    return int(total.value)
+
+
+def recycle_bin_available(folder) -> bool:
+    """Whether a folder deleted here would go to the Windows Recycle Bin."""
+    return not recycle_bin_refusal(folder)
+
+
+def move_folder_to_recycle_bin(folder, window_handle: int = 0) -> None:
+    """Send folder, with everything in it, to the Windows Recycle Bin.
+    OSError when Windows does not do it; the folder is then still there, or
+    partly there."""
+    if sys.platform != "win32":
+        raise OSError("There is no Recycle Bin on this computer.")
+    name = Path(folder).name
+    # The list of paths ends with two nulls (the buffer adds the second).
+    source = ctypes.create_unicode_buffer(os.path.abspath(str(folder)) + "\0")
+    operation = _ShellFileOperation()
+    operation.hwnd = window_handle or None
+    operation.wFunc = 3  # FO_DELETE
+    operation.pFrom = ctypes.cast(source, ctypes.c_void_p)
+    # FOF_ALLOWUNDO (the Recycle Bin), no progress window, no question (the
+    # program has asked) and no error window (the error is shown here), and
+    # FOF_WANTNUKEWARNING: Windows itself asks if it would delete for good.
+    operation.fFlags = 0x0040 | 0x0004 | 0x0010 | 0x0400 | 0x4000
+    function = ctypes.windll.shell32.SHFileOperationW
+    function.argtypes = [ctypes.POINTER(_ShellFileOperation)]
+    function.restype = ctypes.c_int
+    code = function(ctypes.byref(operation))
+    if code != 0:
+        raise OSError(f"Windows could not move {name} to the Recycle Bin (code {code}).")
+    if operation.fAnyOperationsAborted:
+        raise OSError(f"Moving {name} to the Recycle Bin was cancelled.")
+    if os.path.lexists(folder):
+        raise OSError(f"{name} is still there: Windows did not move it to the Recycle Bin.")
+
+
+def _folder_delete_refusal(folder: Path) -> str:
+    refusal = _folder_edit_refusal(folder, "deleted")
+    if not refusal and folder_is_link(folder):
+        refusal = f"{folder.name} is a link to another folder; it is not deleted here."
+    return refusal
+
+
+def _folder_is_empty(folder) -> bool:
+    with os.scandir(folder) as entries:
+        return next(entries, None) is None
+
+
+_FOLDER_DELETE_WHILE_SCANNING = (
+    "A scan is running. A folder with data can be deleted here once it has ended.")
+
+
+def folder_delete_question(folder) -> tuple[str, str]:
+    """(how, the question to ask) before folder is deleted: how is "empty"
+    (the folder is removed) or "recycle" (it goes to the Recycle Bin).
+    ValueError (the text for the user) when it may not be deleted."""
+    folder = Path(folder)
+    refusal = _folder_delete_refusal(folder)
+    if refusal:
+        raise ValueError(refusal)
+    if _folder_is_empty(folder):
+        return "empty", f"Delete the empty folder {folder.name}?"
+    if open_scan_runs():
+        # Before the count, which also takes the Tk thread.
+        raise ValueError(_FOLDER_DELETE_WHILE_SCANNING)
+    files, folders, size, complete = folder_contents(folder)
+    if not complete:
+        raise ValueError(
+            f"{folder.name} holds more than is counted here ({FOLDER_DIALOG_COUNT_LIMIT} files and "
+            "folders), or a part of it cannot be read or is a link to another folder. Delete it "
+            "in the Windows Explorer.")
+    holds = (f"{files} file{'s' if files != 1 else ''} and {folders} "
+             f"folder{'s' if folders != 1 else ''} ({_folder_size_text(size)})")
+    no_bin = recycle_bin_refusal(folder, size)
+    if no_bin:
+        raise ValueError(f"{folder.name} holds {holds}. {no_bin}, so only an empty folder can be "
+                         "deleted in this window.")
+    return "recycle", (f"Delete the folder {folder.name}?\n\nIt holds {holds}. Windows moves it to "
+                       "the Recycle Bin, where it can be restored.")
+
+
+def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
+    """Delete folder as folder_delete_question said ("empty" or "recycle").
+    The refusals are checked again; an "empty" folder that holds something
+    by now is not removed (OSError).  Returns "" or, when the Recycle Bin
+    did not gain an item, a warning for the user."""
+    folder = Path(folder)
+    refusal = _folder_delete_refusal(folder)
+    if refusal:
+        raise ValueError(refusal)
+    if how == "empty":
+        os.rmdir(folder)
+        return ""
+    if how != "recycle":
+        raise ValueError(f"Unknown way to delete a folder: {how!r}")
+    if open_scan_runs():
+        raise ValueError(_FOLDER_DELETE_WHILE_SCANNING)
+    no_bin = recycle_bin_refusal(folder)
+    if no_bin:
+        raise ValueError(f"{no_bin}, so only an empty folder can be deleted in this window.")
+    before = recycle_bin_item_count(folder)
+    move_folder_to_recycle_bin(folder, window_handle)
+    after = recycle_bin_item_count(folder)
+    if before is not None and after is not None and after <= before:
+        return (f"{folder.name} is gone. The Recycle Bin did not gain an item, so check that it "
+                "is in there: Windows may have deleted it for good.")
+    return ""
+
+
+def folder_dialog_start_directory(initialdir="") -> Path:
+    """Where the dialog opens: initialdir, or the nearest folder above it
+    that exists; without one, where the last dialog was, else the program's
+    current directory."""
+    for text in (initialdir, _FOLDER_DIALOG_LAST_DIRECTORY):
+        if not str(text or "").strip():
+            continue
+        path = Path(os.path.abspath(str(text)))
+        for candidate in (path, *path.parents):
+            if candidate.is_dir():
+                return candidate
+    return Path(os.path.abspath(os.getcwd()))
+
+
+class EditableFolderDialog:
+    """The program's folder dialog: choose a folder, and make, rename or
+    delete folders in it.  show() waits for OK or Cancel and returns the
+    folder ("/" between its parts, as Tk's dialog gave it) or ""."""
+
+    def __init__(self, parent, title="", initialdir="", mustexist=False) -> None:
+        self.parent = parent
+        self.mustexist = bool(mustexist)
+        self.result = ""
+        self.directory = folder_dialog_start_directory(initialdir)
+        self.names: list[str] = []
+        self.top = top = tk.Toplevel(parent, class_="EditableFolderDialog")
+        try:
+            self._build(str(title or "Choose a folder"))
+        except BaseException:
+            try:
+                top.destroy()
+            except tk.TclError:
+                pass
+            raise
+
+    def _build(self, title: str) -> None:
+        top = self.top
+        top.withdraw()
+        top.title(title)
+        top.folder_dialog = self
+        self.done = tk.BooleanVar(top, value=False)
+        self.directory_var = tk.StringVar(top)
+        self.selection_var = tk.StringVar(top)
+        self.status_var = tk.StringVar(top)
+        frame = ttk.Frame(top, padding=10, name="body")
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(1, weight=1)
+        ttk.Label(frame, text="Directory:").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.directory_box = ttk.Combobox(frame, textvariable=self.directory_var, name="directory")
+        self.directory_box.grid(row=0, column=1, sticky="ew")
+        self.up_button = ttk.Button(frame, text="Up", width=6, name="up", command=self.go_up)
+        self.up_button.grid(row=0, column=2, sticky="e", padx=(6, 0))
+        box = ttk.Frame(frame)
+        box.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=8)
+        box.columnconfigure(0, weight=1)
+        box.rowconfigure(0, weight=1)
+        self.listbox = tk.Listbox(box, name="folders", width=64, height=14, activestyle="none",
+                                  exportselection=False, selectmode="browse")
+        self.listbox.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(box, orient="vertical", command=self.listbox.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.listbox.configure(yscrollcommand=scroll.set)
+        self.status_label = ttk.Label(frame, textvariable=self.status_var, name="status",
+                                      wraplength=520, justify="left")
+        self.status_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.status_label.grid_remove()
+        ttk.Label(frame, text="Selection:").grid(row=3, column=0, sticky="w", padx=(0, 6))
+        self.selection_entry = ttk.Entry(frame, textvariable=self.selection_var, name="selection")
+        self.selection_entry.grid(row=3, column=1, columnspan=2, sticky="ew")
+        bar = ttk.Frame(frame, name="buttons")
+        bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        self.new_button = ttk.Button(bar, text="New folder", name="new", command=self.new_folder)
+        self.rename_button = ttk.Button(bar, text="Rename", name="rename", command=self.rename_selected)
+        self.delete_button = ttk.Button(bar, text="Delete", name="delete", command=self.delete_selected)
+        for button in (self.new_button, self.rename_button, self.delete_button):
+            button.pack(side="left", padx=(0, 6))
+        self.cancel_button = ttk.Button(bar, text="Cancel", name="cancel", command=self.cancel)
+        self.cancel_button.pack(side="right")
+        self.ok_button = ttk.Button(bar, text="OK", name="ok", command=self.ok)
+        self.ok_button.pack(side="right", padx=(0, 6))
+        self.listbox.bind("<<ListboxSelect>>", lambda _event: self._selection_changed())
+        self.listbox.bind("<Double-Button-1>", lambda _event: self.open_selected())
+        self.listbox.bind("<Return>", lambda _event: self.open_selected())
+        self.listbox.bind("<BackSpace>", lambda _event: self.go_up())
+        self.listbox.bind("<F2>", lambda _event: self.rename_selected())
+        self.listbox.bind("<Delete>", lambda _event: self.delete_selected())
+        self.directory_box.bind("<<ComboboxSelected>>", lambda _event: self.go_to(self.directory_var.get()))
+        self.directory_box.bind("<Return>", lambda _event: self.go_to(self.directory_var.get()))
+        self.selection_entry.bind("<Return>", lambda _event: self.ok())
+        top.bind("<Escape>", lambda _event: self.cancel())
+        top.protocol("WM_DELETE_WINDOW", self.cancel)
+        # Destroyed from outside (the program closing): show() must not wait
+        # for ever (review, 2026-11-15).
+        top.bind("<Destroy>", self._destroyed)
+        self.show_directory(self.directory)
+
+    def _destroyed(self, event) -> None:
+        if event.widget is self.top:
+            try:
+                self.done.set(True)
+            except tk.TclError:
+                pass
+
+    # ----- what the dialog shows -----
+
+    def selected_folder(self) -> Path | None:
+        """The folder picked in the list, or None."""
+        picked = self.listbox.curselection()
+        if not picked or picked[0] >= len(self.names):
+            return None
+        return self.directory / self.names[picked[0]]
+
+    def _volumes(self) -> list[str]:
+        try:
+            return [str(volume) for volume in self.top.tk.splitlist(self.top.tk.call("file", "volumes"))]
+        except tk.TclError:
+            return []
+
+    def show_directory(self, directory, select: str = "") -> None:
+        """List directory (it becomes the dialog's), with ``select`` picked."""
+        self.directory = Path(directory)
+        try:
+            self.names = list_subfolders(self.directory)
+            problem = ""
+        except OSError as error:
+            self.names = []
+            problem = f"This folder cannot be listed: {error}"
+        self.listbox.delete(0, "end")
+        for name in self.names:
+            self.listbox.insert("end", name)
+        self.status_var.set(problem)
+        if problem:
+            self.status_label.grid()
+        else:
+            self.status_label.grid_remove()
+        shown = self.directory.as_posix()
+        above = [path.as_posix() for path in self.directory.parents]
+        values = [shown, *above]
+        self.directory_box.configure(values=values + [v for v in self._volumes() if v not in values])
+        self.directory_var.set(shown)
+        if select in self.names:
+            index = self.names.index(select)
+            self.listbox.selection_set(index)
+            self.listbox.see(index)
+        self._selection_changed()
+
+    def _selection_changed(self) -> None:
+        folder = self.selected_folder()
+        self.selection_var.set((folder or self.directory).as_posix())
+        state = ["!disabled"] if folder is not None else ["disabled"]
+        self.rename_button.state(state)
+        self.delete_button.state(state)
+        self.up_button.state(["disabled"] if self.directory.parent == self.directory else ["!disabled"])
+
+    def go_to(self, text) -> bool:
+        """Show the typed directory; False (and a message) when it is none."""
+        path = self._typed_path(text)
+        if path is None or not path.is_dir():
+            self._error("Choose a folder", f"{str(text).strip() or 'That'} is not a folder.")
+            self.directory_var.set(self.directory.as_posix())
+            return False
+        self.show_directory(path)
+        return True
+
+    def go_up(self) -> None:
+        if self.directory.parent != self.directory:
+            self.show_directory(self.directory.parent, select=self.directory.name)
+
+    def open_selected(self) -> None:
+        folder = self.selected_folder()
+        if folder is not None:
+            self.show_directory(folder)
+
+    def _typed_path(self, text) -> Path | None:
+        text = str(text).strip()
+        if not text:
+            return None
+        path = Path(text)
+        if not path.is_absolute():
+            path = self.directory / path
+        return Path(os.path.abspath(path))
+
+    # ----- the messages and questions, each over this dialog -----
+
+    def _regrab(self) -> None:
+        """This dialog takes the input again after a box or a prompt over it
+        (a prompt drops the grab when it closes)."""
+        try:
+            if int(self.top.winfo_exists()):
+                self.top.grab_set()
+                self.listbox.focus_set()  # F2 and Delete work on at once
+        except tk.TclError:
+            pass
+
+    def _error(self, title: str, text: str) -> None:
+        try:
+            messagebox.showerror(title, text, parent=self.top)
+        finally:
+            self._regrab()
+
+    def _ask_name(self, title: str, prompt: str, initial: str = "") -> str | None:
+        try:
+            return simpledialog.askstring(title, prompt, initialvalue=initial, parent=self.top)
+        finally:
+            self._regrab()
+
+    # ----- New folder, Rename, Delete -----
+
+    def new_folder(self) -> None:
+        name = self._ask_name("New folder", f"Name of the new folder in {self.directory.as_posix()}:")
+        if name is None:
+            return
+        try:
+            folder = make_subfolder(self.directory, name.strip())
+        except (ValueError, OSError) as error:
+            self._error("New folder", f"The folder was not made: {error}")
+            return
+        self.show_directory(self.directory, select=folder.name)
+
+    def rename_selected(self) -> None:
+        folder = self.selected_folder()
+        if folder is None:
+            return
+        name = self._ask_name("Rename folder", f"New name for {folder.name}:", folder.name)
+        if name is None or name.strip() == folder.name:
+            return
+        try:
+            renamed = rename_subfolder(folder, name.strip())
+        except (ValueError, OSError) as error:
+            self._error("Rename folder", f"{folder.name} was not renamed: {error}")
+            self.show_directory(self.directory, select=folder.name)
+            return
+        self.show_directory(self.directory, select=renamed.name)
+
+    def delete_selected(self) -> None:
+        folder = self.selected_folder()
+        if folder is None:
+            return
+        try:
+            how, question = folder_delete_question(folder)
+        except (ValueError, OSError) as error:
+            self._error("Delete folder", f"{folder.name} was not deleted: {error}")
+            return
+        try:
+            agreed = messagebox.askyesno("Delete folder", question, default="no", icon="warning",
+                                         parent=self.top)
+        finally:
+            self._regrab()
+        if not agreed:
+            return
+        try:
+            warning = delete_subfolder(folder, how, self._window_handle())
+        except (ValueError, OSError) as error:
+            self._error("Delete folder", f"{folder.name} was not deleted: {error}")
+            warning = ""
+        self.show_directory(self.directory)
+        if warning:
+            try:
+                messagebox.showwarning("Delete folder", warning, parent=self.top)
+            finally:
+                self._regrab()
+
+    def _window_handle(self) -> int:
+        """This window for Windows (its own question, if any, comes over it)."""
+        if sys.platform != "win32":
+            return 0
+        try:
+            parent = ctypes.windll.user32.GetParent
+            parent.argtypes, parent.restype = [ctypes.c_void_p], ctypes.c_void_p
+            return int(parent(self.top.winfo_id()) or 0)
+        except Exception:
+            return 0
+
+    # ----- OK and Cancel -----
+
+    def ok(self) -> None:
+        path = self._typed_path(self.selection_var.get()) or self.directory
+        if not path.is_dir():
+            if os.path.lexists(path):
+                self._error("Choose a folder", f"{path.as_posix()} is not a folder.")
+                return
+            if self.mustexist:
+                self._error("Choose a folder", f"{path.as_posix()} does not exist.")
+                return
+            try:
+                agreed = messagebox.askyesno("Choose a folder", f"{path.as_posix()} does not exist. "
+                                             "Make it?", parent=self.top)
+            finally:
+                self._regrab()
+            if not agreed:
+                return
+            try:
+                path.mkdir(parents=True)
+            except OSError as error:
+                self._error("Choose a folder", f"The folder was not made: {error}")
+                return
+        result = path.as_posix()
+        self.result = result.rstrip("/") if result.startswith("//") else result
+        self.done.set(True)
+
+    def cancel(self) -> None:
+        self.result = ""
+        self.done.set(True)
+
+    def show(self) -> str:
+        global _FOLDER_DIALOG_LAST_DIRECTORY
+        top, parent = self.top, self.parent
+        try:
+            owner = parent.winfo_toplevel()
+            if owner.winfo_viewable():
+                top.transient(owner)
+        except tk.TclError:
+            owner = None
+        top.update_idletasks()
+        width, height = top.winfo_reqwidth(), top.winfo_reqheight()
+        try:
+            top.minsize(min(width, 420), min(height, 300))
+            if owner is not None and owner.winfo_viewable():
+                x = owner.winfo_rootx() + (owner.winfo_width() - width) // 2
+                y = owner.winfo_rooty() + (owner.winfo_height() - height) // 3
+            else:
+                x = (top.winfo_screenwidth() - width) // 2
+                y = (top.winfo_screenheight() - height) // 3
+            x = max(0, min(x, top.winfo_screenwidth() - width))
+            y = max(0, min(y, top.winfo_screenheight() - height - 40))
+            top.geometry(f"+{x}+{y}")
+        except tk.TclError:
+            pass
+        top.deiconify()
+        try:
+            top.lift()
+            top.focus_force()
+        except tk.TclError:
+            pass
+        # The window holding the grab, by its Tcl name (see the message box).
+        try:
+            previous_grab = str(top.tk.call("grab", "current", top._w)) or None
+        except tk.TclError:
+            previous_grab = None
+        try:
+            top.grab_set()
+        except tk.TclError:
+            # Not on the screen yet (X11): once more when it is.
+            top.after(100, self._regrab)
+        self.listbox.focus_set()
+        try:
+            top.wait_variable(self.done)
+            return self.result
+        finally:
+            _FOLDER_DIALOG_LAST_DIRECTORY = str(self.directory)
+            try:
+                top.grab_release()
+                top.destroy()
+            except tk.TclError:
+                pass
+            if previous_grab is not None:
+                try:
+                    if (int(parent.tk.call("winfo", "exists", previous_grab))
+                            and int(parent.tk.call("winfo", "viewable", previous_grab))):
+                        parent.tk.call("grab", "set", previous_grab)
+                except tk.TclError:
+                    pass
+
+
+def editable_folder_dialog(**options) -> str:
+    """tkinter.filedialog.askdirectory, as the program's own folder dialog
+    (parent, title, initialdir, mustexist).  The chosen folder, or ""."""
+    parent = options.get("parent") or getattr(tk, "_default_root", None)
+    if not isinstance(parent, tk.Misc) or _NATIVE_ASK_DIRECTORY is None:
+        # Not a Tk window (a stand-in in the tests, or no window yet).
+        if _NATIVE_ASK_DIRECTORY is None:
+            raise RuntimeError("A folder dialog needs a Tk window")
+        return _NATIVE_ASK_DIRECTORY(**options)
+    try:
+        dialog = EditableFolderDialog(parent, options.get("title", ""), options.get("initialdir", ""),
+                                      options.get("mustexist", False))
+    except Exception:
+        return _NATIVE_ASK_DIRECTORY(**options)
+    return dialog.show()
+
+
 def use_english_tk_dialogs(root: tk.Misc) -> bool:
     """Message boxes (Yes/No, OK) and the open, save and folder dialogs in
     English, whatever the language of Windows.  tkinter's messagebox and
     filedialog call the Tk commands replaced here, so every call site is
-    covered.  On X11 Tk's own dialogs are already used.  Returns whether
-    Tk's own dialogs are in use."""
+    covered.  On X11 Tk's own dialogs are already used.  The folder dialog
+    is the program's own (editable_folder_dialog), which can also make,
+    rename and delete folders (user, 2026-11-15).  Returns whether Tk's own
+    dialogs are in use."""
     # tkinter.messagebox's functions all go through _show: each box becomes
     # its own window (english_message_box).  Tcl's own tk_messageBox (the
     # file dialogs' "overwrite?") is Tk's English one, below.
@@ -246,6 +1047,15 @@ def use_english_tk_dialogs(root: tk.Misc) -> bool:
             native = tk_messagebox._english_native_show = tk_messagebox._show
         _NATIVE_MESSAGE_SHOW = native
         tk_messagebox._show = english_message_box
+    # filedialog.askdirectory: the program's own folder dialog.  Tk's own is
+    # kept once per process, as the message box's is.
+    import tkinter.filedialog as tk_filedialog
+    global _NATIVE_ASK_DIRECTORY
+    native_folder = getattr(tk_filedialog, "_english_native_askdirectory", None)
+    if native_folder is None:
+        native_folder = tk_filedialog._english_native_askdirectory = tk_filedialog.askdirectory
+    _NATIVE_ASK_DIRECTORY = native_folder
+    tk_filedialog.askdirectory = editable_folder_dialog
     try:
         system = str(root.tk.call("tk", "windowingsystem"))
         if system == "x11":
@@ -16661,6 +17471,10 @@ class ScanRunRecorder:
         self.lock = threading.Lock()
         self.failure: BaseException | None = None
         self.closed = False
+        # Until it is closed, the folder dialog does not rename or delete
+        # this run's folder or one above it (user, 2026-11-15).
+        self.other_folders: list[Path] = []
+        _OPEN_SCAN_RUNS.add(self)
         self.rows_written = 0
         self.fieldnames = None if self.FIELDNAMES is None else list(self.FIELDNAMES)
         try:
@@ -16683,6 +17497,11 @@ class ScanRunRecorder:
             # The folder and any file made stay, as evidence; nothing starts.
             self.closed = True
             raise
+
+    def also_saves_into(self, folder) -> None:
+        """Another folder this run writes into (a MOKE scan's images), which
+        the folder dialog then leaves alone as it does the run folder."""
+        self.other_folders.append(Path(folder))
 
     def _default_stem(self) -> str:
         return f"{self.page}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -37325,6 +38144,7 @@ class CombinedControlApp:
                 return
         self.magnet_scan_image_session_dir = image_session
         if image_session is not None:
+            recorder.also_saves_into(image_session)
             self.magnet_image_directory_var.set(f"Scan images for this run: {image_session}")
 
         self.magnet_scan_settings = dict(settings)
@@ -39037,6 +39857,7 @@ class CombinedControlApp:
                 return
         self.keithley_scan_image_session_dir = image_session
         if image_session is not None:
+            recorder.also_saves_into(image_session)
             self.keithley_image_directory_var.set(f"Scan images for this run: {image_session}")
 
         self.keithley_scan_settings = dict(settings)

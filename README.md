@@ -233,6 +233,36 @@ picture is saved and the run log's `plot_snapshots` entry says why; the CSV
 and the log are not affected. The CIDWM pulse scan has no axis plot and
 saves camera images instead.
 
+**Choosing a folder.** Every folder choice (a run's folder, an image folder)
+opens the program's own folder window (since 2026-11-15; it was Tk's, which
+could only choose). It lists the folders of the Directory shown; a
+double-click or Return opens one, "Up" or Backspace goes back, and OK gives
+the folder picked in the list, or the one shown when none is picked. Three
+buttons work on the folder picked in the list:
+
+- **New folder** asks for a name and makes it in the Directory shown.
+- **Rename** (F2) asks for the new name; what the folder holds is kept.
+- **Delete** (Del) asks first, with No as the default, and says how many
+  files and folders it holds. An empty folder is removed. One with anything
+  in it goes to the Windows Recycle Bin, where it can be restored.
+
+The rules, for the data's sake:
+
+- A name must be a valid Windows folder name, and never one already there.
+- The program never deletes data for good. A folder with data is refused
+  where Windows would not recycle it: a network or removable drive, the
+  Recycle Bin switched off or smaller than the folder, more than 20000 files
+  and folders in it, or a part of it that cannot be read or is a link to
+  another folder. Delete such a folder in the Windows Explorer.
+- A folder that a running scan is saving into (its run folder, a MOKE
+  scan's image folder, or any folder above them) cannot be renamed or
+  deleted until the scan has ended, and while any scan runs no folder with
+  data is deleted at all. Empty folders, New folder and Rename elsewhere
+  still work during a scan.
+- A link to another folder is not deleted here.
+
+Save-as and open-file windows are Tk's own, as before.
+
 ## Instruments
 
 Keithley 2410, 2400, 6221 and 2182A; Stanford Research SR830 lock-ins;
