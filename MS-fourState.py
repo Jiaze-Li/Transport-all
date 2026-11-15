@@ -58,7 +58,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 # The instrument code MS-fourState shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 f8b04543407a…
+# Copied from Transport_all.py, SHA-256 bda5f1870d7c…
 import ctypes
 
 
@@ -3571,7 +3571,8 @@ def initialize_lockin(lockin):
         lockin.instrument.write("*CLS")  # A disconnect can leave *ESR? latched.
         for command, value in SR830_BASELINE:
             sr830_write(lockin, f"{command} {value}")
-        for command in ("DDEF 1,1,0", "DDEF 2,1,0"):
+        # X and Y on the display (user, 2026-11-15; it was R and theta).
+        for command in ("DDEF 1,0,0", "DDEF 2,0,0"):
             sr830_write(lockin, command)
         for command, expected in SR830_BASELINE:
             actual = sr830_query(lockin, f"{command}?", 1)[0]

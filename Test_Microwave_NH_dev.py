@@ -59,7 +59,7 @@ from typing import Callable
 # The English dialogs (Tk's own message boxes and file dialogs) it shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 f8b04543407a…
+# Copied from Transport_all.py, SHA-256 bda5f1870d7c…
 import ctypes
 
 
@@ -2362,8 +2362,8 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 f"OFLT {STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE}",
                 "OFSL 1",
                 "RMOD 1",
-                "DDEF 1,1,0",
-                "DDEF 2,1,0",
+                "DDEF 1,0,0",   # X and Y on the display (user, 2026-11-15;
+                "DDEF 2,0,0",   # it was R and theta)
             ):
                 self.instrument.write(command)
             actual_reference_mode = int(round(float(

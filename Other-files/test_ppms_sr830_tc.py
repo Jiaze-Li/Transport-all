@@ -256,10 +256,11 @@ class DeferredExecutor:
 
 def connect_setup(time_constant_code, harmonic=1):
     """Connect's SR830 writes, in the order used before 2026-10-14, with the
-    chosen time constant; each is followed by a *ESR? check."""
+    chosen time constant; each is followed by a *ESR? check.  The display
+    is X and Y since 2026-11-15 (user; it was R and theta)."""
     return ["*CLS", "FMOD 0", "RSLP 1", f"HARM {harmonic}", "ISRC 1", "IGND 0", "ICPL 0",
             "ILIN 0", "SYNC 0", "SENS 9", f"OFLT {time_constant_code}", "OFSL 1", "RMOD 1",
-            "PHAS 0", "DDEF 1,1,0", "DDEF 2,1,0"]
+            "PHAS 0", "DDEF 1,0,0", "DDEF 2,0,0"]
 
 
 class NoWindows(unittest.TestCase):

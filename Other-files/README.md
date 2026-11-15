@@ -1,5 +1,25 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## A connected SR830 shows X and Y (user, 2026-11-15)
+
+- **Request:** "when the SR830 connect, it should display X and Y in its font panel instead of R and theta".
+- **Where R and θ came from:** the program itself. Every page's SR830 set-up ended with `DDEF 1,1,0` / `DDEF 2,1,0`
+  (CH1 R, CH2 θ): PPMS and SHV at Connect, ST-FMR and Non-local with a scan's Start, MS-fourState at its
+  connection, and the microwave test program in its set-up.
+- **Now** `SR830_DISPLAY_XY_COMMANDS` = `DDEF 1,0,0` / `DDEF 2,0,0` (CH1 X, CH2 Y, no ratio) in all of those places;
+  the Non-local Start's read-back of the display expects `(0, 0)` on both channels.
+- **At Connect on every page.** PPMS and SHV set it in their Connect's set-up, as before, each write checked with
+  `*ESR?`. ST-FMR and Non-local sent the SR830 nothing at Connect (their set-up comes with Start), so the panel kept
+  whatever it showed: their Connect now sends the two display commands after the identity is known
+  (`show_sr830_x_and_y`). That is best effort: a failed write is logged and the connection stands, and Start's
+  set-up writes the same again.
+- **The display only.** The program reads X, Y, R and θ with `SNAP?` and nowhere reads the display (`OUTR?` is not
+  used), so the saved data, the auto-range and the lock checks do not change. The CH1 / CH2 OUTPUT sockets follow
+  the display when they are set to "Display" on the instrument: a cable on them carries X / Y now, not R / θ.
+- **Tests:** `test_sr830_display_xy.py` (the commands, no R / θ left, the ST-FMR and Non-local Connect, a failed
+  write); the pinned set-up lists in `test_stfmr_sr830_tc_fixed_current`, `test_ppms_sr830_tc` and
+  `test_ms_four_state`. Not tested on an SR830.
+
 ## The folder window can make, rename and delete folders (user, 2026-11-15)
 
 - **Request** ("can you make the file folder in our program editable? e.g. delete folder, rename folder and create

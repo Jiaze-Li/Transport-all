@@ -189,10 +189,11 @@ def build_stfmr_page():
 
 
 def sr830_setup(time_constant_code):
-    """configure()'s writes as of 5d91c14, with the time constant chosen."""
+    """configure()'s writes as of 5d91c14, with the time constant chosen;
+    the display X and Y since 2026-11-15 (user; it was R and theta)."""
     return ["*CLS", "FMOD 0", "RSLP 0", "HARM 1", "ISRC 0", "IGND 0", "ICPL 0",
             "ILIN 0", "SYNC 0", "SENS 13", f"OFLT {time_constant_code}", "OFSL 1",
-            "RMOD 1", "DDEF 1,1,0", "DDEF 2,1,0"]
+            "RMOD 1", "DDEF 1,0,0", "DDEF 2,0,0"]
 
 
 class NoWindows(unittest.TestCase):

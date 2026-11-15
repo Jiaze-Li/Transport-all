@@ -6157,6 +6157,30 @@ class STFMRGauss475Controller(SafeVisaIdentityController):
         return value * factors[unit_code]
 
 
+# What an SR830's front panel shows once the program has connected it: X on
+# CH1 and Y on CH2, no ratio (user, 2026-11-15: "when the SR830 connect, it
+# should display X and Y in its front panel instead of R and theta"; every
+# page had set R and theta, "DDEF 1,1,0" / "DDEF 2,1,0").  The display only:
+# the program reads X, Y, R and theta with SNAP?, whatever is shown.  The
+# CH1 / CH2 OUTPUT BNCs follow the display when they are set to "Display".
+SR830_DISPLAY_XY_COMMANDS = ("DDEF 1,0,0", "DDEF 2,0,0")
+
+
+def show_sr830_x_and_y(instrument, logger=None, label: str = "SR830") -> bool:
+    """X and Y on the SR830's display, at Connect on the pages whose own
+    set-up comes only with a scan's Start (ST-FMR, Non-local).  Best effort:
+    a failed write is logged and the connection stands; the scan's set-up
+    writes the same again."""
+    try:
+        for command in SR830_DISPLAY_XY_COMMANDS:
+            instrument.write(command)
+        return True
+    except Exception as error:
+        if logger is not None:
+            logger(f"{label}: the display was not set to X and Y: {error}")
+        return False
+
+
 class STFMRSR830Controller(SafeVisaIdentityController):
     """SR830 voltage-input reader for the SMB100A-modulated STFMR path."""
 
@@ -6172,6 +6196,15 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         self.auto_range_enabled = True
         self.low_range_count = 0
         self.range_cooldown = 0
+
+    def connect(self, resource_name: str) -> str:
+        """As the shared connect, then X and Y on the display (user,
+        2026-11-15); the rest of the set-up still comes with Start."""
+        identity = super().connect(resource_name)
+        with self.lock:
+            if self.instrument is not None:
+                show_sr830_x_and_y(self.instrument, self.logger, "STFMR SR830")
+        return identity
 
     @staticmethod
     def _numbers(response: str, expected: int) -> list[float]:
@@ -6218,8 +6251,7 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 f"OFLT {time_constant_code}",
                 "OFSL 1",
                 "RMOD 1",
-                "DDEF 1,1,0",
-                "DDEF 2,1,0",
+                *SR830_DISPLAY_XY_COMMANDS,
             ):
                 self.instrument.write(command)
             actual_reference_mode = int(round(float(
@@ -12508,6 +12540,8 @@ class NonLocalACController:
                     pass
                 lockin.write("OUTX 1")
                 time.sleep(0.05)
+                # X and Y on the display from Connect on (user, 2026-11-15).
+                show_sr830_x_and_y(lockin, self.logger, f"Non-local IV SR830 #{key}")
                 self.lockins[key] = lockin
                 self.lockin_identities[key] = identity
                 self.lockin_resources[key] = resource
@@ -13873,7 +13907,7 @@ class NonLocalACController:
                     "FMOD 0", "RSLP 2", f"HARM {harmonic}", "ISRC 1",
                     "IGND 0", f"ICPL {coupling_code}", "ILIN 0", "SYNC 0", "SENS 9",
                     *time_constant, "RMOD 1", "PHAS 0",
-                    "DDEF 1,1,0", "DDEF 2,1,0",
+                    *SR830_DISPLAY_XY_COMMANDS,
                 ):
                     self._write_sr830(key, command)
                 actual_harmonic = int(
@@ -13906,7 +13940,8 @@ class NonLocalACController:
                         f"SR830 #{key} external reference readback mismatch: FMOD={reference_mode}, "
                         f"RSLP={reference_slope}"
                     )
-                if channel_1 != (1, 0) or channel_2 != (1, 0):
+                # X and Y, no ratio (R and theta until 2026-11-15).
+                if channel_1 != (0, 0) or channel_2 != (0, 0):
                     raise RuntimeError(
                         f"SR830 #{key} front-panel display readback mismatch: CH1={channel_1}, CH2={channel_2}"
                     )
@@ -52278,7 +52313,7 @@ class CombinedControlApp:
             controller.instrument.write("*CLS")
             for command, value in configuration:
                 self._ppms_write_sr830_checked(key, f"{command} {value}")
-            for command in ("DDEF 1,1,0", "DDEF 2,1,0"):
+            for command in SR830_DISPLAY_XY_COMMANDS:
                 self._ppms_write_sr830_checked(key, command)
             for command, expected in configuration:
                 actual = self._ppms_query_numbers(key, f"{command}?", 1)[0]

@@ -599,7 +599,8 @@ class RunTests(unittest.TestCase):
         ms.initialize_lockin(world.lockin)
         for command, value in ms.SR830_BASELINE:
             self.assertEqual(world.lockin_device.p[command], value, command)
-        self.assertEqual(world.lockin_device.p["DDEF"], "2,1,0")
+        # X and Y on the display (user, 2026-11-15; it was R and theta).
+        self.assertEqual(world.lockin_device.p["DDEF"], "2,0,0")
 
     def test_a_failed_baseline_leaves_the_lockin_disconnected(self):
         world = World()

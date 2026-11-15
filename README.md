@@ -273,6 +273,12 @@ rotation; and serial LED and sample-stage controllers.
 
 Default VISA addresses are set in the code and editable in the interface.
 
+An SR830 shows X on CH1 and Y on CH2 once the program has connected it
+(since 2026-11-15; every page had set R and θ). This is the front-panel
+display only: the saved X, Y, R and θ are read from the instrument
+whatever it shows. The CH1 and CH2 OUTPUT sockets follow the display when
+they are set to "Display" on the instrument.
+
 ## Layout
 
 | Path | Contents |
