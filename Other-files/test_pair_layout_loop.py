@@ -331,11 +331,12 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                 with self.subTest(width=width, plot=key):
                     self.assertGreaterEqual(canvas.winfo_height(), 55, "Increase the window height")
 
-    def test_at_the_default_1_plus_2_two_rows_are_drawn_and_the_third_is_hidden(self):
-        """The SHHV default, SR830-1 at 1 and SR830-2 at 2 measured and the
-        Zurich at 1+2 not (user's figures, 2026-10-18 and 2026-10-20): the
-        first- and second-harmonic rows keep their 55 px in the 1101 px
-        window and at 2000 px, and the third row is hidden."""
+    def test_at_the_default_only_the_second_harmonic_row_is_drawn(self):
+        """The SHHV default (user's figure, 2026-11-16): SR830-1 at 2
+        measured, SR830-2 at 2, SR830-3 at 3 and the Zurich at 1+2 not: the
+        second-harmonic row keeps at least 55 px in the 1101 px window and at
+        2000 px, and the first- and third-harmonic rows are hidden.  (From
+        2026-10-20 SR830-1 at 1 and SR830-2 at 2 measured, two rows.)"""
         panel = self.a.rte_panel
         canvases = panel.ppms_harmonic_canvases
         try:
@@ -344,16 +345,16 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             panel._apply_ppms2_zurich_harmonic()
             self.assertEqual(app.RTE_ZURICH_DEFAULT_HARMONICS, "1+2")
             self.assertEqual({order: sorted(meters) for order, meters in panel._ppms2_measured_orders().items()},
-                             {1: ["830_a"], 2: ["830_b"]})
+                             {2: ["830_a"]})
             for width, height in ((1101, CI_SHOT_HEIGHT), (LAB_WIDE, self.height)):
                 self.root.geometry(f"{width}x{height}+0+0")
                 self.root.update()
-                print(f"SHHV plots at 1+2, {self.root.winfo_width()}x{self.root.winfo_height()} px: "
-                      f"{sorted({c.winfo_height() for k, c in canvases.items() if k[0] != 3})} px tall")
+                print(f"SHHV plots at the default, {self.root.winfo_width()}x{self.root.winfo_height()} px: "
+                      f"{sorted({c.winfo_height() for k, c in canvases.items() if k[0] == 2})} px tall")
                 for key, canvas in canvases.items():
                     with self.subTest(width=width, plot=key):
-                        if key[0] == 3:
-                            self.assertFalse(canvas.winfo_ismapped(), "the third-harmonic row is hidden")
+                        if key[0] != 2:
+                            self.assertFalse(canvas.winfo_ismapped(), "only the second-harmonic row is drawn")
                         else:
                             self.assertTrue(canvas.winfo_ismapped())
                             self.assertGreaterEqual(canvas.winfo_height(), 55, "Increase the window height")
