@@ -78,7 +78,13 @@ class ControllerTests(unittest.TestCase):
         c = self.make(input_utilization=.9)
         c.read_stfmr_mfli(317.3, auto_range=True)
         c._run_mfli_autorange.assert_called_once_with('overload/high')
+        # Low is under 1 % of the range (user, 2026-11-16; it was 15 %, so
+        # 10 % counted): 10 % keeps the range.
         c = self.make(input_utilization=.1)
+        for _ in range(8):
+            c.read_stfmr_mfli(317.3, auto_range=True)
+        c._run_mfli_autorange.assert_not_called()
+        c = self.make(input_utilization=.005)
         for _ in range(2):
             c.read_stfmr_mfli(317.3, auto_range=True)
         c._run_mfli_autorange.assert_not_called()
