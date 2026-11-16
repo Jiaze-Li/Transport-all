@@ -233,6 +233,31 @@ picture is saved and the run log's `plot_snapshots` entry says why; the CSV
 and the log are not affected. The CIDWM pulse scan has no axis plot and
 saves camera images instead.
 
+**Lock-in range.** With its autorange on, a lock-in's range steps down when
+the reading has been under 1 % of the range for three readings in a row with
+the reference locked (since 2026-11-16; it was 15 % on ST-FMR and Non-local
+and for the Zurich, 10 % on PPMS and SHV). For an SR830 the reading is R
+against its full scale; for the Zurich it is the input's peak, every
+harmonic and the noise included, against its input range. The range still
+steps up at once on an overload, and on ST-FMR, Non-local and the Zurich
+also at 85 % of the range. Two things keep those rules from taking turns
+for ever:
+
+- An SR830 range that had to be left because it overloaded while R was small
+  on it (a weak harmonic beside a strong fundamental) is not returned to
+  until the next set-up: a scan's Start, each pass of an ST-FMR sweep, the
+  next order of a 6221-IV pass, and on PPMS and SHV a new excitation, pass
+  or sweep.
+- The Zurich chooses its own range. A step down that did not lower the
+  range is not asked for again on that range, and each time a range that
+  was stepped down has to go up again, the next step down needs twice as
+  many low readings in a row.
+
+A reading can now stay at 1-2.5 % of an SR830's full scale without the range
+stepping down, where it used to be brought to 15-40 %. That is what the 1 %
+rule means; for the finest resolution on a small signal, set the range by
+hand and untick the autorange.
+
 **Angle scans.** The plots of an angle scan (SHV: Angle, Angle+Field,
 Angle+Current; PPMS: Angle, Angle+Temperature, Angle+Field) span exactly the
 scan's own angles from the first point on, with ticks at round angles: a

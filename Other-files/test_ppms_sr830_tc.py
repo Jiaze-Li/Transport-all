@@ -750,7 +750,9 @@ class IdlePollTests(NoWindows):
         controller = panel.ppms_instrument_controllers["830_a"]
         controller.lock = self.HandOverLock()
         sr830 = controller.instrument
-        sr830.answers["OUTP? 3"] = "1e-07"   # far below 10 % of the range: a low reading
+        # 0.5 % of the 2 uV range: a low reading (under 1 % since 2026-11-16;
+        # it was 1e-07, 5 %, while the rule was 10 %).
+        sr830.answers["OUTP? 3"] = "1e-08"
         sr830.writes.clear()
         sr830.queries.clear()
         panel.ppms_environment_controller = types.SimpleNamespace(backend="fake", read_environment=lambda: {})

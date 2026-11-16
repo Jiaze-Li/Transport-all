@@ -146,7 +146,8 @@ class CurrentCallbacks(unittest.TestCase):
         obj.ppms_instrument_controllers = {'830_a': controller}
         obj._ppms_query_numbers = Mock(side_effect=[(13,), (13,), (13,), (10,), (12,), (12,), (12,), (12,)])
         obj._set_connection_indicator = Mock()
-        small = .09 * app.NONLOCAL_SR830_FULL_SCALE_V[13]
+        # Under 1 % of the range (user, 2026-11-16; the rule was 10 %).
+        small = .009 * app.NONLOCAL_SR830_FULL_SCALE_V[13]
         self.assertEqual(obj._ppms_autorange_sr830('830_a', small, 0), 0.)
         self.assertEqual(obj._ppms_autorange_sr830('830_a', small, 0), 0.)
         controller.instrument.write.assert_not_called()
@@ -170,15 +171,30 @@ class CurrentCallbacks(unittest.TestCase):
             obj._ppms_autorange_sr830('830_a', small, 0, allow_down=False)  # inside a scan point
         controller.instrument.write.assert_not_called()
 
-    def test_reading_above_ten_percent_resets_the_count(self):
+    def test_reading_above_one_percent_resets_the_count(self):
         obj = self.make_app()
         controller = Mock(lock=threading.RLock())
         obj.ppms_instrument_controllers = {'830_a': controller}
         obj._ppms_query_numbers = Mock(return_value=(13,))
         obj._set_connection_indicator = Mock()
         scale = app.NONLOCAL_SR830_FULL_SCALE_V[13]
-        for magnitude in (.05 * scale, .05 * scale, .3 * scale, .05 * scale, .05 * scale):
+        for magnitude in (.005 * scale, .005 * scale, .3 * scale, .005 * scale, .005 * scale):
             self.assertEqual(obj._ppms_autorange_sr830('830_a', magnitude, 0), 0.)
+        controller.instrument.write.assert_not_called()
+
+    def test_between_one_and_ten_percent_the_range_is_kept(self):
+        """User, 2026-11-16: "when the measured voltage is below 1%, then
+        decrease the range"; 9 % and 2 % stepped it down while the rule
+        was 10 %."""
+        obj = self.make_app()
+        controller = Mock(lock=threading.RLock())
+        obj.ppms_instrument_controllers = {'830_a': controller}
+        obj._ppms_query_numbers = Mock(return_value=(13,))
+        obj._set_connection_indicator = Mock()
+        scale = app.NONLOCAL_SR830_FULL_SCALE_V[13]
+        for fraction in (.09, .02, .011):
+            for _ in range(10):
+                self.assertEqual(obj._ppms_autorange_sr830('830_a', fraction * scale, 0), 0.)
         controller.instrument.write.assert_not_called()
 
     def test_overload_steps_up_one_code_per_settle(self):

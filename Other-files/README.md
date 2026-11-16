@@ -1,5 +1,55 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## A lock-in's range steps down under 1 %, and the rules no longer take turns for ever (user, 2026-11-16)
+
+- **Request:** "when the measured voltage is below 1%, then decrease the range of lock-in. pls make sure the
+  auto-range function work well and not get stuck in an endless auto-ranging loop".
+- **The step down** is at `LOCKIN_DOWNRANGE_FRACTION` = 1 % of the range on every page, after
+  `LOCKIN_DOWNRANGE_READINGS` = 3 low readings in a row with the reference locked. This supersedes the 15 %
+  (ST-FMR's and Non-local's SR830, the Zurich) and the 10 % (PPMS and SHV) of the earlier entries here. The step
+  up is unchanged: an overload, and on ST-FMR, Non-local and the Zurich also 85 % (`LOCKIN_UPRANGE_FRACTION`).
+  One SR830 code down is 2 or 2.5 times finer, so a reading lands at 2-2.5 % of the new range.
+- **Two loops were found** (on stand-in instruments; none was reproduced on hardware):
+  - **An SR830 whose finer range overloads on the input while R is small on it** (a weak harmonic beside a strong
+    fundamental): down on a low R, up on the overload, down again. ST-FMR and Non-local had no guard: 113 range
+    changes in 400 readings, each one a reading left out and a wait of 5 time constants. Now 4. They keep the
+    "overload floor" PPMS and SHV had since 2026-10-18: the range gone up to is the finest the down rule may
+    still step to.
+  - **The Zurich with a weak signal on its lowest range.** Its firmware chooses the range, and a "low" autorange
+    that kept the range counted as a change: 83 autoranges in 500 readings, each a wait of 10 time constants.
+    Now 1.
+- **The guards, and when they are forgotten:**
+  - SR830 floor: set only when the range overloaded while R was under 85 % of it (a full-scale R is the signal
+    itself, which is followed down again). Forgotten at `configure()` (a scan's Start), at each pass of an
+    ST-FMR sweep (`STFMRSR830Controller.new_pass`, from the pass's pre-read, which also drops an overload latched
+    while the pass was set up), and at a 6221-IV pass's next order; Gate-VI, which switches the order at every
+    point, keeps one floor per order (`overload_floor_memory`). PPMS and SHV: `_ppms_clear_sr830_range_floor`,
+    as before.
+  - Zurich: `mfli_low_floor_v` (no "low" autorange at or under the range the firmware kept) and
+    `mfli_low_readings_needed` (3, doubled each time a range that was stepped down has to go up again, up to
+    `MFLI_DOWNRANGE_READINGS_LIMIT`). Both start afresh at `configure_mfli()`, at a set-up's own autorange
+    ("initial", "STFMR frequency start") and, on PPMS and SHV, wherever the SR830 floors are forgotten
+    (`forget_mfli_range_guard`).
+- **Also changed with it:**
+  - The down rule on ST-FMR and Non-local needs the reference locked, as on PPMS (an unlocked R is noise, and the
+    range walked down while the source was off). On Non-local an unreadable `LIAS?` counts as unlocked for it.
+  - `PPMS_FIRST_POINT_FLOOR_FRACTION` 0.2 % -> 0.05 % of the range (2 % of an R at 2.5 % of the range): the
+    first-point test's floor was 2 % of the smallest R the 10 % rule left on a range, and would have been 8-20 %
+    of R at 1-2.5 %.
+- **From the review, before it shipped:** the ST-FMR floor was forgotten only at Start and each pass's pre-read
+  could raise it (13 -> 18 over six passes); the Zurich's guard was a one-way block, so a signal that grew and
+  shrank stayed on a coarse range; a 6221-IV pass's next order started at SENS 9 under the last order's floor;
+  PPMS and SHV forgot the SR830 floors but not the Zurich's guard; the first-point floor; the unreadable `LIAS?`.
+- **What the 1 % rule costs:** a reading can stay at 1-2.5 % of an SR830's full scale (it was brought to 15-40 %),
+  so the smallest signals are read with up to about ten times coarser steps. The Zurich's 1 % is of its input's
+  peak, not of the demodulated R.
+- **Not changed:** `Test_Microwave_NH_dev.py` (its own older copies of these rules, still 15 %). A Zurich
+  "overload/high" autorange that does not raise the range (the highest range, a spiky input) is still asked for
+  again; ST-FMR, PPMS and 6221-IV end the point with an error after three, Gate-VI reads on.
+- **Tests:** `test_lockin_downrange.py` (45: both SR830 rules, the Zurich's, the forgetting, the first-point
+  floor) and the four tests that held the old fractions (`test_ppms_current_callbacks`, `test_ppms_sr830_tc`,
+  `test_ppms_two_panels`, `test_stfmr_settle_acquire`). Not tested on a lock-in.
+
 ## An angle scan's plots span the scan's own angles (user, 2026-11-15)
 
 - **Request:** "when scan angle, can the xlim auto set to 0-360?", with a picture of an SHV Angle+Current scan from

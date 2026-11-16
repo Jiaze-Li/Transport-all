@@ -3097,13 +3097,49 @@ PPMS_PLOT_ROW_MIN_HEIGHT_PX = 70
 # Helium-level history is appended to this single file beside the program;
 # elapsed_s restarts at each program session, timestamp_local is absolute.
 PPMS_HELIUM_HISTORY_FILENAME = "PPMS_He_history.csv"
-# First point of a sweep: acquisition windows are repeated until two in a row
-# agree within the tolerance (fraction of R, with a floor as a fraction of the
-# SR830 full scale), capped at this many windows; the last window is kept.
+# When a lock-in's range is stepped down, on every page (user, 2026-11-16:
+# "when the measured voltage is below 1%, then decrease the range of
+# lock-in. pls make sure the auto-range function work well and not get stuck
+# in an endless auto-ranging loop"): the reading is under this fraction of
+# the range (an SR830's R of its full scale; the Zurich's input peak, every
+# harmonic and the noise with it, of its input range) for
+# LOCKIN_DOWNRANGE_READINGS readings in a row, the reference locked.  It was
+# 15 % on ST-FMR and Non-local and for the Zurich, 10 % on PPMS and SHV.
+# One SR830 code lower is 2 or 2.5 times finer, so the reading lands at
+# 2-2.5 % of the new range: far from the top, where the range steps up
+# again (an overload; on ST-FMR, Non-local and the Zurich also 85 %).
+#
+# What keeps the two rules from taking turns for ever:
+# - An SR830 range left because of an OVERLOAD while R was small is not
+#   returned to (the "overload floor"): a weak signal beside a strong one (a
+#   harmonic beside the fundamental, noise) overloads the input on the finer
+#   range while its R stays small, so the down rule would step back at
+#   once.  PPMS and SHV had this (2026-10-18); ST-FMR and Non-local now have
+#   it too.  The floor is forgotten where a finer range may be right again:
+#   a scan's Start, each pass of an ST-FMR sweep (carrier, power, modulation
+#   frequency, angle), a 6221-IV pass's next order (Gate-VI keeps one per
+#   order), and on PPMS and SHV see _ppms_clear_sr830_range_floor.
+# - The Zurich's range is chosen by its own firmware.  A "low" autorange
+#   that did not lower the range (the lowest range, or the firmware's own
+#   choice) is not asked for again on that range.  It was asked for every
+#   few readings for good with a weak signal, each one a wait of 10 time
+#   constants.  And each time a range that was stepped down has to go up
+#   again, twice as many low readings in a row are needed for the next step
+#   down (3, 6, 12 ...): a signal that grew and shrank is still followed,
+#   and a pair of ranges that take turns does so ever more rarely.  Both
+#   start afresh with a set-up (configure_mfli, a set-up's own autorange,
+#   and where PPMS and SHV forget the SR830 floors).
+LOCKIN_DOWNRANGE_FRACTION = 0.01
+LOCKIN_DOWNRANGE_READINGS = 3
+# The Zurich's low readings in a row stop doubling here.
+MFLI_DOWNRANGE_READINGS_LIMIT = LOCKIN_DOWNRANGE_READINGS * 1024
+# The range goes up at once at this fraction of it (ST-FMR, Non-local and
+# the Zurich; PPMS and SHV step up on an overload alone).  Unchanged.
+LOCKIN_UPRANGE_FRACTION = 0.85
 # Down-ranging (separate from the overload step): after this many consecutive
 # settled readings below this fraction of the SR830 full scale, the range is
 # narrowed one code.  Cool-down readings are skipped after any range change.
-PPMS_SR830_DOWNRANGE_FRACTION = 0.10
+PPMS_SR830_DOWNRANGE_FRACTION = LOCKIN_DOWNRANGE_FRACTION
 PPMS_SR830_DOWNRANGE_READINGS = 3
 PPMS_SR830_RANGE_COOLDOWN_READINGS = 3
 # A PPMS scan point gives SR830 autoranging 180 s.  That limit dates from the
@@ -3115,9 +3151,16 @@ PPMS_SR830_RANGE_COOLDOWN_READINGS = 3
 # shorter keep 180 s exactly (user, 2026-10-14).
 PPMS_SR830_RANGE_LIMIT_S = 180.0
 PPMS_SR830_RANGE_LIMIT_STEPS = 36
+# First point of a sweep: acquisition windows are repeated until two in a row
+# agree within the tolerance (fraction of R, with a floor as a fraction of the
+# SR830 full scale), capped at this many windows; the last window is kept.
+# The floor was 0.2 % of the range: 2 % of the smallest R the 10 % down rule
+# left on a range.  With the 1 % rule a reading stays at 1-10 % of the range,
+# where that floor is 2-20 % of R, so it follows the rule: 2 % of an R at
+# 2.5 % of the range, where a step down lands (review, 2026-11-16).
 PPMS_FIRST_POINT_MAX_WINDOWS = 10
 PPMS_FIRST_POINT_TOLERANCE_FRACTION = 0.02
-PPMS_FIRST_POINT_FLOOR_FRACTION = 0.002
+PPMS_FIRST_POINT_FLOOR_FRACTION = PPMS_FIRST_POINT_TOLERANCE_FRACTION * 2.5 * LOCKIN_DOWNRANGE_FRACTION
 PPMS_HARMONIC_ORDERS = (1, 2, 3)
 PPMS_HARMONIC_LABELS = {1: "1st harmonic", 2: "2nd harmonic", 3: "3rd harmonic"}
 PPMS_METER_COLORS = {"830_a": "#0072B2", "830_b": "#E69F00", "830_c": "#009E73", "zurich": "#CC79A7"}
@@ -6196,6 +6239,9 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         self.auto_range_enabled = True
         self.low_range_count = 0
         self.range_cooldown = 0
+        # The finest range (SENS index) the down rule may still step to: one
+        # above the last range that overloaded; 0 until one does.
+        self.overload_floor = 0
 
     def connect(self, resource_name: str) -> str:
         """As the shared connect, then X and Y on the display (user,
@@ -6304,6 +6350,7 @@ class STFMRSR830Controller(SafeVisaIdentityController):
             self.auto_range_enabled = auto_range
             self.low_range_count = 0
             self.range_cooldown = 0
+            self.overload_floor = 0  # a new scan may need a finer range again
             self.lias_clear_pending = True
             return {
                 "reference_input": reference_input,
@@ -6379,7 +6426,9 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         utilization = abs(float(r_value)) / NONLOCAL_SR830_FULL_SCALE_V[old]
         requested = old
         reason = ""
-        if status & 0x07 or utilization >= 0.85:
+        overloaded = bool(status & 0x07)
+        floor = int(self.__dict__.get("overload_floor") or 0)
+        if overloaded or utilization >= LOCKIN_UPRANGE_FRACTION:
             requested = min(old + 1, len(NONLOCAL_SR830_FULL_SCALE_V) - 1)
             reason = "overload/high"
             self.low_range_count = 0
@@ -6393,7 +6442,10 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         elif self.range_cooldown > 0:
             self.range_cooldown -= 1
             self.low_range_count = 0
-        elif utilization < 0.15 and old > 0:
+        elif (utilization < LOCKIN_DOWNRANGE_FRACTION and old > floor and not status & 0x08):
+            # Under 1 % of the range, the reference locked (an unlocked R
+            # says nothing), and not back onto a range that overloaded
+            # (user, 2026-11-16; see LOCKIN_DOWNRANGE_FRACTION).
             self.low_range_count += 1
             if self.low_range_count >= 3:
                 requested = old - 1
@@ -6414,7 +6466,23 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         self.sensitivity_index = actual
         self.range_cooldown = 3
         self.lias_clear_pending = True
+        if overloaded and actual > old and utilization < LOCKIN_UPRANGE_FRACTION:
+            # The range left overloaded while R was small on it: the down
+            # rule stops above it.  A large R is the signal itself, which the
+            # two rules follow without taking turns.
+            self.overload_floor = max(floor, actual)
         return f"SENS {old}->{actual} ({reason})"
+
+    def new_pass(self) -> None:
+        """The next pass of a sweep (carrier, power, modulation frequency or
+        angle): the range that overloaded in the pass before is no floor
+        for it, and an overload latched while the pass was set up (the 4886
+        zeroed and set again, the RF changed) is not this pass's (review,
+        2026-11-16: it raised the range, and the floor with it, pass after
+        pass)."""
+        with self.lock:
+            self.overload_floor = 0
+            self.lias_clear_pending = True
 
     def auto_phase(self) -> float:
         with self.lock:
@@ -12135,6 +12203,9 @@ class NonLocalACController:
     # SR830 queries that clear what they report as they are read: asked once,
     # never again after a misaligned reply (review, 2026-10-18).
     CLEAR_ON_READ_QUERIES = ("LIAS?", "*ESR?", "ERRS?")
+    # The Zurich autoranges that belong to a set-up (a scan's Start, a new
+    # carrier frequency): after one the range may be stepped down again.
+    MFLI_RANGE_FRESH_REASONS = ("initial", "STFMR frequency start")
     # The status of a reading whose LIAS? reply was unreadable: every
     # overload bit and the reference unlocked, so the reading is left out
     # (review, 2026-10-18: "treat a misaligned LIAS? as overloaded").
@@ -12165,8 +12236,22 @@ class NonLocalACController:
         self.sensitivity_indices: dict[str, int] = {}
         self.low_range_counts: dict[str, int] = {}
         self.range_cooldowns: dict[str, int] = {}
+        # Per SR830, the finest range (SENS index) the down rule may still
+        # step to: one above the last range that overloaded.
+        self.overload_floors: dict[str, int] = {}
+        # ... and the floor of each order of an SR830 that reads several
+        # (Gate-VI switches at every point), with the order it is on now.
+        self.overload_floor_memory: dict[tuple[str, int], int] = {}
+        self.lockin_harmonics: dict[str, int] = {}
         self.mfli_low_range_count = 0
         self.mfli_range_cooldown = 0
+        # The Zurich's step down (see LOCKIN_DOWNRANGE_FRACTION): the range
+        # a "low" autorange kept (none asked for at or under it), whether
+        # the range in use was reached by a step down, and how many low
+        # readings in a row the next one needs.
+        self.mfli_low_floor_v = 0.0
+        self.mfli_stepped_down = False
+        self.mfli_low_readings_needed = LOCKIN_DOWNRANGE_READINGS
         self.mfli_initial_autorange_pending = False
         # 6221-IV may switch the MFLI input autorange off; every configure()
         # sets it again (Gate-VI keeps it on).
@@ -12572,6 +12657,8 @@ class NonLocalACController:
                 self.sensitivity_indices.pop(key, None)
                 self.low_range_counts.pop(key, None)
                 self.range_cooldowns.pop(key, None)
+                self.__dict__.setdefault("overload_floors", {}).pop(key, None)
+                self.__dict__.setdefault("lockin_harmonics", {}).pop(key, None)
                 self.logger(f"Non-local IV SR830 #{key} connected: {identity}")
                 return identity
             except BaseException:
@@ -13481,7 +13568,17 @@ class NonLocalACController:
         self.mfli_low_range_count = 0
         self.mfli_range_cooldown = 0
         self.mfli_initial_autorange_pending = True
+        # A new set-up: the range may be stepped down again.
+        self.forget_mfli_range_guard()
         return dict(self.mfli_config)
+
+    def forget_mfli_range_guard(self) -> None:
+        """A new set-up (a scan's Start, a new carrier, a new excitation):
+        what held the Zurich's step down back is forgotten (see
+        LOCKIN_DOWNRANGE_FRACTION)."""
+        self.mfli_low_floor_v = 0.0
+        self.mfli_stepped_down = False
+        self.mfli_low_readings_needed = LOCKIN_DOWNRANGE_READINGS
 
     def read_mfli(self, expected_frequency_hz: float) -> dict[str, object]:
         if not self.mfli_connected:
@@ -13975,6 +14072,12 @@ class NonLocalACController:
                 self.sensitivity_indices[key] = sensitivity
                 self.low_range_counts[key] = 0
                 self.range_cooldowns[key] = 0
+                # A new scan may need a finer range again, on every order.
+                self.__dict__.setdefault("overload_floors", {})[key] = 0
+                memory = self.__dict__.setdefault("overload_floor_memory", {})
+                for name in [name for name in memory if name[0] == key]:
+                    del memory[name]
+                self.__dict__.setdefault("lockin_harmonics", {})[key] = harmonic
                 self.lias_clear_pending[key] = True
                 time_constant_code = int(self._query_sr830_numbers(key, "OFLT?", 1)[0])
                 readbacks[key] = {
@@ -14215,6 +14318,25 @@ class NonLocalACController:
         self.mfli_low_range_count = 0
         self.mfli_range_cooldown = 3
         self.mfli_initial_autorange_pending = False
+        # Whether the range may be stepped down again (user, 2026-11-16; see
+        # LOCKIN_DOWNRANGE_FRACTION).  The firmware chooses the range, so a
+        # "low" autorange may keep it: asked again and again, each one a
+        # wait of 10 time constants and a reading left out, for good.
+        if reason in self.MFLI_RANGE_FRESH_REASONS:
+            # A set-up's own autorange: a new start.
+            self.forget_mfli_range_guard()
+        elif reason == "low":
+            if new_range < old_range * (1.0 - 1e-6):
+                self.mfli_stepped_down = True
+            else:
+                # The firmware kept the range: no "low" at or under it again.
+                self.mfli_low_floor_v = new_range
+        elif new_range > old_range * (1.0 + 1e-6) and self.__dict__.get("mfli_stepped_down", False):
+            # A range that was stepped down had to go up again: the next
+            # step down needs twice as many low readings in a row.
+            self.mfli_stepped_down = False
+            needed = int(self.__dict__.get("mfli_low_readings_needed") or LOCKIN_DOWNRANGE_READINGS)
+            self.mfli_low_readings_needed = min(2 * needed, MFLI_DOWNRANGE_READINGS_LIMIT)
         return f"RANGE {old_range:.6g}->{new_range:.6g} V ({reason})"
 
     def _auto_range_mfli(self, sample: dict[str, object]) -> str:
@@ -14224,15 +14346,24 @@ class NonLocalACController:
         utilization = float(sample.get("input_utilization", 0.0))
         if not math.isfinite(utilization):
             return ""
-        if utilization >= 0.85:
+        if utilization >= LOCKIN_UPRANGE_FRACTION:
             return self._run_mfli_autorange("overload/high")
         if self.mfli_range_cooldown > 0:
             self.mfli_range_cooldown -= 1
             self.mfli_low_range_count = 0
             return ""
-        if utilization < 0.15:
+        # Under 1 % of the range, and not on a range the firmware kept the
+        # last time it was asked (user, 2026-11-16).
+        floor = float(self.__dict__.get("mfli_low_floor_v") or 0.0)
+        try:
+            in_use = float((self.__dict__.get("mfli_config") or {}).get("input_range_v", math.nan))
+        except (TypeError, ValueError):
+            in_use = math.nan
+        kept_here = floor > 0.0 and math.isfinite(in_use) and in_use <= floor * (1.0 + 1e-6)
+        if utilization < LOCKIN_DOWNRANGE_FRACTION and not kept_here:
             self.mfli_low_range_count += 1
-            if self.mfli_low_range_count >= 3:
+            needed = int(self.__dict__.get("mfli_low_readings_needed") or LOCKIN_DOWNRANGE_READINGS)
+            if self.mfli_low_range_count >= needed:
                 return self._run_mfli_autorange("low")
         else:
             self.mfli_low_range_count = 0
@@ -14253,7 +14384,7 @@ class NonLocalACController:
         utilization = float(sample.get("input_utilization", math.nan))
         raw_valid = bool(sample.get("input_extrema_valid", False))
         overloaded = sample.get("input_overload") is True
-        high = raw_valid and math.isfinite(utilization) and utilization >= 0.85
+        high = raw_valid and math.isfinite(utilization) and utilization >= LOCKIN_UPRANGE_FRACTION
         if attempts >= 3:
             if overloaded or high or initial:
                 raise RuntimeError(
@@ -14280,14 +14411,20 @@ class NonLocalACController:
         utilization = abs(r_v) / NONLOCAL_SR830_FULL_SCALE_V[old]
         requested = old
         reason = ""
-        if status & 0x07 or utilization >= 0.85:
+        overloaded = bool(status & 0x07)
+        floors = self.__dict__.setdefault("overload_floors", {})
+        floor = int(floors.get(key) or 0)
+        if overloaded or utilization >= LOCKIN_UPRANGE_FRACTION:
             requested = min(old + 1, len(NONLOCAL_SR830_FULL_SCALE_V) - 1)
             reason = "overload/high"
             self.low_range_counts[key] = 0
         elif self.range_cooldowns[key] > 0:
             self.range_cooldowns[key] -= 1
             self.low_range_counts[key] = 0
-        elif utilization < 0.15 and old > 0:
+        elif utilization < LOCKIN_DOWNRANGE_FRACTION and old > floor and not status & 0x08:
+            # Under 1 % of the range, the reference locked, and not back
+            # onto a range that overloaded (user, 2026-11-16; see
+            # LOCKIN_DOWNRANGE_FRACTION).
             self.low_range_counts[key] += 1
             # Require several consecutive low readings; a single quiet sample
             # must not make sensitivity chatter during a sweep.
@@ -14305,6 +14442,10 @@ class NonLocalACController:
             self.sensitivity_indices[key] = actual
             self.range_cooldowns[key] = 3
             self.lias_clear_pending[key] = True
+            if overloaded and actual > old and utilization < LOCKIN_UPRANGE_FRACTION:
+                # The range left overloaded while R was small on it: the
+                # down rule stops above it (see STFMRSR830Controller).
+                floors[key] = max(floor, actual)
             return f"SENS {old}->{actual} ({reason})"
         return ""
 
@@ -14392,9 +14533,11 @@ class NonLocalACController:
         if unreadable:
             status = self.SR830_LIAS_UNREADABLE
         sensitivity_used = self.sensitivity_indices[key]
-        # An unreadable status steps no range: R alone decides, and an
-        # overload that lasts shows again in the next LIAS? (it latches anew).
-        auto_action = self._auto_range(key, values[2], 0 if unreadable else status)
+        # An unreadable status steps no range for an overload: R alone
+        # decides the step up, and an overload that lasts shows again in the
+        # next LIAS? (it latches anew).  It counts as unlocked, so it steps
+        # no range down either (review, 2026-11-16).
+        auto_action = self._auto_range(key, values[2], 0x08 if unreadable else status)
         reference_valid = not (status & 8) and math.isclose(
             values[4], expected_frequency_hz, rel_tol=5e-3, abs_tol=0.1
         )
@@ -14500,6 +14643,18 @@ class NonLocalACController:
             self.lias_clear_pending[key] = True
             self.low_range_counts[key] = 0
             self.range_cooldowns[key] = 0
+            # The overload floor belongs to an order (review, 2026-11-16:
+            # the next order started at SENS 9 under the last one's floor
+            # and could never step down).  An order that starts at the
+            # configure range starts without one; one that comes back to its
+            # own last range (Gate-VI, at every point) keeps its own.
+            floors = self.__dict__.setdefault("overload_floors", {})
+            memory = self.__dict__.setdefault("overload_floor_memory", {})
+            harmonics = self.__dict__.setdefault("lockin_harmonics", {})
+            if key in harmonics:
+                memory[(key, harmonics[key])] = int(floors.get(key) or 0)
+            floors[key] = 0 if sensitivity_index is None else int(memory.get((key, harmonic)) or 0)
+            harmonics[key] = harmonic
 
     def output_off(self) -> None:
         with self.lock:
@@ -26956,6 +27111,10 @@ class CombinedControlApp:
                 lambda: self.stfmr_lockin_controllers["gauss"].read_field(),
             )
             if meter in ("SR830", "MFLI + SR830"):
+                # Each pass ranges afresh (review, 2026-11-16).
+                new_pass = getattr(self.stfmr_lockin_controllers["830"], "new_pass", None)
+                if callable(new_pass):
+                    new_pass()
                 self._stfmr_retry_read(
                     "SR830",
                     lambda: self.stfmr_lockin_controllers["830"].read_sample(
@@ -27008,9 +27167,10 @@ class CombinedControlApp:
         its overload and near-full-scale steps (and its limit of three range
         changes per point): a step down there would restart the point, and
         the MFLI's firmware autorange counts as a change even when it keeps
-        the range, so a weak signal, always under 15 % of the lowest range,
-        would restart every point three times, 10 x TC each
-        (user, 2026-10-14)."""
+        the range, so a weak signal, always under the down rule's fraction
+        of the lowest range, would restart every point three times, 10 x TC
+        each (user, 2026-10-14).  Since 2026-11-16 such a step down is not
+        asked for a second time either (mfli_low_floor_v)."""
         controller = self.stfmr_lockin_mfli_controller
         expected_hz = self.stfmr_lockin_expected_hz
         auto_range = self.stfmr_lockin_mfli_auto_range
@@ -27030,7 +27190,7 @@ class CombinedControlApp:
         high = (
             bool(sample.get("input_extrema_valid", False))
             and math.isfinite(utilization)
-            and utilization >= 0.85
+            and utilization >= LOCKIN_UPRANGE_FRACTION
             and bool(getattr(controller, "mfli_auto_range_enabled", True))
         )
         if not overloaded and not high:
@@ -50089,8 +50249,9 @@ class CombinedControlApp:
 
         self.ppms_last_current_trip = False
         # A new excitation: the ranges that overloaded under the old one are
-        # no floor for it (review, 2026-10-18).
-        self._ppms_clear_sr830_range_floor(active_lockins)
+        # no floor for it (review, 2026-10-18), nor is what held the
+        # Zurich's step down back (review, 2026-11-16).
+        self._ppms_clear_sr830_range_floor(active_lockins, zurich=True)
         current_rms_ma = float(settings["current_rms_ma"])
         frequency_hz = float(settings["frequency_hz"])
         compliance_v = float(settings["compliance_v"])
@@ -50315,7 +50476,7 @@ class CombinedControlApp:
             sample[f"{prefix}_sensitivity_index"] = self.ppms_sr830_range_states[key].sensitivity_index
         return sample
 
-    def _ppms_clear_sr830_range_floor(self, keys=None) -> None:
+    def _ppms_clear_sr830_range_floor(self, keys=None, zurich=None) -> None:
         """Forget the ranges that overloaded (_ppms_autorange_sr830), for
         ``keys`` or every SR830: a new pass, sweep, source set-up, time
         constant or Connect may need a finer range again (review,
@@ -50323,6 +50484,12 @@ class CombinedControlApp:
         for key, state in dict(getattr(self, "ppms_sr830_range_states", None) or {}).items():
             if keys is None or key in keys:
                 state.overload_floor = None
+        # The Zurich's own step-down guard, at the same moments (review,
+        # 2026-11-16): with every SR830's floor, or when asked (``zurich``).
+        if keys is None if zurich is None else zurich:
+            forget = getattr(self.__dict__.get("zurich_controller"), "forget_mfli_range_guard", None)
+            if callable(forget):
+                forget()
 
     def _ppms_read_sr830_status(self, key, fresh=False) -> int:
         """Read the SR830 LIA status byte with its latching in mind.
@@ -50354,9 +50521,10 @@ class CombinedControlApp:
 
         Up: any overload report widens the range one code at once.
         Down: with ``allow_down`` (idle polling, and a scan point's first
-        reading), a reference-locked amplitude below 10 % of full scale for
+        reading), a reference-locked amplitude below 1 % of full scale
+        (LOCKIN_DOWNRANGE_FRACTION; user, 2026-11-16; it was 10 %) for
         three consecutive settled readings narrows the range one code,
-        landing the signal at 20-25 % of the new range.  Both directions are
+        landing the signal at 2-2.5 % of the new range.  Both directions are
         followed by a cool-down of three readings.  ``enabled`` gates only
         the down rule (it needs the PPMS excitation to be on).
 

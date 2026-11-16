@@ -662,8 +662,14 @@ class TwoPanelTests(unittest.TestCase):
         controller._run_mfli_autorange.reset_mock()
         controller.mfli_range_cooldown = 0
         controller.mfli_low_range_count = 0
+        # 10 % of the range is not low any more (under 1 %; user, 2026-11-16).
         controller.read_mfli.return_value = {'input_overload': False,
             'input_extrema_valid': True, 'input_utilization': .1}
+        for _ in range(6):
+            controller.read_stfmr_mfli(317.3, auto_range=True)
+        controller._run_mfli_autorange.assert_not_called()
+        controller.read_mfli.return_value = {'input_overload': False,
+            'input_extrema_valid': True, 'input_utilization': .005}
         for _ in range(2):
             controller.read_stfmr_mfli(317.3, auto_range=True)
             controller._run_mfli_autorange.assert_not_called()

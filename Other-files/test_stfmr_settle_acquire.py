@@ -91,7 +91,8 @@ class PatternMFLI(PatternSR830):
 class RangingMFLI(Device):
     """A stand-in MFLI with the real controller's range rules (read_stfmr_mfli,
     _auto_range_mfli, and _run_mfli_autorange's count and cool-down reset),
-    always reading a weak signal: 1 % of its input range."""
+    always reading a weak signal: 0.1 % of its input range (under the down
+    rule's 1 %; user, 2026-11-16)."""
 
     _auto_range_mfli = app.NonLocalACController._auto_range_mfli
 
@@ -107,7 +108,7 @@ class RangingMFLI(Device):
 
     def read_mfli(self, expected):
         sample = super().read_mfli(expected)
-        sample.update(input_extrema_valid=True, input_utilization=0.01)
+        sample.update(input_extrema_valid=True, input_utilization=0.001)
         return sample
 
     def _run_mfli_autorange(self, reason):
@@ -381,7 +382,7 @@ class RangeAndFailureTests(Sweeps):
         self.assertEqual(rows[1]["mfli_auto_range_action"], "")
 
     def test_a_weak_mfli_signal_ranges_down_only_on_each_points_first_reading(self):
-        """Counted on every reading, 1 % of the range would run the
+        """Counted on every reading, 0.1 % of the range would run the
         firmware autorange (a change even when it keeps the range) after
         every three low readings and restart the point, up to three times
         a point; counted on each point's first reading only, as when a point
