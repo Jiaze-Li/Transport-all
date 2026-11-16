@@ -815,9 +815,12 @@ class ScanStartTimeConstantTests(NoWindows):
         panel.ppms_instrument_controllers["6221"] = slot("Keithley 6221", source, "GPIB0::12::INSTR")
         panel._ppms_write_6221_checked = source.write
         panel._initialize_ppms_6221 = lambda: None
+        # The page's own SR830-1 harmonic, which Connect set (SHHV's is 2
+        # since the user's figure of 2026-11-16), so the start writes no HARM.
+        own = str(panel._ppms_harmonic_var("830_a").get())
         panel._configure_ppms_transport_scan(dict(
             active_lockins=("830_a",), current_rms_ma=1.0, frequency_hz=317.3, compliance_v=10.0,
-            harmonic_a=1, harmonic_b=2, harmonic_c=3))
+            harmonic_a=int(own) if own.isdigit() else 1, harmonic_b=2, harmonic_c=3))
         return sr830
 
     def connected(self, build=build_ppms_panel):

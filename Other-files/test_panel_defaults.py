@@ -43,32 +43,33 @@ class PanelDefaultTests(unittest.TestCase):
         (2026-10-07), 1+2, at 1 mA RMS, 317.3 Hz, KEPCO current 8 A (the
         user's figures, 2026-10-18; it was 1+2+3, 0.1 mA RMS, 17.3 Hz, 0 A)."""
         panel = self.app.rte_panel
-        # The lock-ins since 2026-10-20 (user's figure): SR830-1 at 1 and
-        # SR830-2 at 2 measured, SR830-3 at 3 and the Zurich at 1+2 not.
+        # The lock-ins since 2026-11-16 (user's figure): SR830-1 at 2
+        # measured; SR830-2 at 2, SR830-3 at 3 and the Zurich at 1+2 not.
         self.assertEqual(self.settings(panel), {
-            "830_a": ("1", True),
-            "830_b": ("2", True),
+            "830_a": ("2", True),
+            "830_b": ("2", False),
             "830_c": ("3", False),
             "zurich": ("1+2", False),
         })
         self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHHV")
-        self.assertEqual(panel.ppms_transport_current_var.get(), "1")
+        self.assertEqual(panel.ppms_transport_current_var.get(), "1.5")
         self.assertEqual(panel.ppms_transport_frequency_var.get(), "317.3")
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "50")
-        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("8", "5"))
+        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("5", "5"))
         self.assertEqual(panel.zurich_expected_frequency, 317.3)
         # The PPMS page keeps its own excitation.
         self.assertEqual(self.app.ppms_panel.ppms_transport_frequency_var.get(), "317.3")
-        # The start-up scan (user's figure, 2026-10-18): Angle, 0 to -360 deg
-        # in 5 deg steps, Settle s 0.5, Acquire s 2, Loops 1; round trip off
-        # since 2026-10-18 (user: "default not click Round trip"); Angle+Field
-        # with the outer KEPCO 3 to 9 A in 1 A steps since 2026-10-19 (user).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
+        # The start-up scan (user's figures, 2026-10-18 and 2026-11-16): Angle,
+        # 0 to -360 deg in 5 deg steps, Settle s 0.5, Acquire s 5, Loops 1;
+        # round trip off since 2026-10-18 (user: "default not click Round
+        # trip").  Angle+Field (from 2026-10-19 to 2026-11-16 the start-up
+        # mode) keeps its outer KEPCO 3 to 9 A in 1 A steps.
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
         self.assertEqual([v.get() for v in panel.rte_outer_ranges["Angle+Field"]], ["3", "9", "1"])
         self.assertEqual([v.get() for v in panel.ppms_simple_range], ["0", "-360", "5"])
         self.assertIs(panel.rte_round_trip.get(), False)
         self.assertEqual((panel.ppms_field_scan_stable_var.get(), panel.ppms_acquisition_time_var.get(),
-                          int(panel.ppms_field_scan_loop_var.get())), ("0.5", "2", 1))
+                          int(panel.ppms_field_scan_loop_var.get())), ("0.5", "5", 1))
         self.assertEqual(panel.rte_scan_units.get(), "Stage °")
         self.assertEqual(panel.ppms_plot_axis, "angle")
         # The PPMS page keeps its own Acquire s.
@@ -77,14 +78,15 @@ class PanelDefaultTests(unittest.TestCase):
     def test_rte_selection_gives_one_plot_row_per_harmonic(self):
         panel = self.app.rte_panel
         orders = panel._ppms2_measured_orders()
-        # SR830-1 at 1 and SR830-2 at 2 by default (user's figure, 2026-10-20).
-        self.assertEqual(sorted(orders), [1, 2])
+        # SR830-1 alone at 2 by default (user's figure, 2026-11-16).
+        self.assertEqual(sorted(orders), [2])
         self.assertEqual({order: sorted(meters) for order, meters in orders.items()},
-                         {1: ["830_a"], 2: ["830_b"]}, f"SR830-1 and SR830-2 measured by default: {orders}")
+                         {2: ["830_a"]}, f"SR830-1 alone measured by default: {orders}")
 
     def test_rte_scan_runs_one_pass_per_harmonic(self):
-        # SR830-1 at 1+2+3, chosen as its harmonic box would: it starts at 1
-        # since the user's figure (2026-10-20; it was 1+2+3 until then).
+        # SR830-1 at 1+2+3, chosen as its harmonic box would: it starts at 2
+        # since the user's figure of 2026-11-16 (1 from 2026-10-20, 1+2+3
+        # before).
         panel = self.app.rte_panel
         variable = panel._ppms_harmonic_var("830_a")
         self.addCleanup(variable.set, variable.get())

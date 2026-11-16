@@ -3576,17 +3576,19 @@ PPMS_TRANSPORT_CURRENT_RMS_MA = 0.001
 PPMS_TRANSPORT_FREQUENCY_HZ = 317.3
 # The SHHV page (called RT-E until 2026-10-18 and SHV until 2026-11-16; user:
 # "rename RT-E as SHV", then "change SHV module name to SHHV pls.").
-# Its start-up excitation: 1 mA RMS at 317.3 Hz (user's figures, 2026-10-18;
-# it was 0.1 mA RMS at 17.3 Hz).
+# Its start-up excitation: 1.5 mA RMS at 317.3 Hz (user's figure, 2026-11-16:
+# "using the parameters in the figure as default pls."; 1 mA RMS since
+# 2026-10-18, before that 0.1 mA RMS at 17.3 Hz).
 RTE_TRANSPORT_FREQUENCY_HZ = 317.3
-RTE_TRANSPORT_CURRENT_RMS_MA = 1.0
+RTE_TRANSPORT_CURRENT_RMS_MA = 1.5
 # SHHV start-up scan, the user's figures (2026-10-18): an Angle scan from 0 to
 # -360 deg in 5 deg steps, Acquire s 2 (Settle s 0.5 and Loops 1 as before),
 # round trip off since 2026-10-18 (user: "default not click Round trip").
 # The Angle range is also what choosing Angle puts in the boxes.
-# SHHV starts on Angle+Field, outer KEPCO 3 to 9 A in 1 A steps (user's figure,
-# 2026-10-19; it started on Angle).
-RTE_DEFAULT_SCAN_MODE = 'Angle+Field'
+# SHHV starts on Angle again (user's figure, 2026-11-16); from 2026-10-19 it
+# started on Angle+Field, outer KEPCO 3 to 9 A in 1 A steps (still that row's
+# start-up range).
+RTE_DEFAULT_SCAN_MODE = 'Angle'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # The SHHV scan modes.  Angle+Field and Angle+Current (user, 2026-10-18: "add
 # the angle + field scan mode, field is the outside loop"; "also angle+current
@@ -3607,11 +3609,13 @@ RTE_OUTER_ROWS = {
 # _rte_settle_field reads the LS475 every 0.2 s; the shortest settle is
 # STFMR_FIELD_SETTLE_REQUIRED_SAMPLES of them (the time estimates count it).
 RTE_FIELD_SETTLE_POLL_S = 0.2
-RTE_ACQUISITION_S = 2.0
-# The "KEPCO current A" box at start-up, the field an Angle scan holds (user's
-# figure, 2026-10-18; it was 0 A).  Only Apply KEPCO or an Angle scan's Start,
-# each after its Yes/No naming the current, sends it.
-RTE_KEPCO_DEFAULT_CURRENT_A = 8.0
+# Acquire s at start-up: 5 s (user's figure, 2026-11-16; 2 s since 2026-10-18).
+RTE_ACQUISITION_S = 5.0
+# The "Magnet current A" box at start-up, the field an Angle scan holds: 5 A
+# (user's figure, 2026-11-16; 8 A since 2026-10-18, before that 0 A).  Only
+# Apply KEPCO / Apply LS643 or an Angle scan's Start, each after its Yes/No
+# naming the current, sends it.
+RTE_KEPCO_DEFAULT_CURRENT_A = 5.0
 # The Zurich's harmonics at start-up (user's figure, 2026-10-18; was 1+2+3).
 RTE_ZURICH_DEFAULT_HARMONICS = '1+2'
 PPMS_TRANSPORT_COMPLIANCE_V = 50.0
@@ -56945,26 +56949,28 @@ class RTEPanel(PPMSPanel):
         # reconnect (review, 2026-10-18); Connect's claim shares it again.
         self.rte_controllers['newmark'].share_stop_record(self._newmark_stage_ownership())
         self.ppms_plot_frame.configure(text='SHHV: X, Y, phase vs measured field / excitation current / sample angle')
-        # SHHV start-up defaults (the user's figures, 2026-10-07 and
-        # 2026-10-18): 6221 1 mA RMS at 317.3 Hz, and the Zurich alone
-        # measures, reading 1+2 harmonics together.  The SR830s keep their
-        # harmonic settings so ticking Measure needs no further setup.
+        # SHHV start-up defaults (the user's figures, 2026-10-07, 2026-10-18
+        # and 2026-11-16): 6221 1.5 mA RMS at 317.3 Hz; the lock-ins below.
+        # Every lock-in keeps a harmonic setting so ticking Measure needs no
+        # further setup.
         self.ppms_transport_current_var.set(f'{RTE_TRANSPORT_CURRENT_RMS_MA:g}')
         self.ppms_transport_frequency_var.set(f'{RTE_TRANSPORT_FREQUENCY_HZ:g}')
         self.zurich_expected_frequency = RTE_TRANSPORT_FREQUENCY_HZ
-        # The lock-ins at start-up (user's figure, 2026-10-20): SR830-1 at
-        # harmonic 1 and SR830-2 at 2 measured, SR830-3 at 3 and the Zurich at
-        # 1+2 not measured (until then the Zurich alone measured, and SR830-1
-        # was at 1+2+3).
-        self.ppms_transport_harmonic_a_var.set('1')
+        # The lock-ins at start-up (user's figure, 2026-11-16): SR830-1 at
+        # harmonic 2 measured; SR830-2 at 2, SR830-3 at 3 and the Zurich at
+        # 1+2 not measured.  From 2026-10-20 SR830-1 was at harmonic 1 and
+        # SR830-2 measured too; before that the Zurich alone measured, and
+        # SR830-1 was at 1+2+3.
+        self.ppms_transport_harmonic_a_var.set('2')
         self.ppms_transport_harmonic_b_var.set('2')
         self.ppms_transport_harmonic_c_var.set('3')
         self.zurich_harmonic.set(RTE_ZURICH_DEFAULT_HARMONICS)
-        for key, measured in (('830_a', True), ('830_b', True),
+        for key, measured in (('830_a', True), ('830_b', False),
                               ('830_c', False), ('zurich', False)):
             self.ppms_lockin_selection[key].set(measured)
-        # The start-up scan (user's figures, 2026-10-18): Angle, 0 to -360
-        # deg in 5 deg steps, Acquire s 2, round trip off (user, 2026-10-18).
+        # The start-up scan (user's figures, 2026-10-18 and 2026-11-16): Angle,
+        # 0 to -360 deg in 5 deg steps, Settle s 0.5, Acquire s 5, Loops 1,
+        # round trip off (user, 2026-10-18).
         # The mode change sets the range, round trip, units label, scan note,
         # outer row (removed) and plot axis, as choosing Angle does.
         self.ppms_acquisition_time_var.set(f'{RTE_ACQUISITION_S:g}')

@@ -1,5 +1,20 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV start-up values from the user's screenshot (user, 2026-11-16)
+
+- **Request:** "using the parameters in the figure as default pls." (a screenshot of the SHHV settings and scan
+  boxes).
+- **Changed:** scan mode Angle (was Angle+Field; `RTE_DEFAULT_SCAN_MODE`), Magnet current A 5 (was 8;
+  `RTE_KEPCO_DEFAULT_CURRENT_A`, the box shared by the KEPCO and the LS643), 6221 1.5 mA RMS (was 1;
+  `RTE_TRANSPORT_CURRENT_RMS_MA`), Acquire s 5 (was 2; `RTE_ACQUISITION_S`), SR830-1 at harmonic 2 and measured,
+  SR830-2 at 2 not measured (was SR830-1 at 1 and SR830-2 measured).
+- **Already as in the figure:** LS643, Rate 1 A/s, 317.3 Hz, Compliance 50 V, Stage 0°, SR830-3 at 3 and the
+  Zurich at 1+2 not measured, Start 0 / End -360 / Step 5, Loops 1, Settle s 0.5, Round trip off.
+- **Not made a default:** "Safety confirmed" stays unticked at start-up; it is ticked by hand each session.
+- Nothing is sent at start-up, as before: the 5 A reaches the magnet supply only through Apply or an Angle scan's
+  Start, each after its Yes/No naming the current; the 1.5 mA reaches the 6221 only through Set 6221 or a scan's
+  Start, with the safety box ticked.
+
 ## The SHV page is renamed SHHV (user, 2026-11-16)
 
 - **Request:** "change SHV module name to SHHV pls."

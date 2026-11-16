@@ -1922,12 +1922,13 @@ class AnglePageTests(unittest.TestCase):
                           and "row" in w.grid_options and w.grid_options["row"] == 0], "only the scan rows on top")
         # Three scan rows (mode/Start/End/Step; units/Loops/Settle s/Acquire
         # s; Start scan/Stop/Save CSV as/Round trip), and the outer row of
-        # Angle+Field and Angle+Current (user, 2026-10-18), shown at start-up,
-        # since the page starts on Angle+Field (user, 2026-10-19).
+        # Angle+Field and Angle+Current (user, 2026-10-18), hidden at
+        # start-up, since the page starts on Angle (user, 2026-11-16; it
+        # started on Angle+Field from 2026-10-19).
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
-                          if w.parent is rows and "row" in w.grid_options and not w.grid_removed}, {0, 1, 2, 3})
+                          if w.parent is rows and "row" in w.grid_options and not w.grid_removed}, {0, 1, 2})
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
-                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, set())
+                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {3})
         labels = {w.options["text"]: w for w in Recorder.made
                   if w.parent is block and "text" in w.options and "command" not in w.options}
         buttons = {w.options.get("text"): w for w in Recorder.made if "command" in w.options}
@@ -1956,8 +1957,8 @@ class AnglePageTests(unittest.TestCase):
         # stay full width under the scan rows.
         self.assertIs(panel.ppms_field_scan_progress.parent.parent, scan)
         note = next(w for w in Recorder.made if w.options.get("textvariable") is panel.rte_scan_note)
-        # The page starts on the user's Angle scan (2026-10-18).
-        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field: Stage °; outer: KEPCO A")
+        # The page starts on the user's Angle scan (2026-11-16).
+        self.assertEqual(panel.rte_scan_note.get(), "Angle: Stage °; field: KEPCO current A")
         self.assertIs(note.parent.parent, scan)
         self.assertEqual((rows.grid_options["row"], panel.ppms_field_scan_progress.parent.grid_options["row"],
                           note.parent.grid_options["row"]), (0, 1, 2))
@@ -3072,9 +3073,10 @@ class OuterRowPageTests(unittest.TestCase):
         outer = [widget for widget, _options in panel.rte_outer_widgets]
         others = [w for w in Recorder.made if w.parent is rows and w not in outer]
         layout = lambda: [(w, dict(w.grid_options), w.grid_removed) for w in others]
-        # The page starts on Angle+Field with its outer row (user, 2026-10-19).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
-        self.assertFalse(any(w.grid_removed for w in outer))
+        # The page starts on Angle, without the outer row (user, 2026-11-16;
+        # Angle+Field with its outer row from 2026-10-19).
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
+        self.assertTrue(all(w.grid_removed for w in outer))
         self.mode(panel, "Angle")
         before = layout()
         # Angle: round trip off and no outer row.

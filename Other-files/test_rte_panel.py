@@ -444,13 +444,15 @@ class RTE(unittest.TestCase):
             stack.enter_context(patch.object(app.CombinedControlApp, '_set_connection_indicator', Mock()))
             stack.enter_context(patch.object(app.CombinedControlApp, '_draw_nonlocal_series', Mock()))
             panel = app.RTEPanel(parent, Widget())
-            # The start-up scan is the user's Angle+Field scan (2026-10-19).
-            self.assertEqual(panel.ppms_simple_mode.get(), 'Angle+Field')
+            # The start-up scan is the user's Angle scan (2026-11-16; Angle+Field
+            # from 2026-10-19); Angle+Field keeps its outer range.
+            self.assertEqual(panel.ppms_simple_mode.get(), 'Angle')
             self.assertEqual([v.get() for v in panel.rte_outer_ranges['Angle+Field']], ['3', '9', '1'])
             # Round trip off (user, 2026-10-18: "default not click Round trip").
             self.assertFalse(panel.rte_round_trip.get())
             self.assertEqual([v.get() for v in panel.ppms_simple_range], ['0', '-360', '5'])
-            self.assertEqual(panel.ppms_acquisition_time_var.get(), '2')
+            # Acquire s 5 (user's figure, 2026-11-16; 2 since 2026-10-18).
+            self.assertEqual(panel.ppms_acquisition_time_var.get(), '5')
             measurement = panel.ppms_instruments_frame.parent
             rack = panel.rte_connection_widgets['kepco'][0].parent
             for key in ('6221', '2400'):

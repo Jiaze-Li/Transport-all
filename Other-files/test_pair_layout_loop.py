@@ -362,8 +362,8 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             self.root.update()
 
     def test_the_outer_row_costs_no_height_in_the_1101_px_window(self):
-        """The outer row of Angle+Field (the start-up scan since 2026-10-19,
-        user) and Angle+Current: beside the main row in the 1101 px window,
+        """The outer row of Angle+Field (the start-up scan from 2026-10-19 to
+        2026-11-16, user) and Angle+Current: beside the main row in the 1101 px window,
         so the scan box is as tall as an Angle scan's (CI, 2026-10-30: under
         the main rows it took 36 px from the plots on Windows, 43 px each with
         three plot rows); under it at 2000 px, its Start / End / Step under
@@ -373,7 +373,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         scan = rows.master
         outer = [widget for widget, _options in panel.rte_outer_widgets]
         font = tkinter.font.nametofont("TkDefaultFont")
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field", "the start-up scan")
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle", "the start-up scan (user, 2026-11-16)")
 
         def choose(mode, width, height):
             panel.ppms_simple_mode.set(mode)

@@ -458,12 +458,12 @@ class AngleScanTests(EndToEnd):
         self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
 
     def test_the_lockins_at_start_up(self):
-        # The user's figure (2026-10-20): SR830-1 at 1 and SR830-2 at 2
-        # measured, SR830-3 at 3 and the Zurich at 1+2 not measured.
+        # The user's figure (2026-11-16): SR830-1 at 2 measured; SR830-2 at
+        # 2, SR830-3 at 3 and the Zurich at 1+2 not measured.
         panel = build_page()
         self.assertEqual({key: (str(panel._ppms_harmonic_var(key).get()), panel.ppms_lockin_selection[key].get())
                           for key in app.PPMS_SR830_KEYS},
-                         {"830_a": ("1", True), "830_b": ("2", True), "830_c": ("3", False)})
+                         {"830_a": ("2", True), "830_b": ("2", False), "830_c": ("3", False)})
         self.assertEqual((panel.zurich_harmonic.get(), panel.ppms_lockin_selection["zurich"].get()), ("1+2", False))
 
     def test_the_zurich_alone_runs(self):
@@ -480,9 +480,10 @@ class AngleScanTests(EndToEnd):
 
     def test_the_mode_change_sets_the_angle_boxes(self):
         panel = build_page()
-        # The page starts on the user's Angle+Field scan (2026-10-19).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
-        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field: Stage °; outer: KEPCO A")
+        # The page starts on the user's Angle scan (2026-11-16; Angle+Field
+        # from 2026-10-19).
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
+        self.assertTrue(panel.rte_scan_note.get().startswith("Angle: Stage °; field: "), panel.rte_scan_note.get())
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
             panel.ppms_simple_mode.set("Field")
             panel._rte_mode_changed()
