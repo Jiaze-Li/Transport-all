@@ -1,6 +1,6 @@
 """An angle scan's plots span the scan's own angles (user, 2026-11-15: "when
 scan angle, can the xlim auto set to 0-360?").  The x limits were rounded
-out to the tick step, so an SHV scan from 0 to -360 deg was drawn on
+out to the tick step, so an SHHV scan from 0 to -360 deg was drawn on
 -400..0, and they grew with the points.  Now the axis is the scan's range
 from the first point on, with ticks at round angles.
 
@@ -21,7 +21,7 @@ PLOT_WIDTH, AXIS_Y = WIDTH - LEFT - RIGHT, HEIGHT - BOTTOM
 class AngleTickTests(unittest.TestCase):
     def test_a_full_turn_has_a_tick_every_90_degrees(self):
         self.assertEqual(app.angle_axis_ticks(0, 360), (0.0, 360.0, [0.0, 90.0, 180.0, 270.0, 360.0], 90.0))
-        # The SHV page's own scan, 0 to -360 deg, either way round.
+        # The SHHV page's own scan, 0 to -360 deg, either way round.
         for low, high in ((-360, 0), (0, -360)):
             self.assertEqual(app.angle_axis_ticks(low, high),
                              (-360.0, 0.0, [-360.0, -270.0, -180.0, -90.0, 0.0], 90.0))

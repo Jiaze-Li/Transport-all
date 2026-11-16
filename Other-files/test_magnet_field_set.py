@@ -1,5 +1,5 @@
 """The magnetic-field setting's controller (user, 2026-11-14: "Add a magnetic
-field setting in FMR, SHV, STFMR modules. You can try to use PID to control
+field setting in FMR, SHHV, STFMR modules. You can try to use PID to control
 the magnetic field value"), offline against simulated magnets.
 
 - MagnetFieldPID: G per A measured with a probe step, then a PID step per

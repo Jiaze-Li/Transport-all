@@ -1,13 +1,13 @@
 """An SR830's front panel shows X and Y once the program has connected it
 (user, 2026-11-15: "when the SR830 connect, it should display X and Y in its
 font panel instead of R and theta").  Every page had set R and theta
-("DDEF 1,1,0" / "DDEF 2,1,0"): PPMS and SHV at Connect, ST-FMR and Non-local
+("DDEF 1,1,0" / "DDEF 2,1,0"): PPMS and SHHV at Connect, ST-FMR and Non-local
 with a scan's Start, which connected and showed whatever was on the panel
 until then.
 
 Here: the commands, and the Connect of the ST-FMR and Non-local pages.  The
 set-up lists of the pages are in test_stfmr_sr830_tc_fixed_current (ST-FMR's
-Start), test_ppms_sr830_tc (the PPMS / SHV Connect) and test_ms_four_state.
+Start), test_ppms_sr830_tc (the PPMS / SHHV Connect) and test_ms_four_state.
 """
 import inspect
 import unittest
@@ -66,7 +66,7 @@ class DisplayTests(unittest.TestCase):
         code = [line.split("#")[0] for line in source.splitlines()]
         self.assertEqual([line.strip() for line in code if "DDEF 1,1" in line or "DDEF 2,1" in line], [])
         # The commands and the Connect's helper, then ST-FMR's Start,
-        # Non-local's Start and the PPMS / SHV Connect.
+        # Non-local's Start and the PPMS / SHHV Connect.
         self.assertEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
 
     def test_stfmr_connect_shows_x_and_y(self):

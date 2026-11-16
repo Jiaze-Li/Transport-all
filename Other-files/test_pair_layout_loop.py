@@ -128,9 +128,9 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         cls.build()
         notebook = next(w for w in cls.a.__dict__.values() if isinstance(w, tk.ttk.Notebook))
         for index in range(notebook.index("end")):
-            if notebook.tab(index, "text") == "SHV":
+            if notebook.tab(index, "text") == "SHHV":
                 notebook.select(index)
-        # Three plot rows, the worst case for height: SHV starts with
+        # Three plot rows, the worst case for height: SHHV starts with
         # SR830-1 at 1 and SR830-2 at 2 measured and the Zurich not (user's
         # figure, 2026-10-20), and every plot must still keep its 55 px when
         # the user also measures the Zurich at 1+2+3.  As its Measure tick
@@ -155,7 +155,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         body, params, lockins, block = rte_stage_parts(self.a)
         settings, scan = body.master, self.a.rte_panel.rte_start_button.master.master
         canvases = self.a.rte_panel.ppms_harmonic_canvases
-        print(f"SHV {label} {self.root.winfo_width()}x{self.root.winfo_height()} px: layouts {self.layouts()}; "
+        print(f"SHHV {label} {self.root.winfo_width()}x{self.root.winfo_height()} px: layouts {self.layouts()}; "
               f"settings {settings.winfo_width()}x{settings.winfo_height()}, scan box "
               f"{scan.winfo_width()}x{scan.winfo_height()}, params {params.winfo_reqwidth()}x"
               f"{params.winfo_reqheight()}, lock-ins {lockins.winfo_reqwidth()}x{lockins.winfo_reqheight()}, "
@@ -181,7 +181,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                     self.assertIn(final[2], ("beside lock-ins", "under params"))
                 body = rte_stage_parts(self.a)[0]
                 self.assertFalse(getattr(body, "_pair_flip_guard", {}).get("held"))
-        self.assertEqual(rte_stage_parts(self.a)[3].master.master.cget("text"), "SHV settings")
+        self.assertEqual(rte_stage_parts(self.a)[3].master.master.cget("text"), "SHHV settings")
 
     def test_the_block_costs_no_height_and_fits_at_1101_px(self):
         self.root.geometry(f"1101x{CI_SHOT_HEIGHT}+0+0")
@@ -198,7 +198,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         self.assertLessEqual(block.winfo_rootx() + block.winfo_width(), settings.winfo_rootx() + settings.winfo_width())
         # The scan box keeps only the scan rows, its status and notes.
         rows = self.a.rte_panel.rte_start_button.master
-        self.assertEqual(rows.master.cget("text"), "SHV scan")
+        self.assertEqual(rows.master.cget("text"), "SHHV scan")
 
     def test_at_2000_px_the_block_is_beside_or_under_the_kepco_rows(self):
         self.show(LAB_WIDE)
@@ -274,7 +274,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             self.root.update()
 
     def test_set_stage_zero_is_red_and_as_large_as_before(self):
-        # User, 2026-10-18: "make the set angle zero button in SHV module also
+        # User, 2026-10-18: "make the set angle zero button in SHHV module also
         # red": a tk.Button in the program's red, filling a frame of exactly
         # the Inline ttk button's size, so the block keeps its layout; grey
         # while locked.
@@ -315,7 +315,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         self.assertEqual(len(canvases), 9, "the Zurich at 1+2+3 (set above): three rows of X, Y, theta")
         self.assertEqual(sorted(self.a.rte_panel._ppms2_measured_orders()), [1, 2, 3])
         # The layout numbers, for the record (user, 2026-10-17).
-        print(f"SHV plots at {self.root.winfo_width()}x{self.root.winfo_height()} px: "
+        print(f"SHHV plots at {self.root.winfo_width()}x{self.root.winfo_height()} px: "
               f"{sorted({c.winfo_height() for c in canvases.values()})} px tall")
         for key, canvas in canvases.items():
             with self.subTest(plot=key):
@@ -325,14 +325,14 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             # The lab's widened window at the lab screen's height.
             self.root.geometry(f"{width}x{self.height}+0+0")
             self.root.update()
-            print(f"SHV plots at {self.root.winfo_width()}x{self.root.winfo_height()} px: "
+            print(f"SHHV plots at {self.root.winfo_width()}x{self.root.winfo_height()} px: "
                   f"{sorted({c.winfo_height() for c in canvases.values()})} px tall")
             for key, canvas in canvases.items():
                 with self.subTest(width=width, plot=key):
                     self.assertGreaterEqual(canvas.winfo_height(), 55, "Increase the window height")
 
     def test_at_the_default_1_plus_2_two_rows_are_drawn_and_the_third_is_hidden(self):
-        """The SHV default, SR830-1 at 1 and SR830-2 at 2 measured and the
+        """The SHHV default, SR830-1 at 1 and SR830-2 at 2 measured and the
         Zurich at 1+2 not (user's figures, 2026-10-18 and 2026-10-20): the
         first- and second-harmonic rows keep their 55 px in the 1101 px
         window and at 2000 px, and the third row is hidden."""
@@ -348,7 +348,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             for width, height in ((1101, CI_SHOT_HEIGHT), (LAB_WIDE, self.height)):
                 self.root.geometry(f"{width}x{height}+0+0")
                 self.root.update()
-                print(f"SHV plots at 1+2, {self.root.winfo_width()}x{self.root.winfo_height()} px: "
+                print(f"SHHV plots at 1+2, {self.root.winfo_width()}x{self.root.winfo_height()} px: "
                       f"{sorted({c.winfo_height() for k, c in canvases.items() if k[0] != 3})} px tall")
                 for key, canvas in canvases.items():
                     with self.subTest(width=width, plot=key):
@@ -395,7 +395,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                     self.assertFalse(any(w.winfo_ismapped() for w in outer))
                     continue
                 # The layout numbers, for the record.
-                print(f"SHV {mode} at 1101 px: outer row {panel.rte_outer_place}, {panel.rte_outer_numbers}, "
+                print(f"SHHV {mode} at 1101 px: outer row {panel.rte_outer_place}, {panel.rte_outer_numbers}, "
                       f"columns {panel.rte_scan_rows_columns}, outer widgets "
                       f"{[w.winfo_reqwidth() for w in outer]} px, label {panel.rte_outer_label.get()!r}")
                 with self.subTest(mode=mode, width=1101):
@@ -412,7 +412,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                         self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(), right, "inside the box")
                     self.assertLessEqual(font.measure(panel.rte_outer_label.get()), outer[0].winfo_width(),
                                          "the label shows in full")
-            print(f"SHV scan box at 1101x{CI_SHOT_HEIGHT} px: {heights} px tall")
+            print(f"SHHV scan box at 1101x{CI_SHOT_HEIGHT} px: {heights} px tall")
             self.assertEqual(heights["Angle+Field"], heights["Angle"], "no height in the 1101 px window")
             self.assertEqual(heights["Angle+Current"], heights["Angle"])
             for mode in ("Angle+Field", "Angle+Current"):

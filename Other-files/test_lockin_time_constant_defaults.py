@@ -203,7 +203,7 @@ class DefaultSetupsAtTheNewTc(NoWindows):
         self.assertEqual(app.NONLOCAL_IV6221_DEFAULT_MEASURE, {"8": False, "9": False, "mfli": True})
         self.assertRegex(text, r"key: tk\.BooleanVar\(value=value\) for key, value in "
                                r"NONLOCAL_IV6221_DEFAULT_MEASURE\.items\(\)")
-        # SHV (RT-E): SR830-1 and SR830-2 measure (user's figure, 2026-10-20).
+        # SHHV (RT-E): SR830-1 and SR830-2 measure (user's figure, 2026-10-20).
         self.assertRegex(text, r"for key, measured in \(\('830_a', True\), \('830_b', True\),\s*"
                                r"\('830_c', False\), \('zurich', False\)\):")
 

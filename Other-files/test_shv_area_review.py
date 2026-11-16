@@ -1,15 +1,15 @@
-"""SHV page, Newmark driver and shared controllers: the audit of 2026-10-18.
+"""SHHV page, Newmark driver and shared controllers: the audit of 2026-10-18.
 
 H1: an unconfirmed stop is kept across a Disconnect and a Connect, on either
 page, until a STOP sequence sees the stage stopped; a Disconnect with MST
 unreadable after one sends STOP again and says CHECK THE STAGE.  H2: the
-SHV stop handlers set their event and queue their OFF before the run log is
+SHHV stop handlers set their event and queue their OFF before the run log is
 written.  H3: an ABORT that stopped the stage is said so, and the KEPCO,
 LS475 and Newmark lines are a running scan's run-log notes.  C1-1: the
 LabOne C / .NET adapters, without setDouble / getDouble, are skipped.
 C1-3: the PNA gets OUTP OFF only once identified.  C1-5: the .NET DLL search
 goes past a bad candidate and never leaks its DLL-directory handle.  C2-7:
-the camera is "still releasing" while its thread holds it.  The SHV scans'
+the camera is "still releasing" while its thread holds it.  The SHHV scans'
 save and zero at every ending, and their dialogs out of drain_ui_queue.
 
 No Tk window, no instrument, no real DLL: the stage is the program's
@@ -138,7 +138,7 @@ class UnconfirmedStopDriverTests(rte_stage.StageBase):
         self.assertEqual(h.stage.unconfirmed_stop, "")
         self.assertTrue(any("the STOP before closing confirmed the stage stopped; the earlier unconfirmed stop" in line
                             for line in h.log), h.log)
-        self.assertTrue(h.log[-1].startswith("SHV Newmark NSC-A1: stopped before closing, at "), h.log[-1])
+        self.assertTrue(h.log[-1].startswith("SHHV Newmark NSC-A1: stopped before closing, at "), h.log[-1])
 
     def test_mst_unreadable_on_a_still_stage_closes_without_stop(self):
         h = self.make(LosesMST())
@@ -153,7 +153,7 @@ class UnconfirmedStopDriverTests(rte_stage.StageBase):
         h = self.unconfirmed(LosesMST(), ownership)
         with self.assertRaises(app.NewmarkStageError):
             h.stage.disconnect()
-        self.assertIn("SHV page", ownership.unconfirmed_stop)
+        self.assertIn("SHHV page", ownership.unconfirmed_stop)
         h.sim.motion, h.sim.stuck = None, False      # it came to rest meanwhile
         h.stage.connect("auto")
         self.assertTrue(h.stage.motion_may_run, "a new Connect no longer clears it")
@@ -169,7 +169,7 @@ class UnconfirmedStopDriverTests(rte_stage.StageBase):
         # The other page's controller sees it as soon as it claims the device.
         other = app.NewmarkNSCA1Controller(lambda _text: None, owner_scope="STFMR")
         self.assertFalse(other.motion_may_run)
-        ownership.release("SHV")
+        ownership.release("SHHV")
         ownership.claim("STFMR", other)
         self.assertTrue(other.motion_may_run)
         ownership.release("STFMR")
@@ -185,7 +185,7 @@ class UnconfirmedStopDriverTests(rte_stage.StageBase):
     def test_a_controllers_own_record_moves_to_the_programs_on_claim(self):
         h = self.unconfirmed(LosesMST())
         ownership = app.NewmarkStageOwnership()
-        ownership.claim("SHV", h.stage)
+        ownership.claim("SHHV", h.stage)
         self.assertIs(h.stage.stop_record, ownership)
         self.assertTrue(ownership.unconfirmed_stop)
 
@@ -232,11 +232,11 @@ class AbortDriverTests(rte_stage.StageBase):
         h.stage.connect("auto")
         turning(h.sim)
         h.stage.disconnect()
-        self.assertTrue(h.log[-1].startswith("SHV Newmark NSC-A1: stopped before closing (STOP, then ABORT), at "),
+        self.assertTrue(h.log[-1].startswith("SHHV Newmark NSC-A1: stopped before closing (STOP, then ABORT), at "),
                         h.log[-1])
 
 
-# ---- H3: the SHV page's stage texts ------------------------------------------------------
+# ---- H3: the SHHV page's stage texts ------------------------------------------------------
 class AbortPageTests(rte_stage.StageBase):
     def test_stop_stage_on_the_page(self):
         h = self.make(StopIgnored())
@@ -276,7 +276,7 @@ class AbortPageTests(rte_stage.StageBase):
         self.assertRegex(h.panel.rte_stage_where, r"^stage stopped at [+-]\d+\.\d{3}° \(ABORT\)$")
 
 
-# ---- H1 on the SHV page, end to end --------------------------------------------------------
+# ---- H1 on the SHHV page, end to end --------------------------------------------------------
 class SHVReconnectTests(ete.EndToEnd):
     def test_an_unconfirmed_stop_holds_after_a_reconnect_until_stop_stage(self):
         h = self.make(sim=LosesMST(), span=("0", "10", "10"), round_trip=False)
@@ -284,7 +284,7 @@ class SHVReconnectTests(ete.EndToEnd):
         turning(h.sim)
         panel._rte_stage_stop()
         self.pump(h)
-        self.assertEqual(h.showerror.call_args.args[0], "SHV stage")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV stage")
         self.assertIn("could not be confirmed stopped", h.showerror.call_args.args[1])
         panel._rte_disconnect("newmark")
         self.pump(h)
@@ -309,11 +309,11 @@ class SHVReconnectTests(ete.EndToEnd):
         # Start (every mode) and Move stage are refused; nothing is sent to move.
         panel.start_ppms_field_scan()
         self.pump(h)
-        self.assertEqual(h.showerror.call_args.args[0], "SHV scan parameters")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV scan parameters")
         self.assertIn("last stop was not confirmed", h.showerror.call_args.args[1])
         panel.rte_stage_target.set("5")
         panel._rte_stage_move()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV stage")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV stage")
         self.assertIn("press Stop stage first", h.showerror.call_args.args[1])
         self.assertEqual(h.sim.moves, [], "nothing was sent to move")
         self.assertFalse(panel.ppms_field_scan_running)
@@ -338,16 +338,16 @@ class CrossPageTests(stfmr_motor.MotorBase):
         shv_sim = LosesMST()
         shv_dll = rte_stage.RecordingDLL(shv_sim)
         shv_log = []
-        shv = stfmr_motor.app.NewmarkNSCA1Controller(shv_log.append, owner_scope="SHV",
+        shv = stfmr_motor.app.NewmarkNSCA1Controller(shv_log.append, owner_scope="SHHV",
                                                      loader=lambda: (shv_dll, "fake PerformaxCom.dll"))
         shv._now, shv._sleep = run.clock.now, run.clock.sleep
-        ownership.claim("SHV", shv)
+        ownership.claim("SHHV", shv)
         shv.connect("auto")
         turning(shv_sim)
         self.assertFalse(shv.stop()["stopped"])
         with self.assertRaises(stfmr_motor.app.NewmarkStageError):
             shv.disconnect()
-        ownership.release("SHV")
+        ownership.release("SHHV")
         # The STFMR page's own Connect: the flag is the program's.
         h.connect_stfmr_lockin_motor()
         h.root.drain()
@@ -369,7 +369,7 @@ class CrossPageTests(stfmr_motor.MotorBase):
         self.assertEqual(h._stfmr_lockin_angle_plan()["used"], True)
 
 
-# ---- H2: the SHV stop handlers, event and OFF first ------------------------------------------
+# ---- H2: the SHHV stop handlers, event and OFF first ------------------------------------------
 class ProbeRecorder:
     """A running scan's recorder that notes, at each event, what the probe says."""
 
@@ -453,11 +453,11 @@ class ControllerLogTests(ete.RunLogBase):
                 self.assertEqual(panel.rte_controllers[key].logger, panel.thread_log)
                 self.assertNotEqual(panel.rte_controllers[key].logger, panel.parent_app.thread_log)
         with tempfile.TemporaryDirectory() as folder:
-            panel.rte_recorder = app.SHVScanRecorder(Path(folder), "notes")
-            panel.rte_controllers["kepco"].logger("SHV KEPCO 4886 connected: KEPCO,BIT 4886")
+            panel.rte_recorder = app.SHHVScanRecorder(Path(folder), "notes")
+            panel.rte_controllers["kepco"].logger("SHHV KEPCO 4886 connected: KEPCO,BIT 4886")
             path = panel.rte_recorder.log_path
             panel.rte_recorder.close("not_started")
-            self.assertIn('"event": "note", "text": "SHV KEPCO 4886 connected: KEPCO,BIT 4886"',
+            self.assertIn('"event": "note", "text": "SHHV KEPCO 4886 connected: KEPCO,BIT 4886"',
                           path.read_text(encoding="utf-8"))
 
     def test_an_abort_in_a_scan_is_in_its_log(self):
@@ -468,13 +468,13 @@ class ControllerLogTests(ete.RunLogBase):
         self.start(h)
         events = self.events(h)
         notes = [event["text"] for event in events if event["event"] == "note"]
-        self.assertIn("SHV Newmark NSC-A1: not stopped after STOP; ABORT", notes)
+        self.assertIn("SHHV Newmark NSC-A1: not stopped after STOP; ABORT", notes)
         self.assertRegex(events[-1]["stage"], r"^stage stopped at \+\d+\.\d{3}° \(ABORT\)$")
         self.assertRegex(panel.ppms_field_scan_status_var.get(),
                          r"^Stopped; KEPCO and 6221 zeroed; stage stopped at \+\d+\.\d{3}° \(ABORT\)$")
 
 
-# ---- the SHV scans' save and zero, and their dialogs out of drain_ui_queue --------------------------
+# ---- the SHHV scans' save and zero, and their dialogs out of drain_ui_queue --------------------------
 class SHVSaveZeroTests(ete.RunLogBase):
     def outside_drain(self, h):
         """Every dialog: never inside drain_ui_queue (the README's 2026-10-14 rule)."""
@@ -530,7 +530,7 @@ class SHVSaveZeroTests(ete.RunLogBase):
         h.kepco.force_output_off = refused
         self.start(h)
         h.showerror.assert_called_once()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV outputs")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV outputs")
         self.assertFalse(h.panel.ppms_field_scan_running)
 
     def test_a_failed_scan_dialog_opens_outside_the_drain(self):
@@ -539,7 +539,7 @@ class SHVSaveZeroTests(ete.RunLogBase):
         h.gauss.read_field = Mock(side_effect=RuntimeError("LS475 read failed"))
         self.start(h)
         h.showerror.assert_called_once()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV scan")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV scan")
         self.assertTrue(h.showerror.call_args.args[1].endswith("At the end: 6221 zeroed; KEPCO zeroed"))
 
     def test_a_refused_angle_start_dialog_opens_outside_the_drain(self):
@@ -549,7 +549,7 @@ class SHVSaveZeroTests(ete.RunLogBase):
         self.outside_drain(h)
         self.start(h)
         h.showerror.assert_called_once()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV")
         self.assertIn("a limit input is on at rest", h.showerror.call_args.args[1])
         self.assertTrue(h.panel.ppms_field_scan_status_var.get().startswith("Angle scan not started:"))
 

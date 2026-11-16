@@ -167,7 +167,7 @@ the Lake Shore 648 as its magnet supply at `GPIB0::15::INSTR`, the Lake Shore
 **STFMR** sweeps field with a
 microwave source and lock-in detection, with MFLI, SR830 or both together.
 
-**Setting a field.** FMR, SHV and STFMR each have a "Set field" control
+**Setting a field.** FMR, SHHV and STFMR each have a "Set field" control
 (since 2026-11-14): type the target in G and its tolerance, tick the page's
 safety confirmation, and press Set field. The program steps the page's chosen
 magnet supply (the KEPCO 4886 or its Lake Shore) until the Lake Shore 475
@@ -176,7 +176,7 @@ reads the LS475 again about every two seconds and corrects the current
 whenever the field has left the tolerance.
 - **Where:** in the field-output box on FMR (a row of its own) and STFMR
   (right of the safety tick); in the instrument rack under the LS475's
-  reading on SHV.
+  reading on SHHV.
 - **How:** it first makes a small probe step (0.02 A, then 0.1 and 0.5 A if
   the field did not move) to measure how many G the magnet gives per A and in
   which direction. Then each correction is a PID step on the field error.
@@ -224,7 +224,7 @@ whenever the field has left the tolerance.
 folder when it ends, whether it completed, was stopped or failed, as long as
 it saved at least one point (since 2026-11-13; Gate-VI did already, and MOKE
 magnet and MOKE-24 only with "Save CSV + PNG"). A page with one plot saves
-`<run name>_plot_snapshot.png`; a page with a grid of plots (PPMS, SHV,
+`<run name>_plot_snapshot.png`; a page with a grid of plots (PPMS, SHHV,
 6221-IV, STFMR) saves one picture of the whole plot box,
 `<run name>_plots_snapshot.png`. It is a screenshot, so it holds what is on
 the screen at that moment: keep the scan's page shown and the program's
@@ -236,7 +236,7 @@ saves camera images instead.
 **Lock-in range.** With its autorange on, a lock-in's range steps down when
 the reading has been under 1 % of the range for three readings in a row with
 the reference locked (since 2026-11-16; it was 15 % on ST-FMR and Non-local
-and for the Zurich, 10 % on PPMS and SHV). For an SR830 the reading is R
+and for the Zurich, 10 % on PPMS and SHHV). For an SR830 the reading is R
 against its full scale; for the Zurich it is the input's peak, every
 harmonic and the noise included, against its input range. The range still
 steps up at once on an overload, and on ST-FMR, Non-local and the Zurich
@@ -246,7 +246,7 @@ for ever:
 - An SR830 range that had to be left because it overloaded while R was small
   on it (a weak harmonic beside a strong fundamental) is not returned to
   until the next set-up: a scan's Start, each pass of an ST-FMR sweep, the
-  next order of a 6221-IV pass, and on PPMS and SHV a new excitation, pass
+  next order of a 6221-IV pass, and on PPMS and SHHV a new excitation, pass
   or sweep.
 - The Zurich chooses its own range. A step down that did not lower the
   range is not asked for again on that range, and each time a range that
@@ -258,7 +258,7 @@ stepping down, where it used to be brought to 15-40 %. That is what the 1 %
 rule means; for the finest resolution on a small signal, set the range by
 hand and untick the autorange.
 
-**Angle scans.** The plots of an angle scan (SHV: Angle, Angle+Field,
+**Angle scans.** The plots of an angle scan (SHHV: Angle, Angle+Field,
 Angle+Current; PPMS: Angle, Angle+Temperature, Angle+Field) span exactly the
 scan's own angles from the first point on, with ticks at round angles: a
 scan from 0° to 360° is drawn on 0 to 360 with a tick every 90°, one from 0°

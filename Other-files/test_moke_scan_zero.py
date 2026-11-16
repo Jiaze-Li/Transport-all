@@ -1,7 +1,7 @@
 """Isolated worker regression: no GUI, drivers, or physical instruments.
 
 Since 2026-10-18 (user: every scan page zeroes its sources at every end, as
-SHV) every ending of a magnet scan, completed, stopped or failed, writes the
+SHHV) every ending of a magnet scan, completed, stopped or failed, writes the
 verified 0 A to the scanned path and sends 0 A to the other path's KEPCO, on
 the worker after the scan's own clean-up.  Before, a completed scan verified
 its 0 A, and a Stop or a failure wrote a plain 0 A to the scanned path only;

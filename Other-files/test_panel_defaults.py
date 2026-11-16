@@ -39,7 +39,7 @@ class PanelDefaultTests(unittest.TestCase):
         return state
 
     def test_rte_defaults_are_the_users_figure(self):
-        """The SHV page (RT-E until 2026-10-18): the Zurich alone measures
+        """The SHHV page (RT-E until 2026-10-18): the Zurich alone measures
         (2026-10-07), 1+2, at 1 mA RMS, 317.3 Hz, KEPCO current 8 A (the
         user's figures, 2026-10-18; it was 1+2+3, 0.1 mA RMS, 17.3 Hz, 0 A)."""
         panel = self.app.rte_panel
@@ -51,7 +51,7 @@ class PanelDefaultTests(unittest.TestCase):
             "830_c": ("3", False),
             "zurich": ("1+2", False),
         })
-        self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHV")
+        self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHHV")
         self.assertEqual(panel.ppms_transport_current_var.get(), "1")
         self.assertEqual(panel.ppms_transport_frequency_var.get(), "317.3")
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "50")
@@ -630,10 +630,10 @@ class PanelDefaultTests(unittest.TestCase):
 
     def test_fmr_stfmr_and_shv_have_a_field_setting(self):
         """Set field (user, 2026-11-14: "Add a magnetic field setting in FMR,
-        SHV, STFMR modules"): each page has the target and tolerance boxes
+        SHHV, STFMR modules"): each page has the target and tolerance boxes
         (0 G, ± 2 G) and the button.  On FMR and ST-FMR it waits, as Apply
         output does, for the supply, and for the LS475 it is set against;
-        on SHV it is one of the rack's inputs, locked while the rack is busy."""
+        on SHHV it is one of the rack's inputs, locked while the rack is busy."""
         a, shv = self.app, self.app.rte_panel
         self.assertEqual((a.stfmr_field_target_var.get(), a.stfmr_field_tolerance_var.get()), ("0", "2"))
         self.assertEqual((a.stfmr_lockin_field_target_var.get(), a.stfmr_lockin_field_tolerance_var.get()),
@@ -647,7 +647,7 @@ class PanelDefaultTests(unittest.TestCase):
         self.assertEqual(str(shv.rte_set_field_button.cget("state")), str(shv.rte_apply_button.cget("state")))
         # The buttons sit in their pages' field panels: FMR's and ST-FMR's
         # field-output boxes (ST-FMR's beside the safety tick, so the panel
-        # is no taller), SHV's rack beside the LS475's reading.
+        # is no taller), SHHV's rack beside the LS475's reading.
         self.assertIs(a.stfmr_set_field_button.master.master, a.stfmr_field_output_frame)
         self.assertIs(a.stfmr_lockin_set_field_button.master.master.master, a.stfmr_lockin_field_output_frame)
 
@@ -657,7 +657,7 @@ class PanelDefaultTests(unittest.TestCase):
         STFMR's MFLI TC s and SR830 TC all start at 1 s (three were 0.1 s and
         the SR830's 100 ms)."""
         a = self.app
-        for name, panel in (("PPMS", a.ppms_panel), ("SHV", a.rte_panel)):
+        for name, panel in (("PPMS", a.ppms_panel), ("SHHV", a.rte_panel)):
             self.assertEqual(panel.zurich_timeconstant.get(), "1", name)
         self.assertEqual(a.nonlocal_mfli_tc_var.get(), "1")
         self.assertEqual(a.stfmr_lockin_mfli_timeconstant_var.get(), "1")
@@ -680,7 +680,7 @@ class NotebookTabTests(unittest.TestCase):
                       for index in range(notebook.index("end"))]
             self.assertEqual(titles, [
                 "MOKE light", "MOKE motor", "MOKE magnet", "CIDWM",
-                "MOKE-24", "Non-local", "PPMS", "SHV", "FMR", "STFMR"])
+                "MOKE-24", "Non-local", "PPMS", "SHHV", "FMR", "STFMR"])
         finally:
             built.closing = True
             built.safe_close_hardware()
@@ -712,11 +712,11 @@ class RTEStatusRowTests(unittest.TestCase):
         # could be wider; a wait of 100000 s or more (once 7 x a 30 ks SR830
         # time constant) cannot occur at the user's 1 x TC, as Settle s is
         # at most 86400 s (user, 2026-10-14).
-        "SHV Current: 100000 points, settle 86400 s; at least 4800024 h 00 min 00 s",
-        "SHV Current: 100000 points, settle 0.0864 s; at least 2400026 h 24 min 02 s",
+        "SHHV Current: 100000 points, settle 86400 s; at least 4800024 h 00 min 00 s",
+        "SHHV Current: 100000 points, settle 0.0864 s; at least 2400026 h 24 min 02 s",
         # The default Field scan at 1 x TC: 199 x (1 s + 1 s) + 1 s (user,
         # 2026-10-14; "settle 7 s; at least 26 min 33 s" at 7 x TC).
-        "SHV Field: 199 points, settle 1 s; at least 6 min 39 s",
+        "SHHV Field: 199 points, settle 1 s; at least 6 min 39 s",
         # A wait that differs from the one announced at Start, while it runs
         # (a time constant changed since Connect), at its widest: about 412
         # px in Arial, 485 px in DejaVu Sans (the same digits as the
@@ -731,7 +731,7 @@ class RTEStatusRowTests(unittest.TestCase):
         "Completed; " + app.rte_outputs_text({"6221": "zero FAILED: x", "kepco": "zero FAILED: y"}),
         # The Angle scan's (2026-10-13), at their longest: six significant
         # digits ({:g}) for the angles and the KEPCO current, 100000 points.
-        "SHV Angle -359.995° to 359.995°, KEPCO -9.87654 A held; 100000 points",
+        "SHHV Angle -359.995° to 359.995°, KEPCO -9.87654 A held; 100000 points",
         "Stopped; " + app.rte_outputs_text({"6221": "zeroed", "kepco": "zeroed"}, check=False)
         + "; stage stopped at -359.999°",
         "Stopped; " + app.rte_outputs_text({"6221": "zero FAILED: x", "kepco": "zeroed"}, check=False)
@@ -770,7 +770,7 @@ class RTEStatusRowTests(unittest.TestCase):
         notebook = next(w for w in cls.app.__dict__.values()
                         if isinstance(w, tk.ttk.Notebook))
         for index in range(notebook.index("end")):
-            if notebook.tab(index, "text") == "SHV":
+            if notebook.tab(index, "text") == "SHHV":
                 notebook.select(index)
         cls.root.update()
 

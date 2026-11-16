@@ -2,7 +2,7 @@
 "all program when finish scanning, auto save the screenshot of axis plot").
 
 Gate-VI did already; MOKE magnet and MOKE-24 saved one only with their
-"Save CSV + PNG" button.  Now also MOKE magnet, MOKE-24, PPMS, SHV, FMR's
+"Save CSV + PNG" button.  Now also MOKE magnet, MOKE-24, PPMS, SHHV, FMR's
 field scan and frequency sweep, ST-FMR, and Non-local's 2400-IV, 6221-IV
 and |R| vs time, all through save_scan_plot_snapshots:
 
@@ -39,7 +39,7 @@ NOT_SHOWN = "The plot is not visible; cannot capture a snapshot"
 
 
 def setUpModule():
-    # The SHV page's guards: no real DLL, no window.
+    # The SHHV page's guards: no real DLL, no window.
     shv_runs.setUpModule()
 
 
@@ -390,7 +390,7 @@ class PpmsTests(unittest.TestCase):
         self.assertTrue(page.panel.ppms_macro_scan_result, "a Macro goes on as before")
 
 
-# ------------------------------------------------------------------------ SHV
+# ------------------------------------------------------------------------ SHHV
 class ShvTests(shv_runs.RunLogBase):
     def test_a_scan_saves_one_picture_of_its_plot_box(self):
         grabs = Grabs(self)
@@ -416,7 +416,7 @@ class FmrDefaultTests(unittest.TestCase):
         self.assertEqual(app.STFMR_DEFAULT_RESOURCES["gauss"], "GPIB0::12::INSTR")
         self.assertEqual(app.STFMR_DEFAULT_RESOURCES["vna"], "GPIB0::16::INSTR")
         self.assertEqual(app.STFMR_FMR_MAGNET_CHOICES[1], "LS648")
-        # The LS643 of SHV and ST-FMR keeps its address.
+        # The LS643 of SHHV and ST-FMR keeps its address.
         self.assertEqual(app.LAKESHORE_MAGNET_MODELS["643"]["resource"], "GPIB0::12::INSTR")
 
 

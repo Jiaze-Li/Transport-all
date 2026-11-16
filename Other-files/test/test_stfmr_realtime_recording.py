@@ -553,7 +553,7 @@ class StreamingTests(unittest.TestCase):
 
     def test_shutdown_error_is_logged_without_claiming_outputs_off(self):
         # A zero that fails no longer turns a completed sweep into a failed
-        # one: it stays completed, as on SHV, its outputs say so, and a
+        # one: it stays completed, as on SHHV, its outputs say so, and a
         # dialog says CHECK IT (user, 2026-10-18; it was outcome "error").
         h, recorder = self.start(stop='5')
         h.stfmr_lockin_controllers['kepco'].zero_error = True

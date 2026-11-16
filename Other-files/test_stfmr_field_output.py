@@ -70,7 +70,7 @@ class FieldOutputTests(unittest.TestCase):
                 notebook.select(index)
         cls.root.update()
         # The page starts on the Lake Shore 643 (user, 2026-10-23: "change
-        # SHV and STFMR to default use LS643"), as recorded here; the tests of
+        # SHHV and STFMR to default use LS643"), as recorded here; the tests of
         # the KEPCO 4886's field output choose the KEPCO, as its combobox
         # does, and test_the_page_starts_on_the_lake_shore_643 checks the
         # start-up choice and the LS643's row.
@@ -213,7 +213,7 @@ class FieldOutputTests(unittest.TestCase):
             self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
 
     def test_the_page_starts_on_the_lake_shore_643(self):
-        """User, 2026-10-23: "change SHV and STFMR to default use LS643".  The
+        """User, 2026-10-23: "change SHHV and STFMR to default use LS643".  The
         page starts with the LS643 chosen: its row (address, Connect,
         Disconnect, lamp, state) in the magnet supply's row, laid out as the
         rows under it, and the field output panel its own, in the 1101 px
@@ -874,7 +874,7 @@ class FieldOutputTests(unittest.TestCase):
     # ------------------------------------------------------------ CIDWM
     def test_cidwm_boxes_connections_then_settings_then_scan(self):
         """User, 2026-10-20: "make connections together, settings together,
-        then scan. like SHV and PPMS module": "Instruments" (a row per
+        then scan. like SHHV and PPMS module": "Instruments" (a row per
         instrument, then the 6221 safety tick), "Pulse settings" (a 6221 and
         an Avtech row), the pulse sign scan beside MOKE magnet's difference
         display (2026-10-20), then Images and Camera settings."""

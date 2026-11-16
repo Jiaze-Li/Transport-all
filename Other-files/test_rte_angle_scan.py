@@ -238,7 +238,7 @@ class Recorder(rte_tests.Widget):
 
     def grid_remove(self):
         # Tk keeps the grid options of a removed widget (2026-10-18: the
-        # SHV outer row).
+        # SHHV outer row).
         self.grid_removed = True
 
 
@@ -376,7 +376,7 @@ class NewmarkDriverTests(StageBase):
         self.assertLess(h.clock.t - 1000.0, 0.5, "no wait for a driver read")
         self.assertEqual(h.stage.steps_per_degree, 10000, "40 x microstep 250 (fixed)")
         self.assertEqual(h.stage.scale_text(), SCALE)
-        self.assertIn(f"SHV Newmark NSC-A1 connected (Ace-Series-SDE, V231BL): {SCALE}", h.log)
+        self.assertIn(f"SHHV Newmark NSC-A1 connected (Ace-Series-SDE, V231BL): {SCALE}", h.log)
         self.assertEqual(h.stage.resource_name, "SIM-NSC-A1")
         self.assertEqual(h.sim.moves, [])
         self.assertEqual(app.newmark_stage_text(h.stage.read_state()), "Stage: +0.000° (10000 steps/°)")
@@ -513,7 +513,7 @@ class NewmarkDriverTests(StageBase):
         cases = (("moving", lambda sim: sim._start(sim.px + 10 ** 6, script._now()), "is moving", refused),
                  ("latched", lambda sim: setattr(sim, "latched", 1 << 6),
                   r"limit error is latched \(MST 64: not moving, -limit ERROR \(latched\)\): the move was not sent\. "
-                  r"To clear it, press Move stage or Start an Angle scan on the SHV page, or Start a sweep with "
+                  r"To clear it, press Move stage or Start an Angle scan on the SHHV page, or Start a sweep with "
                   r"the motor on the STFMR page, and answer Yes \(CLR\)$",
                   latched),
                  ("input", lambda sim: setattr(sim, "inputs", 1 << 5), "polarity problem.*QuickMotion", refused),
@@ -523,7 +523,7 @@ class NewmarkDriverTests(StageBase):
                   "limit input is on at rest.*polarity problem", refused),
                  ("EO=0", lambda sim: setattr(sim, "eo", 0),
                   r"^the motor driver is off \(EO=0\): the position counter would advance without motion, so the "
-                  r"move was not sent\. To switch it on, press Move stage or Start an Angle scan on the SHV page, "
+                  r"move was not sent\. To switch it on, press Move stage or Start an Angle scan on the SHHV page, "
                   r"or Start a sweep with the motor on the STFMR page, and answer Yes \(EO=1\)$", off))
         for name, arrange, message, kind in cases:
             with self.subTest(name):
@@ -842,7 +842,7 @@ class MotorRowOwnershipTests(StageBase):
         with patch.object(app.messagebox, "showerror") as showerror:
             h.panel._rte_connect("newmark")
             self.drain(h)
-        showerror.assert_called_once_with("SHV motor", "The motor is connected on the STFMR page: disconnect it "
+        showerror.assert_called_once_with("SHHV motor", "The motor is connected on the STFMR page: disconnect it "
                                           "there first.", parent=h.panel.root)
         self.assertEqual(h.dll.calls, [], "nothing queued or sent")
         self.assertFalse(h.stage.connected)
@@ -854,7 +854,7 @@ class MotorRowOwnershipTests(StageBase):
         with patch.object(app.messagebox, "showerror") as showerror:
             h.panel._rte_connect("newmark")
             self.drain(h)
-            self.assertEqual(ownership.owner, "SHV")
+            self.assertEqual(ownership.owner, "SHHV")
             self.assertEqual(h.panel.rte_connections["newmark"].get(), "Connected")
             self.assertEqual(h.panel.rte_stage_live.get(), "Stage: +0.000° (10000 steps/°)")
             h.panel._rte_disconnect("newmark")
@@ -874,14 +874,14 @@ class MotorRowOwnershipTests(StageBase):
 
     def test_a_disconnect_still_open_keeps_the_claim(self):
         h = self.make()
-        h.panel._newmark_stage_ownership().claim("SHV")
+        h.panel._newmark_stage_ownership().claim("SHHV")
         with ThreadPoolExecutor(max_workers=1) as other:
             other.submit(h.stage.connect, "auto").result(timeout=30)
             with patch.object(app.messagebox, "showerror"):
                 h.panel._rte_disconnect("newmark")      # refused: another thread holds the handles
                 self.drain(h)
             self.assertTrue(h.stage.connected)
-            self.assertEqual(h.panel._newmark_stage_ownership().owner, "SHV")
+            self.assertEqual(h.panel._newmark_stage_ownership().owner, "SHHV")
             other.submit(h.stage.disconnect).result(timeout=30)
 
     def test_closing_releases(self):
@@ -1110,7 +1110,7 @@ class AngleScanWorkerTests(StageBase):
         self.assertEqual(h.sim.received.count("STOP"), 1, "the driver's STOP; the page does not repeat it")
         self.assertIsNone(h.sim.motion)
         self.assertTrue(panel.rte_stage_where.startswith("stage stopped at +"), panel.rte_stage_where)
-        panel.thread_log.assert_any_call(f"SHV Angle scan, after the stage failure: {panel.rte_stage_where}")
+        panel.thread_log.assert_any_call(f"SHHV Angle scan, after the stage failure: {panel.rte_stage_where}")
         self.assert_zeroed_at_the_end(panel, failure_offs=1)
         panel.rte_controllers["kepco"].safe_output_off.assert_not_called()
 
@@ -1120,7 +1120,7 @@ class AngleScanWorkerTests(StageBase):
             self.run_scan(h=h)
         panel = h.panel
         self.assertEqual(panel.rte_stage_where, "stage NOT confirmed stopped: CHECK THE STAGE")
-        panel.thread_log.assert_any_call("SHV Angle scan, after the stage failure: stage NOT confirmed stopped: "
+        panel.thread_log.assert_any_call("SHHV Angle scan, after the stage failure: stage NOT confirmed stopped: "
                                          "CHECK THE STAGE")
         self.assert_zeroed_at_the_end(panel, failure_offs=1)
         # The page's own STOP (a failure before X, so the driver's did not run).
@@ -1130,7 +1130,7 @@ class AngleScanWorkerTests(StageBase):
         h.panel._rte_stop_stage_after_failure(app.NewmarkRefused("the stage is moving"))
         self.assertEqual(h.panel.rte_stage_where, "stage NOT confirmed stopped: CHECK THE STAGE")
         self.assertIn("ABORT", h.sim.received)
-        h.panel.thread_log.assert_any_call("SHV Angle scan, after the stage failure: stage NOT confirmed stopped: "
+        h.panel.thread_log.assert_any_call("SHHV Angle scan, after the stage failure: stage NOT confirmed stopped: "
                                            "CHECK THE STAGE")
 
     def test_a_field_drift_neither_ends_the_scan_nor_discards_a_point(self):
@@ -1158,7 +1158,7 @@ class AngleScanWorkerTests(StageBase):
         self.assert_zeroed_at_the_end(panel)
         self.assertEqual(h.sim.moves, ["X50000", "X100000", "X50000", "X0"])
         notes = [c.args[0] for c in panel.thread_log.call_args_list if "changed by" in c.args[0]]
-        self.assertEqual(notes, ["SHV Angle point 1: the LS475 field changed by +32 G during the acquisition "
+        self.assertEqual(notes, ["SHHV Angle point 1: the LS475 field changed by +32 G during the acquisition "
                                  "(-2 -> +30 G); point saved, scan goes on (later drifts of this pass are in the "
                                  "field_drift_g column only)"])
 
@@ -1173,7 +1173,7 @@ class AngleScanWorkerTests(StageBase):
         with patch.object(app.time, "monotonic", lambda: float(next(clock))):
             field = app.RTEPanel._rte_settle_field(panel)
         self.assertEqual(field, 70.)
-        panel.thread_log.assert_called_once_with("SHV: the LS475 field did not settle within 15 s (last readings "
+        panel.thread_log.assert_called_once_with("SHHV: the LS475 field did not settle within 15 s (last readings "
                                                  "+50, +60, +70 G); the scan goes on")
         # And the run log's event (user, 2026-10-18).
         panel._rte_log.assert_called_once_with("field_not_settled", timeout_s=15, readings_g=[50., 60., 70.])
@@ -1427,7 +1427,7 @@ class ManualStageControlTests(StageBase):
         self.drain(h)
         self.assertIn("STOP", h.sim.received)
         self.assertEqual(h.panel.rte_stage_live.get(), "Stage: stopped at +0.000°")
-        h.panel.thread_log.assert_any_call("SHV Newmark NSC-A1: Stop stage: stopped at +0.000°")
+        h.panel.thread_log.assert_any_call("SHHV Newmark NSC-A1: Stop stage: stopped at +0.000°")
         # Not connected: only the event.
         h = self.make()
         h.panel.ppms_executor = Mock()
@@ -1450,11 +1450,11 @@ class ManualStageControlTests(StageBase):
         self.assertEqual(h.panel.rte_stage_live.get(), "Stage: STOP not confirmed: CHECK THE STAGE")
         showerror.assert_called_once()
         title, message = showerror.call_args.args
-        self.assertEqual(title, "SHV stage")
+        self.assertEqual(title, "SHHV stage")
         self.assertIn("STOP (then ABORT) sent, but the stage could not be confirmed stopped: CHECK THE STAGE",
                       message)
         self.assertIn("24 V off", message)
-        h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {message}")
+        h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {message}")
         # STOP not sent at all (here refused as a call from another thread):
         # the same log line and dialog.
         h = self.make()
@@ -1470,7 +1470,7 @@ class ManualStageControlTests(StageBase):
         self.assertIn("STOP was not sent", message)
         self.assertIn("another thread", message)
         self.assertIn("CHECK THE STAGE", message)
-        h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {message}")
+        h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {message}")
         h.stage._thread_id = None
 
     def test_stop_stage_during_a_scan_between_moves_only_sets_the_event(self):
@@ -1557,7 +1557,7 @@ class AngleStartTests(unittest.TestCase):
             with self.subTest(options=options):
                 run = self.start(**options)
                 run.showerror.assert_called_once()
-                self.assertEqual(run.showerror.call_args.args[0], "SHV scan parameters")
+                self.assertEqual(run.showerror.call_args.args[0], "SHHV scan parameters")
                 self.assertRegex(run.showerror.call_args.args[1], message)
                 run.askyesno.assert_not_called()
                 run.panel.ppms_executor.submit.assert_not_called()
@@ -1597,7 +1597,7 @@ class AngleStartTests(unittest.TestCase):
         # Without "stage turns sample and wires" (the Yes/No says it): the full
         # line did not fit the status label on the CI (user, 2026-10-13).
         self.assertEqual(run.panel.ppms_field_scan_status_var.get(),
-                         "SHV Angle 0° to 10°, KEPCO +1.5 A held; 5 points")
+                         "SHHV Angle 0° to 10°, KEPCO +1.5 A held; 5 points")
 
     def test_field_and_current_starts_unchanged(self):
         for mode in ("Field", "Current"):
@@ -1610,7 +1610,7 @@ class AngleStartTests(unittest.TestCase):
                 # duration, 5 x (1 s + 1 s) + 1 s (user, 2026-10-14: 1 x TC;
                 # 7 x TC and 41 s before).
                 self.assertEqual(run.panel.ppms_field_scan_status_var.get(),
-                                 f"SHV {mode}: 5 points, settle 1 s; at least 11 s")
+                                 f"SHHV {mode}: 5 points, settle 1 s; at least 11 s")
 
     def test_no_scan_starts_while_the_stage_may_still_be_turning(self):
         # An unconfirmed stop: no scan watches the stage, and Stop stage queues
@@ -1621,7 +1621,7 @@ class AngleStartTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 run = self.start(mode=mode, span=span, may_run=True)
                 run.showerror.assert_called_once()
-                self.assertEqual(run.showerror.call_args.args[0], "SHV scan parameters")
+                self.assertEqual(run.showerror.call_args.args[0], "SHHV scan parameters")
                 self.assertIn("last stop was not confirmed", run.showerror.call_args.args[1])
                 self.assertIn("press Stop stage first", run.showerror.call_args.args[1])
                 run.askyesno.assert_not_called()
@@ -1683,11 +1683,11 @@ class AngleStartTests(unittest.TestCase):
                     check = ("\n\nCHECK IT: KEPCO not confirmed at zero." if outputs is kepco_failed else "")
                     self.assertEqual(showerror.call_args.args[1],
                                      f"{outcome}\n\n{where[:1].upper()}{where[1:]}\n\n{at_the_end}{check}")
-                    run.panel.thread_log.assert_any_call(f"SHV scan {expected}; {where}")
+                    run.panel.thread_log.assert_any_call(f"SHHV scan {expected}; {where}")
                 elif outputs is kepco_failed:
                     # A zero that failed: its own dialog, "CHECK IT".
                     showerror.assert_called_once()
-                    self.assertEqual(showerror.call_args.args[0], "SHV outputs")
+                    self.assertEqual(showerror.call_args.args[0], "SHHV outputs")
                     self.assertIn("CHECK IT", showerror.call_args.args[1])
                     self.assertIn(at_the_end, showerror.call_args.args[1])
                 else:
@@ -1715,7 +1715,7 @@ class AngleStartTests(unittest.TestCase):
                 with self.subTest(mode=mode, options=options):
                     run = self.start(mode=mode, **{"outer": good, **options})
                     run.showerror.assert_called_once()
-                    self.assertEqual(run.showerror.call_args.args[0], "SHV scan parameters")
+                    self.assertEqual(run.showerror.call_args.args[0], "SHHV scan parameters")
                     self.assertRegex(run.showerror.call_args.args[1], message)
                     run.askyesno.assert_not_called()
                     run.panel.ppms_executor.submit.assert_not_called()
@@ -1727,7 +1727,7 @@ class AngleStartTests(unittest.TestCase):
     def test_angle_field_confirmation_and_submitted_scan(self):
         run = self.start(mode="Angle+Field", outer=("0", "4", "2"), span=("0", "10", "5"), trip=False, yes=False)
         title, question = run.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHV Angle+Field scan")
+        self.assertEqual(title, "SHHV Angle+Field scan")
         # Turning: 0-5-10 three times, back to 0 before fields 2 and 3: 50°,
         # 10 s at 5°/s; 9 x (1 s + 1 s) + 1 s + 10 s + 3 x 0.6 s settle =
         # 30.8 s.
@@ -1753,14 +1753,14 @@ class AngleStartTests(unittest.TestCase):
                          "the voltage limit, no held current, the outer currents")
         self.assertEqual(run.panel.ppms_plot_axis, "angle")
         self.assertEqual(run.panel.ppms_field_scan_total, 9)
-        self.assertEqual(run.panel.ppms_field_scan_status_var.get(), "SHV Angle+Field: 3 fields x 3 angles; 9 points")
+        self.assertEqual(run.panel.ppms_field_scan_status_var.get(), "SHHV Angle+Field: 3 fields x 3 angles; 9 points")
         self.assertFalse(run.panel.rte_stage_stop_event.is_set(), "an old Stop stage does not stop the new scan")
 
     def test_angle_current_confirmation_and_submitted_scan(self):
         run = self.start(mode="Angle+Current", outer=("0.01", "0.03", "0.01"), span=("0", "10", "10"), trip=False,
                          yes=False)
         title, question = run.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHV Angle+Current scan")
+        self.assertEqual(title, "SHHV Angle+Current scan")
         # 6 points x 2 s + 1 s, the first point's second window at the two
         # later currents (2 s), turning 50° (10 s): 25 s.
         for text in ("6221 current, the OUTER loop: 3 steps from 0.01 to 0.03 mA RMS.",
@@ -1778,7 +1778,7 @@ class AngleStartTests(unittest.TestCase):
         self.assertEqual((scan[4], scan[7]), (5., 1.5), "the voltage limit, the held KEPCO current")
         self.assertEqual([round(v, 6) for v in scan[8]], [.01, .02, .03])
         self.assertEqual(run.panel.ppms_field_scan_status_var.get(),
-                         "SHV Angle+Current: 3 currents x 2 angles; 6 points")
+                         "SHHV Angle+Current: 3 currents x 2 angles; 6 points")
 
     def test_the_outer_points_limit(self):
         run = self.start(mode="Angle+Field", outer=("-10", "10", "0.01"), span=("0", "-360", "1"))
@@ -1863,7 +1863,7 @@ class AnglePageTests(unittest.TestCase):
             stack.enter_context(patch.object(app.CombinedControlApp, "_set_connection_indicator", Mock()))
             stack.enter_context(patch.object(app.CombinedControlApp, "_draw_nonlocal_series", Mock()))
             panel = app.RTEPanel(parent, rte_tests.Widget())
-            # The KEPCO 4886 path (SHV starts on the LS643 since 2026-10-23).
+            # The KEPCO 4886 path (SHHV starts on the LS643 since 2026-10-23).
             panel.rte_magnet_choice_var.set(app.MAGNET_SUPPLY_KEPCO)
             panel._rte_magnet_choice_changed()
             return panel
@@ -1912,12 +1912,12 @@ class AnglePageTests(unittest.TestCase):
         # the 2000 px window; arrange_stage_block moves it beside the
         # lock-ins in the 1101 px window).
         block = panel.rte_stage_stop_button.parent
-        settings_box = next(w for w in Recorder.made if w.options.get("text") == "SHV settings")
+        settings_box = next(w for w in Recorder.made if w.options.get("text") == "SHHV settings")
         self.assertIs(block.parent.parent, settings_box)
         self.assertEqual((block.grid_options["row"], block.grid_options["column"]), (1, 0))
         rows = panel.rte_start_button.parent
         scan = rows.parent
-        self.assertEqual(scan.options.get("text"), "SHV scan")
+        self.assertEqual(scan.options.get("text"), "SHHV scan")
         self.assertFalse([w for w in Recorder.made if w.parent is scan and w is not rows
                           and "row" in w.grid_options and w.grid_options["row"] == 0], "only the scan rows on top")
         # Three scan rows (mode/Start/End/Step; units/Loops/Settle s/Acquire
@@ -1962,7 +1962,7 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual((rows.grid_options["row"], panel.ppms_field_scan_progress.parent.grid_options["row"],
                           note.parent.grid_options["row"]), (0, 1, 2))
         self.assertIsInstance(panel.rte_controllers["newmark"], app.NewmarkNSCA1Controller)
-        self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHV")
+        self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHHV")
         self.assertIsNone(panel.rte_controllers["newmark"].dll, "no DLL is loaded before Connect")
         combo = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_simple_mode)
         self.assertEqual(combo.options["values"], ("Field", "Current", "Angle", "Angle+Field", "Angle+Current"))
@@ -2022,9 +2022,9 @@ class AnglePageTests(unittest.TestCase):
 # "clear" and "enable" the old refusals named.  Move stage and an Angle scan's
 # Start now ask Yes/No themselves; Yes sends CLR or EO=1 on the RT-E worker,
 # reads it back, and then goes on; No sends nothing.
-LATCHED = "SHV stage limit error"
-DRIVER = "SHV stage motor driver"
-SCAN = "SHV Angle scan"
+LATCHED = "SHHV stage limit error"
+DRIVER = "SHHV stage motor driver"
+SCAN = "SHHV Angle scan"
 LATCHED_QUESTION = ("A limit error is latched on the stage (MST 64: not moving, -limit ERROR (latched)). Clear it now "
                     "(CLR)?")
 # Yes goes on at once, so the warning about the angle comes in the question,
@@ -2032,7 +2032,7 @@ LATCHED_QUESTION = ("A limit error is latched on the stage (MST 64: not moving, 
 DRIVER_QUESTION = ("The stage's motor driver is off (EO=0). Switch it on now (EO=1) and go on? The motor then holds "
                    "the stage with its current.\n\nIf the driver went off during a move, the angle shown may not be "
                    "the stage's: answer No and check it first (Set stage 0° if needed).")
-TICK = "Tick the SHV rack safety confirmation first"
+TICK = "Tick the SHHV rack safety confirmation first"
 ACTIONS = ("CLR", "EO=0", "EO=1", "STOP", "ABORT", "PX=0")
 
 
@@ -2125,7 +2125,7 @@ class Questions:
 
 NOT_CONFIRMED = ("The Newmark NSC-A1's last stop was not confirmed, so it may still be turning: press Stop stage first "
                  "(check the stage)")
-BUSY = "SHV is busy; wait or stop the scan first"
+BUSY = "SHHV is busy; wait or stop the scan first"
 # What the checks before the question and after its Yes refuse (review,
 # 2026-10-17): (name, change(h), the error dialog's text or None for none).
 RECHECKS = (("an unconfirmed stop", lambda h: setattr(h.stage, "motion_may_run", True), NOT_CONFIRMED),
@@ -2173,12 +2173,12 @@ class StageFixDriverTests(StageBase):
         self.assertEqual(h.stage.clear_limit_error(), 0)
         self.assertEqual(h.sim.received[start:], ["MST", "CLR", "MST"])
         self.assertEqual(h.sim.latched, 0)
-        self.assertIn("SHV Newmark NSC-A1: limit error cleared (CLR; MST 128 -> 0, read back)", h.log)
+        self.assertIn("SHHV Newmark NSC-A1: limit error cleared (CLR; MST 128 -> 0, read back)", h.log)
         # Nothing latched any more: MST read, CLR not sent.
         start = len(h.sim.received)
         h.stage.clear_limit_error()
         self.assertEqual(h.sim.received[start:], ["MST"])
-        self.assertIn("SHV Newmark NSC-A1: no limit error is latched now (MST 0); CLR not sent", h.log)
+        self.assertIn("SHHV Newmark NSC-A1: no limit error is latched now (MST 0); CLR not sent", h.log)
 
     def test_enable_driver_sends_eo1_then_reads_eo_back(self):
         h = self.make()
@@ -2188,7 +2188,7 @@ class StageFixDriverTests(StageBase):
         self.assertEqual(h.stage.enable_driver(), 1)
         self.assertEqual(h.sim.received[start:], ["MST", "EO", "EO=1", "EO"])
         self.assertEqual(h.sim.eo, 1)
-        self.assertIn("SHV Newmark NSC-A1: motor driver switched on (EO=1; EO 0 -> 1, read back)", h.log)
+        self.assertIn("SHHV Newmark NSC-A1: motor driver switched on (EO=1; EO 0 -> 1, read back)", h.log)
         start = len(h.sim.received)
         h.stage.enable_driver()
         self.assertEqual(h.sim.received[start:], ["MST", "EO"], "already on: EO=1 not sent")
@@ -2296,7 +2296,7 @@ class StageFixMoveTests(StageBase):
         h.showerror.assert_not_called()
         self.assertFalse(h.questions.asked[0].busy, "asked with the rack idle again")
         self.assertFalse(h.panel.ppms_environment_busy)
-        h.panel.thread_log.assert_any_call("SHV Newmark NSC-A1: No: CLR not sent; nothing moved")
+        h.panel.thread_log.assert_any_call("SHHV Newmark NSC-A1: No: CLR not sent; nothing moved")
 
     def test_a_latched_limit_error_yes_clears_reads_back_then_moves(self):
         busy = []
@@ -2312,7 +2312,7 @@ class StageFixMoveTests(StageBase):
         self.assertEqual(h.panel.rte_stage_live.get(), "Stage: +10.000° (10000 steps/°)")
         h.showerror.assert_not_called()
         self.assertEqual(h.questions.titles(), [LATCHED])
-        self.assertIn("SHV Newmark NSC-A1: limit error cleared (CLR; MST 64 -> 0, read back)", h.log)
+        self.assertIn("SHHV Newmark NSC-A1: limit error cleared (CLR; MST 64 -> 0, read back)", h.log)
         self.assertFalse(h.panel.ppms_environment_busy)
 
     def test_the_driver_off_no_sends_nothing(self):
@@ -2322,7 +2322,7 @@ class StageFixMoveTests(StageBase):
         self.assertEqual(actions(h.sim.received), [])
         self.assertEqual(h.sim.eo, 0)
         h.showerror.assert_not_called()
-        h.panel.thread_log.assert_any_call("SHV Newmark NSC-A1: No: EO=1 not sent; nothing moved")
+        h.panel.thread_log.assert_any_call("SHHV Newmark NSC-A1: No: EO=1 not sent; nothing moved")
 
     def test_the_driver_off_yes_switches_it_on_reads_back_then_moves(self):
         h = self.move(answers={DRIVER: True}, arrange=[driver_off])
@@ -2331,7 +2331,7 @@ class StageFixMoveTests(StageBase):
         self.assertEqual(actions(after), ["EO=1", "X100000"])
         self.assertEqual((h.sim.eo, h.sim.px), (1, 100000))
         h.showerror.assert_not_called()
-        self.assertIn("SHV Newmark NSC-A1: motor driver switched on (EO=1; EO 0 -> 1, read back)", h.log)
+        self.assertIn("SHHV Newmark NSC-A1: motor driver switched on (EO=1; EO 0 -> 1, read back)", h.log)
 
     def test_both_are_asked_in_turn_each_once(self):
         h = self.move(answers={LATCHED: True, DRIVER: True}, arrange=[latch, driver_off])
@@ -2364,7 +2364,7 @@ class StageFixMoveTests(StageBase):
             h.panel.ppms_control_safety_var.set(False)
             self.drain(h)
         self.assertEqual(questions.asked, [])
-        self.assertEqual(showerror.call_args.args, ("SHV stage", TICK))
+        self.assertEqual(showerror.call_args.args, ("SHHV stage", TICK))
         self.assertEqual(h.sim.received[sent:], [])
         self.assertNotIn("CLR", h.sim.received)
         # Unticked while the question is open, then Yes: refused, nothing sent.
@@ -2372,7 +2372,7 @@ class StageFixMoveTests(StageBase):
         for answers, arrange in (({LATCHED: True}, [latch]), ({DRIVER: True}, [driver_off])):
             with self.subTest(answers=answers):
                 h = self.move(answers=answers, arrange=arrange, before=untick)
-                self.assertEqual(h.showerror.call_args.args, ("SHV stage", TICK))
+                self.assertEqual(h.showerror.call_args.args, ("SHHV stage", TICK))
                 self.assertEqual(h.questions.after(next(iter(answers))), [])
                 self.assertEqual(actions(h.sim.received), [])
 
@@ -2395,7 +2395,7 @@ class StageFixMoveTests(StageBase):
         self.assertEqual(h.questions.titles(), [LATCHED])
         h.showerror.assert_called_once()
         self.assertEqual(h.showerror.call_args.args,
-                         ("SHV stage", "The limit error is latched again (MST 64: not moving, -limit ERROR "
+                         ("SHHV stage", "The limit error is latched again (MST 64: not moving, -limit ERROR "
                                         "(latched)) right after CLR was read back, so nothing moved: check the stage"))
         self.assertEqual(actions(h.sim.received), ["CLR"])
 
@@ -2416,7 +2416,7 @@ class StageFixMoveTests(StageBase):
                 self.assertEqual(h.questions.asked, [])
                 h.showerror.assert_called_once()
                 title, message = h.showerror.call_args.args
-                self.assertEqual(title, "SHV")
+                self.assertEqual(title, "SHHV")
                 self.assertIn("polarity problem; fix the limit polarity in Newmark's QuickMotion", message)
                 self.assertEqual(actions(h.sim.received), [])
 
@@ -2460,7 +2460,7 @@ class StageFixMoveTests(StageBase):
                 showerror.assert_not_called()
                 self.assertEqual(h.panel.rte_stage_live.get(), "Stage: not moved (OFF)")
                 h.panel.thread_log.assert_any_call(
-                    f"SHV Newmark NSC-A1: OFF was pressed meanwhile: {command} not offered; nothing sent")
+                    f"SHHV Newmark NSC-A1: OFF was pressed meanwhile: {command} not offered; nothing sent")
                 self.assertEqual(actions(h.sim.received), [])
 
     def test_the_question_opens_outside_the_drain_with_the_buttons_locked(self):
@@ -2528,8 +2528,8 @@ class StageFixMoveTests(StageBase):
                     if message is None:
                         showerror.assert_not_called()
                     else:
-                        self.assertEqual(showerror.call_args.args, ("SHV stage", message))
-                        h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {command} not offered: {message}")
+                        self.assertEqual(showerror.call_args.args, ("SHHV stage", message))
+                        h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {command} not offered: {message}")
 
     def test_the_checks_after_the_yes_refuse(self):
         for arrange, title, command in FIXES:
@@ -2543,10 +2543,10 @@ class StageFixMoveTests(StageBase):
                     self.assertFalse(h.panel.rte_stage_prompt_open)
                     if message is None:
                         h.showerror.assert_not_called()
-                        h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {command} not sent: SHV is closing")
+                        h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {command} not sent: SHHV is closing")
                     else:
-                        self.assertEqual(h.showerror.call_args.args, ("SHV stage", message))
-                        h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {command} not sent: {message}")
+                        self.assertEqual(h.showerror.call_args.args, ("SHHV stage", message))
+                        h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {command} not sent: {message}")
 
     def test_a_limit_input_on_when_clr_runs_refuses_it(self):
         def input_on(_title, h):        # a limit input comes on while the question is open
@@ -2554,7 +2554,7 @@ class StageFixMoveTests(StageBase):
         h = self.move(answers={LATCHED: True}, arrange=[latch], before=input_on)
         h.showerror.assert_called_once()
         title, message = h.showerror.call_args.args
-        self.assertEqual(title, "SHV")
+        self.assertEqual(title, "SHHV")
         self.assertRegex(message, r"^a limit input is on at rest \(MST 80: not moving, -limit input on, -limit ERROR "
                                   r"\(latched\)\), but .*polarity problem.*QuickMotion\. CLR was not sent$")
         self.assertEqual(h.questions.after(LATCHED), ["MST"], "MST read, CLR not sent, no move")
@@ -2590,12 +2590,12 @@ class StageFixMoveTests(StageBase):
                     showerror.assert_not_called()
                     if name == "close":
                         h.panel.thread_log.assert_any_call(
-                            f"SHV Newmark NSC-A1: {command} not sent: SHV is closing after the Yes")
+                            f"SHHV Newmark NSC-A1: {command} not sent: SHHV is closing after the Yes")
                         self.assertFalse(h.stage.connected, "closed by the clean-up queued after it")
                     else:
                         reason = "Stop stage was pressed" if name == "Stop stage" else "an OFF button was pressed"
                         h.panel.thread_log.assert_any_call(
-                            f"SHV Newmark NSC-A1: {command} not sent: {reason} after the Yes")
+                            f"SHHV Newmark NSC-A1: {command} not sent: {reason} after the Yes")
                         self.assertIn(f"Stage: not moved ({'Stop' if name == 'Stop stage' else 'OFF'})", shown)
 
 
@@ -2693,7 +2693,7 @@ class StageFixAngleStartTests(StageBase):
         self.assertEqual(h.questions.after(LATCHED), [])
         self.assert_not_started(h)
         h.showerror.assert_not_called()
-        h.panel.thread_log.assert_any_call("SHV Newmark NSC-A1: No: CLR not sent; nothing moved")
+        h.panel.thread_log.assert_any_call("SHHV Newmark NSC-A1: No: CLR not sent; nothing moved")
         # From the Tk event loop, not inside the drain; the status line says
         # why the scan did not start (review, 2026-10-17).
         self.assertFalse(question.in_drain)
@@ -2708,7 +2708,7 @@ class StageFixAngleStartTests(StageBase):
         self.assert_started(h)
         h.showerror.assert_not_called()
         self.assertEqual(h.panel.ppms_field_scan_status_var.get(),
-                         "SHV Angle 0° to 10°, KEPCO +1.5 A held; 5 points")
+                         "SHHV Angle 0° to 10°, KEPCO +1.5 A held; 5 points")
 
     def test_the_driver_off_no_and_yes(self):
         h = self.start(answers={DRIVER: False}, arrange=[driver_off])
@@ -2728,14 +2728,14 @@ class StageFixAngleStartTests(StageBase):
     def test_never_asked_or_sent_without_the_safety_tick(self):
         h = self.start(answers={}, arrange=[latch], safety=False)
         self.assertEqual(h.questions.asked, [])
-        self.assertEqual(h.showerror.call_args.args, ("SHV scan parameters", TICK))
+        self.assertEqual(h.showerror.call_args.args, ("SHHV scan parameters", TICK))
         self.assertEqual(h.sim.received[h.start:], [], "nothing sent")
         self.assert_not_started(h)
         untick = lambda title, h: h.panel.ppms_control_safety_var.set(False) if title != SCAN else None
         for answers, arrange in (({LATCHED: True}, [latch]), ({DRIVER: True}, [driver_off])):
             with self.subTest(answers=answers):
                 h = self.start(answers=answers, arrange=arrange, before=untick)
-                self.assertEqual(h.showerror.call_args.args, ("SHV stage", TICK))
+                self.assertEqual(h.showerror.call_args.args, ("SHHV stage", TICK))
                 self.assertEqual(h.questions.after(next(iter(answers))), [])
                 self.assertEqual(actions(h.sim.received), [])
                 self.assert_not_started(h)
@@ -2771,7 +2771,7 @@ class StageFixAngleStartTests(StageBase):
         self.assertEqual(h.questions.titles(), [SCAN])
         self.assert_not_started(h)
         self.assertEqual(h.panel.ppms_field_scan_status_var.get(), "Angle scan not started: Stop stage was pressed")
-        h.panel.thread_log.assert_any_call("SHV Angle scan not started: Stop stage was pressed during the stage check")
+        h.panel.thread_log.assert_any_call("SHHV Angle scan not started: Stop stage was pressed during the stage check")
         self.assertEqual(actions(h.sim.received), [])
 
     # ---- review, 2026-10-17 ------------------------------------------------------
@@ -2790,7 +2790,7 @@ class StageFixAngleStartTests(StageBase):
         self.assertEqual(h.questions.titles(), [SCAN])
         self.assert_not_started(h)
         self.assertEqual(h.panel.ppms_field_scan_status_var.get(), "Angle scan not started: an OFF button was pressed")
-        h.panel.thread_log.assert_any_call("SHV Angle scan not started: an OFF button was pressed during the stage "
+        h.panel.thread_log.assert_any_call("SHHV Angle scan not started: an OFF button was pressed during the stage "
                                            "check")
         self.assertEqual(actions(h.sim.received), [])
 
@@ -2807,7 +2807,7 @@ class StageFixAngleStartTests(StageBase):
                     self.assert_not_started(h)
                     self.assertEqual(h.panel.ppms_field_scan_status_var.get(), f"Angle scan not started: {reason}")
                     self.assertEqual(h.panel.rte_stage_live.get(), f"Stage: not moved ({pressed})")
-                    h.panel.thread_log.assert_any_call(f"SHV Newmark NSC-A1: {pressed} was pressed meanwhile: "
+                    h.panel.thread_log.assert_any_call(f"SHHV Newmark NSC-A1: {pressed} was pressed meanwhile: "
                                                        f"{command} not offered; nothing sent")
                     self.assertEqual(actions(h.sim.received), [])
 
@@ -2818,7 +2818,7 @@ class StageFixAngleStartTests(StageBase):
             self.drain(h)
         h = self.start(arrange=[latch], settle=unconfirmed_meanwhile)
         self.assertEqual(h.questions.titles(), [SCAN])
-        self.assertEqual(h.showerror.call_args.args, ("SHV stage", NOT_CONFIRMED))
+        self.assertEqual(h.showerror.call_args.args, ("SHHV stage", NOT_CONFIRMED))
         self.assert_not_started(h)
         self.assertEqual(h.panel.ppms_field_scan_status_var.get(),
                          "Angle scan not started: The Newmark NSC-A1's last stop was not conf…")
@@ -2826,7 +2826,7 @@ class StageFixAngleStartTests(StageBase):
         def untick_during_the_check(h):
             h.sim.watch = lambda command: h.panel.ppms_control_safety_var.set(False) if command == "EO" else None
         h = self.start(prepare=untick_during_the_check)
-        self.assertEqual(h.showerror.call_args.args, ("SHV scan not started", TICK))
+        self.assertEqual(h.showerror.call_args.args, ("SHHV scan not started", TICK))
         self.assert_not_started(h)
         self.assertEqual(h.panel.ppms_field_scan_status_var.get(), f"Angle scan not started: {TICK}")
 
@@ -2857,12 +2857,12 @@ class StageFixAngleStartTests(StageBase):
                     if name == "close":
                         self.assertEqual(status, "", "a closing page shows nothing")
                         h.panel.thread_log.assert_any_call(
-                            f"SHV Newmark NSC-A1: {command} not sent: SHV is closing after the Yes")
+                            f"SHHV Newmark NSC-A1: {command} not sent: SHHV is closing after the Yes")
                     else:
                         reason = "Stop stage was pressed" if name == "Stop stage" else "an OFF button was pressed"
                         self.assertEqual(status, f"Angle scan not started: {reason}")
                         h.panel.thread_log.assert_any_call(
-                            f"SHV Newmark NSC-A1: {command} not sent: {reason} after the Yes")
+                            f"SHHV Newmark NSC-A1: {command} not sent: {reason} after the Yes")
 
     def test_field_and_current_starts_never_check_the_stage(self):
         # Only an Angle Start reads the stage; Field and Current start at

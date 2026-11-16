@@ -1,5 +1,17 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## The SHV page is renamed SHHV (user, 2026-11-16)
+
+- **Request:** "change SHV module name to SHHV pls."
+- **Renamed** in every text the program shows or writes: the tab, the boxes ("SHHV settings", "SHHV scan",
+  "SHHV measurement"), dialogs, status lines, the log, the overview tooltip, the stage-ownership name
+  (`owner_scope`), the live CSV's default name (`SHHV_<date>_<time>`), the run folder's name and the CSV's
+  `module` column (`SHHV`). The run-folder class is `SHHVScanRecorder`. Internal `rte_*` names are kept, as
+  at the RT-E → SHV rename (2026-10-18). Comments quoting the user's earlier words keep "SHV" as said.
+- **Data already taken** keeps its `SHV_...` names and `module` = `SHV`. The analysis scripts in
+  `3-Transport-RT/process/scripts` that check the module (`rte_harmonic.py`, `shv_field_series.py`,
+  `shv_field_sweep.py`) accept both `SHV` and `SHHV`. Entries below this one use the name of their day.
+
 ## A lock-in's range steps down under 1 %, and the rules no longer take turns for ever (user, 2026-11-16)
 
 - **Request:** "when the measured voltage is below 1%, then decrease the range of lock-in. pls make sure the

@@ -3,7 +3,7 @@ save logic and files in different module like the same as possible").
 
 ScanRunRecorder (the run folder, the live CSV and the JSON-lines log of every
 scan page), begin_scan_run (a Start's folder and file-name step),
-zero_scan_outputs and scan_end_outputs_text (every scan's end), and SHV's and
+zero_scan_outputs and scan_end_outputs_text (every scan's end), and SHHV's and
 STFMR's files and log lines unchanged on the shared class.
 
 Window-free: no Tk window, no instrument; every dialog is answered here."""
@@ -118,7 +118,7 @@ class RecorderFileTests(Folder):
         self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_a_first_line_that_cannot_be_written_starts_nothing(self):
-        # As SHV's Start: the run is closed not_started and the error raised.
+        # As SHHV's Start: the run is closed not_started and the error raised.
         real = app.scan_log_line
 
         def line(name, details):
@@ -403,7 +403,7 @@ class BeginScanRunTests(Folder):
 
 class ScanEndTests(unittest.TestCase):
     def test_shv_s_texts_are_unchanged(self):
-        # The SHV page's texts, which CI measures (RTEStatusRowTests).
+        # The SHHV page's texts, which CI measures (RTEStatusRowTests).
         shv = {"together": "KEPCO and 6221", "outputs": ("6221", "KEPCO")}
         text = app.scan_end_outputs_text
         for results, check, expected in (
@@ -465,7 +465,7 @@ class ScanEndTests(unittest.TestCase):
                          "6221 zero FAILED; KEPCO not connected; 2400 zeroed; magnet zero FAILED: check them")
 
 
-# SHV's and STFMR's recorders as they were at 5380ea8, before the shared class,
+# SHHV's and STFMR's recorders as they were at 5380ea8, before the shared class,
 # kept here only to show that their files and log lines are unchanged.  A page
 # that changes its recorder on purpose updates or drops its comparison.
 class OldSTFMRScanRecorder:
@@ -526,7 +526,7 @@ class OldSTFMRScanRecorder:
         return errors
 
 
-class OldSHVScanRecorder:
+class OldSHHVScanRecorder:
     def __init__(self, parent, stem):
         self.directory = app.make_scan_run_folder(Path(parent), stem)
         name = self.directory.name
@@ -560,7 +560,7 @@ class OldSHVScanRecorder:
     def check(self):
         error = self.failure
         if error is not None:
-            raise RuntimeError(f"The SHV log could not be written ({error}); the scan stopped") from error
+            raise RuntimeError(f"The SHHV log could not be written ({error}); the scan stopped") from error
 
     def close(self, outcome, **details):
         with self.lock:
@@ -649,12 +649,12 @@ class UnchangedOutputTests(Folder):
     def test_shv(self):
         def script(make, parent):
             answers = []
-            for stem in ("angle", "angle", "SHV_20261018_123456"):
+            for stem in ("angle", "angle", "SHHV_20261018_123456"):
                 recorder = make(parent, stem)
                 answers.append(recorder.directory.name)
                 answers.append(recorder.event("run_prepared", mode="Angle", plan={"points": 2}, run_folder=str(
                     recorder.directory), csv_path=str(recorder.csv_path), log_path=str(recorder.log_path)))
-                answers.append(recorder.event("note", text="SHV Angle scan; ünïcode 5°"))
+                answers.append(recorder.event("note", text="SHHV Angle scan; ünïcode 5°"))
                 answers.append(recorder.event("outputs_zeroed", **{"6221": "zeroed", "kepco": "not connected"}))
                 answers.append(recorder.close("completed", error="", points_saved=2, status="Completed; KEPCO and "
                                               "6221 zeroed", outputs={"6221": "zeroed", "kepco": "zeroed"}))
@@ -672,12 +672,12 @@ class UnchangedOutputTests(Folder):
             answers.append(str(raised.exception))
             answers.append(recorder.close("error"))
             return answers
-        script.old, script.new = OldSHVScanRecorder, app.SHVScanRecorder
+        script.old, script.new = OldSHHVScanRecorder, app.SHHVScanRecorder
         files = self.run_both(script)
         self.assertEqual(files["angle/angle.csv"], b"", "the page appends the live CSV")
 
     def test_the_page_recorders_are_the_shared_class(self):
-        self.assertTrue(issubclass(app.SHVScanRecorder, app.ScanRunRecorder))
+        self.assertTrue(issubclass(app.SHHVScanRecorder, app.ScanRunRecorder))
         self.assertTrue(issubclass(app.STFMRScanRecorder, app.ScanRunRecorder))
 
 

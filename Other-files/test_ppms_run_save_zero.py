@@ -444,7 +444,7 @@ class CurrentTemperatureTests(unittest.TestCase):
 
 
 class AutorangeTests(unittest.TestCase):
-    """P2 (shared with SHV): a range that overloaded is a floor until the
+    """P2 (shared with SHHV): a range that overloaded is a floor until the
     next pass, and only a point's first reading steps a range down."""
 
     def sr830(self, index=13):

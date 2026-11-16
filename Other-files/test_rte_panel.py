@@ -182,7 +182,7 @@ class RTE(unittest.TestCase):
                                       panel._rte_harmonic_passes(self.settings()), 5., 0., .001)
         self.assertEqual(panel.rte_scan_outputs, {
             '6221': 'zeroed', 'kepco': "zero FAILED: KEPCO 4886 zero/OFF not confirmed: 'OUTP OFF' timeout"})
-        panel.thread_log.assert_any_call("SHV scan end: 6221 zeroed; KEPCO zero FAILED: KEPCO 4886 zero/OFF not "
+        panel.thread_log.assert_any_call("SHHV scan end: 6221 zeroed; KEPCO zero FAILED: KEPCO 4886 zero/OFF not "
                                          "confirmed: 'OUTP OFF' timeout")
         # A Current scan without a KEPCO connected: nothing to zero there.
         panel = self.harmonic_panel(('1', '2', '3'))
@@ -472,8 +472,8 @@ class RTE(unittest.TestCase):
             self.assertEqual(panel.rte_resources['newmark'].get(), 'auto')
             self.assertEqual(panel.rte_connections['newmark'].get(), 'Not connected')
             block = panel.rte_stage_stop_button.parent
-            self.assertEqual(block.parent.parent.options['text'], 'SHV settings')
-            self.assertEqual(panel.rte_start_button.parent.parent.options['text'], 'SHV scan')
+            self.assertEqual(block.parent.parent.options['text'], 'SHHV settings')
+            self.assertEqual(panel.rte_start_button.parent.parent.options['text'], 'SHHV scan')
             self.assertNotIn('text', panel.ppms_instruments_frame.options)
             self.assertEqual(panel.zurich_harmonic.get(), '1+2')     # user's figure, 2026-10-18
             self.assertEqual(panel.zurich_resource.get(), 'DEV4414 (Super)')

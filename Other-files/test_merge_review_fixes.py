@@ -1,8 +1,8 @@
 """Review of the merged areas (c3b4b24..1c51161): its fixes (review, 2026-10-18).
 
-ST-FMR / FMR SF1-SF6, PPMS / SHV PS1-PS8, MOKE / CIDWM / Non-local MN1-MN4
+ST-FMR / FMR SF1-SF6, PPMS / SHHV PS1-PS8, MOKE / CIDWM / Non-local MN1-MN4
 and the nits.  No Tk window and no instrument: the real methods run on
-stand-ins (the shared STFMR, PPMS and SHV harnesses of the other suites),
+stand-ins (the shared STFMR, PPMS and SHHV harnesses of the other suites),
 every dialog is mocked, and the real Newmark driver only ever sees the fake
 PerformaxCom.dll of test_rte_angle_scan."""
 from concurrent.futures import Future
@@ -66,12 +66,12 @@ class StageKepcoTests(motor_tests.MotorBase):
         self.assertEqual(run.sim.moves, [], "the stage did not turn")
 
     def test_a_hand_move_is_refused_while_the_shv_or_fmr_4886_is_on(self):
-        for page in ("SHV", "FMR"):
+        for page in ("SHHV", "FMR"):
             with self.subTest(page=page):
                 self.error.reset_mock()
                 run = self.hand()
                 h = run.h
-                if page == "SHV":
+                if page == "SHHV":
                     h.rte_panel = types.SimpleNamespace(rte_controllers={"kepco": Kepco(on=True)})
                 else:
                     h.stfmr_controllers = {"kepco": Kepco(on=True)}
@@ -119,13 +119,13 @@ class StageKepcoTests(motor_tests.MotorBase):
         h.rte_panel = types.SimpleNamespace(rte_controllers={"kepco": shv})
 
         def switch_on_elsewhere():
-            shv.output_owned = True        # SHV's KEPCO switched on during the first angle
+            shv.output_owned = True        # SHHV's KEPCO switched on during the first angle
         h.move_hooks[30.0] = switch_on_elsewhere
         h.start_stfmr_lockin_scan()
         h.root.drain()
         self.assertEqual(run.sim.moves, ["X300000"], "the first move only")
         self.error.assert_called_once()
-        self.assertIn("of the SHV page is on", self.error.call_args.args[1])
+        self.assertIn("of the SHHV page is on", self.error.call_args.args[1])
 
     def test_a_sweep_refuses_a_later_move_when_its_4886_is_gone(self):
         run = self.make(angles=("30", "60", "30"))
@@ -146,7 +146,7 @@ class StageKepcoTests(motor_tests.MotorBase):
         self.assertEqual(h._stfmr_lockin_other_4886_on(), [], "the same object is this page's")
         h.stfmr_controllers = {"kepco": Kepco(on=True)}
         h.rte_panel = types.SimpleNamespace(rte_controllers={"kepco": Kepco(on=True)})
-        self.assertEqual(h._stfmr_lockin_other_4886_on(), ["FMR", "SHV"])
+        self.assertEqual(h._stfmr_lockin_other_4886_on(), ["FMR", "SHHV"])
 
 
 # ---- SF2: the FMR close sets no StringVar off the Tk thread ------------------------------------
@@ -509,7 +509,7 @@ class FailureCheckItTests(unittest.TestCase):
             self.assertTrue(text.endswith(("zero FAILED", "confirmed zeroed")), text)
 
 
-# ---- PS6: the SHV run log is closed after the stage's line ------------------------------------
+# ---- PS6: the SHHV run log is closed after the stage's line ------------------------------------
 class SHVCloseOrderTests(unittest.TestCase):
     def test_the_stage_and_instrument_lines_are_in_the_log_before_it_closes(self):
         panel = rte_tests.RTE.make_worker(self)
@@ -521,21 +521,21 @@ class SHVCloseOrderTests(unittest.TestCase):
         panel.ppms_instrument_controllers = {}
         panel.rte_stage_where = "stage at +0.000°"
         stage = mock.Mock(connected=False)
-        stage.disconnect.side_effect = lambda: panel.thread_log("SHV Newmark NSC-A1: stopped (STOP); closed")
+        stage.disconnect.side_effect = lambda: panel.thread_log("SHHV Newmark NSC-A1: stopped (STOP); closed")
         kepco = mock.Mock()
-        kepco.disconnect.side_effect = lambda: panel.thread_log("SHV KEPCO 4886 VISA session closed")
+        kepco.disconnect.side_effect = lambda: panel.thread_log("SHHV KEPCO 4886 VISA session closed")
         panel.rte_controllers = {"newmark": stage, "kepco": kepco}
         future = Future()
         future.set_exception(app.PPMSScanCancelled("closing"))
         panel.rte_scan_future = future
         with tempfile.TemporaryDirectory() as folder:
-            panel.rte_recorder = app.SHVScanRecorder(Path(folder), "close")
+            panel.rte_recorder = app.SHHVScanRecorder(Path(folder), "close")
             path = panel.rte_recorder.log_path
             panel.safe_close_ppms()
             history = read_events(path)
         names = [e.get("text", e["event"]) for e in history]
-        self.assertEqual(names[-3:], ["SHV Newmark NSC-A1: stopped (STOP); closed",
-                                      "SHV KEPCO 4886 VISA session closed", "run_finished"])
+        self.assertEqual(names[-3:], ["SHHV Newmark NSC-A1: stopped (STOP); closed",
+                                      "SHHV KEPCO 4886 VISA session closed", "run_finished"])
         self.assertEqual(history[-1]["outcome"], "stopped")
         self.assertIsNone(panel.__dict__.get("rte_recorder"))
 

@@ -39,7 +39,7 @@ class Folders(unittest.TestCase):
     def open_run(self, sample="sample"):
         """A scan's open run folder <tmp>/<sample>/run."""
         (self.tmp / sample).mkdir(exist_ok=True)
-        recorder = app.ScanRunRecorder(self.tmp / sample, "SHV", "run", {})
+        recorder = app.ScanRunRecorder(self.tmp / sample, "SHHV", "run", {})
         self.addCleanup(recorder.close, "test_end")
         return recorder
 
@@ -214,7 +214,7 @@ class FolderRuleTests(Folders):
     def test_a_run_folder_reached_another_way_is_the_same_folder(self):
         self.make("real")
         os.symlink(self.tmp / "real", self.tmp / "alias", target_is_directory=True)
-        recorder = app.ScanRunRecorder(self.tmp / "alias", "SHV", "run", {})
+        recorder = app.ScanRunRecorder(self.tmp / "alias", "SHHV", "run", {})
         self.addCleanup(recorder.close, "test_end")
         self.assertEqual(app.scan_run_using_folder(self.tmp / "real"), recorder.directory)
         with self.assertRaisesRegex(ValueError, "A running scan is saving into"):
@@ -247,7 +247,7 @@ class FolderRuleTests(Folders):
         self.make("sample")
         with mock.patch.object(app.ScanRunRecorder, "event", side_effect=RuntimeError("disk")), \
                 self.assertRaises(RuntimeError):
-            app.ScanRunRecorder(self.tmp / "sample", "SHV", "run", {})
+            app.ScanRunRecorder(self.tmp / "sample", "SHHV", "run", {})
         self.assertIsNone(app.scan_run_using_folder(self.tmp / "sample"))
 
     @unittest.skipIf(sys.platform == "win32", "making a link needs a privilege on Windows")
@@ -472,9 +472,9 @@ class FolderDialogWindowTests(Folders):
             seen["keys"] = [bool(dialog.listbox.bind(key)) for key in (
                 "<Double-Button-1>", "<Return>", "<F2>", "<Delete>", "<BackSpace>")]
 
-        self.assertEqual(self.choose(look, title="SHV live CSV folder"), "", "cancelled")
+        self.assertEqual(self.choose(look, title="SHHV live CSV folder"), "", "cancelled")
         self.assertEqual(seen, {
-            "title": "SHV live CSV folder", "names": ["SRO2", "SRO14"],
+            "title": "SHHV live CSV folder", "names": ["SRO2", "SRO14"],
             "texts": ["Up", "New folder", "Rename", "Delete", "OK", "Cancel"],
             "directory": posix(self.tmp), "selection": posix(self.tmp),
             "edit": [True, True], "new": False, "picked": posix(self.tmp / "SRO2"),

@@ -255,8 +255,8 @@ class AnglePlanTests(MotorBase):
         with self.assertRaisesRegex(RuntimeError, "connect it on the Motor row of the STFMR instrument "
                                                   "connections, or set Angle start and Angle stop to 0"):
             run.h._stfmr_lockin_angle_plan()
-        run.h.newmark_stage_ownership.claim("SHV")
-        with self.assertRaisesRegex(RuntimeError, "the motor is connected on the SHV page: disconnect it there "
+        run.h.newmark_stage_ownership.claim("SHHV")
+        with self.assertRaisesRegex(RuntimeError, "the motor is connected on the SHHV page: disconnect it there "
                                                   "and connect it on the Motor row here"):
             run.h._stfmr_lockin_angle_plan()
         run.h.stfmr_lockin_angle_start_var.set("abc")
@@ -410,7 +410,7 @@ class AngleSweepTests(MotorBase):
         self.assertTrue(h.stfmr_lockin_stage_where.startswith("stage stopped at +"), h.stfmr_lockin_stage_where)
         where = h.stfmr_lockin_stage_where.split(" at ", 1)[1]
         self.assertTrue(0 < float(where.rstrip("°")) < 90, where)
-        # The outputs first, then the stage, as SHV's (user, 2026-10-18).
+        # The outputs first, then the stage, as SHHV's (user, 2026-10-18).
         self.assertEqual(h.stfmr_lockin_status_var.get(), f"Stopped; 4886 and RF zeroed; stage at {where}; 2 saved")
         self.assertLessEqual(width_in_zeros(h.stfmr_lockin_status_var.get()), LABEL)
         self.assertEqual(h.stfmr_lockin_motor_status_var.get(), where)
@@ -593,7 +593,7 @@ class StartCheckTests(MotorBase):
         self.assertEqual(titles, ["STFMR stage limit error", "STFMR scan"])
         self.assertEqual(self.confirm.call_args_list[0].args[1], LATCHED_QUESTION)
         self.assertEqual(self.confirm.call_args_list[0].args[1],
-                         app.newmark_fix_prompt(app.NewmarkLimitErrorLatched(64), "SHV")[3], "SHV's wording")
+                         app.newmark_fix_prompt(app.NewmarkLimitErrorLatched(64), "SHHV")[3], "SHHV's wording")
         received = run.sim.received
         self.assertEqual(received.count("CLR"), 1)
         self.assertLess(received.index("CLR"), received.index("X900000"))
@@ -763,17 +763,17 @@ class OwnershipTests(MotorBase):
     def test_one_page_at_a_time(self):
         owner = app.NewmarkStageOwnership()
         self.assertIsNone(owner.owner)
-        owner.claim("SHV")
-        owner.claim("SHV")
-        with self.assertRaisesRegex(RuntimeError, r"^The motor is connected on the SHV page: disconnect it there "
+        owner.claim("SHHV")
+        owner.claim("SHHV")
+        with self.assertRaisesRegex(RuntimeError, r"^The motor is connected on the SHHV page: disconnect it there "
                                                   r"first\.$"):
             owner.claim("STFMR")
         owner.release("STFMR")
-        self.assertEqual(owner.owner, "SHV", "only the owner releases")
-        owner.release("SHV")
+        self.assertEqual(owner.owner, "SHHV", "only the owner releases")
+        owner.release("SHHV")
         owner.claim("STFMR")
         with self.assertRaisesRegex(RuntimeError, "connected on the STFMR page"):
-            owner.claim("SHV")
+            owner.claim("SHHV")
 
     def test_the_main_app_and_the_rt_e_page_share_one(self):
         main = object.__new__(App)
@@ -789,17 +789,17 @@ class OwnershipTests(MotorBase):
         source = Path(app.__file__).read_text(encoding="utf-8")
         init = source[source.index("        self.newmark_stage_ownership = NewmarkStageOwnership()"):]
         self.assertLess(init.index("NewmarkStageOwnership()"), init.index("self.build_ui()"),
-                        "made before build_ui builds the SHV page")
+                        "made before build_ui builds the SHHV page")
 
     def test_connect_is_refused_while_the_rt_e_page_has_it(self):
         run = self.make(connect=False)
-        run.h.newmark_stage_ownership.claim("SHV")
+        run.h.newmark_stage_ownership.claim("SHHV")
         run.h.connect_stfmr_lockin_motor()
-        self.error.assert_called_once_with("STFMR motor", "The motor is connected on the SHV page: disconnect "
+        self.error.assert_called_once_with("STFMR motor", "The motor is connected on the SHHV page: disconnect "
                                            "it there first.", parent=run.h.root)
         self.assertEqual(run.dll.calls, [], "nothing queued or sent")
         self.assertFalse(run.motor.connected)
-        self.assertEqual(run.h.newmark_stage_ownership.owner, "SHV")
+        self.assertEqual(run.h.newmark_stage_ownership.owner, "SHHV")
 
     def test_connect_claims_disconnect_and_a_failed_connect_release(self):
         run = self.make(connect=False)
@@ -847,7 +847,7 @@ class OwnershipTests(MotorBase):
         self.assertIsNone(h.newmark_stage_ownership.owner)
 
     def test_the_log_prefix_follows_owner_scope(self):
-        for scope in ("STFMR", "SHV"):
+        for scope in ("STFMR", "SHHV"):
             with self.subTest(scope=scope):
                 run = self.make(connect=False)
                 log = []
@@ -863,7 +863,7 @@ class OwnershipTests(MotorBase):
                 self.assertTrue(log)
                 self.assertEqual([line for line in log if not line.startswith(f"{scope} Newmark NSC-A1")], [])
                 self.assertIn(f"{scope} Newmark NSC-A1 disconnected", log)
-        self.assertEqual(app.NewmarkNSCA1Controller(print).owner_scope, "SHV", "the default is unchanged")
+        self.assertEqual(app.NewmarkNSCA1Controller(print).owner_scope, "SHHV", "the default is unchanged")
 
 
 class SetZeroTests(MotorBase):
@@ -925,7 +925,7 @@ class SetZeroTests(MotorBase):
         self.assertEqual({thread for _name, thread in run.dll.calls}, {worker}, "every DLL call on the worker")
         # RT-E asks the same question.
         source = Path(app.__file__).read_text(encoding="utf-8")
-        self.assertIn("messagebox.askyesno('SHV stage zero', newmark_set_zero_question(), parent=self.root)",
+        self.assertIn("messagebox.askyesno('SHHV stage zero', newmark_set_zero_question(), parent=self.root)",
                       source)
 
     def test_a_refusal_shows_an_error(self):

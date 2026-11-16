@@ -759,7 +759,7 @@ class SequenceTests(unittest.TestCase):
             rig.run()
         self.assertNotIn(("6221", "SOUR:WAVE:ARM"), rig.log)
         rig.assert_switched_off()
-        # Any other set-up keeps the 0.5 % (the SHV page's included).
+        # Any other set-up keeps the 0.5 % (the SHHV page's included).
         other = Rig(self, "Current", None, (1.0,), zurich=False)
         other.source.on_write = lambda command: (setattr(other.source, "frequency", 1000.0)
                                                  if command == "SOUR:WAVE:FREQ 997" else None)
@@ -985,7 +985,7 @@ class PlotTests(unittest.TestCase):
 
 
 class SHVUnchangedTests(unittest.TestCase):
-    """The SHV page (RTEPanel) inherits this code; it must not change."""
+    """The SHHV page (RTEPanel) inherits this code; it must not change."""
 
     def test_the_shv_page_keeps_its_own_modes_and_methods(self):
         import inspect
@@ -998,7 +998,7 @@ class SHVUnchangedTests(unittest.TestCase):
             self.assertNotIn(name, source.replace("RTE_TRANSPORT_FREQUENCY_HZ", "").replace("Frequency Hz", ""))
         for name in ("build_ppms_ui", "start_ppms_field_scan", "_redraw_ppms_transport_plot",
                      "_update_ppms_control_ui", "_rte_mode_changed"):
-            self.assertIn(name, app.RTEPanel.__dict__, f"SHV has its own {name}")
+            self.assertIn(name, app.RTEPanel.__dict__, f"SHHV has its own {name}")
 
     def test_a_set_up_without_a_frequency_scan_keeps_the_8_s_lock(self):
         self.assertEqual(app.PPMS_TRANSPORT_REFERENCE_TIMEOUT_S, 8.0)

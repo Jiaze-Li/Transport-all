@@ -1,5 +1,5 @@
-"""The "Set field" control of the FMR, ST-FMR and SHV pages (user,
-2026-11-14: "Add a magnetic field setting in FMR, SHV, STFMR modules. You
+"""The "Set field" control of the FMR, ST-FMR and SHHV pages (user,
+2026-11-14: "Add a magnetic field setting in FMR, SHHV, STFMR modules. You
 can try to use PID to control the magnetic field value").
 
 Each page steps its chosen magnet supply (the KEPCO 4886 or its Lake Shore)
@@ -61,7 +61,7 @@ def stop_once_held(gauss, target, tolerance, press, readings=14):
 
 
 def setUpModule():
-    # The SHV page's guards: no real DLL, no window.
+    # The SHHV page's guards: no real DLL, no window.
     shv_runs.setUpModule()
     # A second Set field right after one ended is these tests' own; the
     # wait a press needs after an end has its tests below.
@@ -603,7 +603,7 @@ class StfmrFieldTests(ls_pages.NoWindows):
         self.assertFalse(h._stfmr_lockin_magnet_jobs_pending())
 
 
-# ------------------------------------------------------------------------ SHV
+# ------------------------------------------------------------------------ SHHV
 class ShvFieldTests(shv_runs.EndToEnd):
     def page(self, target="500", tolerance="1"):
         h = self.make()
@@ -641,29 +641,29 @@ class ShvFieldTests(shv_runs.EndToEnd):
         self.assertEqual(self.card.writes[-1], f"CURR {self.card.current:.6f}", "the current stays")
         self.assertEqual(panel.rte_drive_live.get(), "KEPCO: field regulation stopped")
         self.assertFalse(panel.rte_field_setting)
-        self.assertEqual(h.logged[-1], "SHV field: regulation of +500 G stopped")
+        self.assertEqual(h.logged[-1], "SHHV field: regulation of +500 G stopped")
         self.assertEqual(set(during), {(True, h.worker)}, "on the worker, the rack busy meanwhile")
         self.assertFalse(panel.ppms_environment_busy)
-        self.assertIn("SHV field: setting +500 G ± 1 G with the KEPCO", h.logged)
+        self.assertIn("SHHV field: setting +500 G ± 1 G with the KEPCO", h.logged)
 
     def test_it_needs_the_racks_safety_tick_and_both_instruments(self):
         h = self.page()
         panel = h.panel
         panel.ppms_control_safety_var.set(False)
         panel._rte_set_field()
-        self.assertEqual(h.showerror.call_args.args[:2], ("SHV field", "Tick the SHV rack safety confirmation first"))
+        self.assertEqual(h.showerror.call_args.args[:2], ("SHHV field", "Tick the SHHV rack safety confirmation first"))
         panel.ppms_control_safety_var.set(True)
         h.gauss.connected = False
         panel._rte_set_field()
-        self.assertEqual(h.showerror.call_args.args[:2], ("SHV field", "Connect the Lake Shore 475 first"))
+        self.assertEqual(h.showerror.call_args.args[:2], ("SHHV field", "Connect the Lake Shore 475 first"))
         h.gauss.connected = True
         panel.rte_field_tolerance.set("0")
         panel._rte_set_field()
-        self.assertEqual(h.showerror.call_args.args[:2], ("SHV field", "The field tolerance must be above 0 G"))
+        self.assertEqual(h.showerror.call_args.args[:2], ("SHHV field", "The field tolerance must be above 0 G"))
         panel.rte_field_tolerance.set("1")
         panel.ppms_environment_busy = True
         panel._rte_set_field()
-        self.assertEqual(h.showerror.call_args.args[:2], ("SHV field", "SHV is busy; wait or stop the scan first"))
+        self.assertEqual(h.showerror.call_args.args[:2], ("SHHV field", "SHHV is busy; wait or stop the scan first"))
         panel.ppms_environment_busy = False
         self.pump(h)
         self.assertEqual(self.card.writes, [], "nothing was sent")
@@ -691,7 +691,7 @@ class ShvFieldTests(shv_runs.EndToEnd):
         (review, 2026-11-14)."""
         h = self.page(target="2400")
         panel = h.panel
-        controller, fake, _clock = connected_supply("643", owner="SHV", current=20.0)
+        controller, fake, _clock = connected_supply("643", owner="SHHV", current=20.0)
         self.addCleanup(app._INSTRUMENT_LEASES.clear)
         panel.rte_controllers["lakeshore"] = controller
         panel.rte_magnet_rate.set("5")
@@ -703,7 +703,7 @@ class ShvFieldTests(shv_runs.EndToEnd):
         self.assertEqual(panel.rte_lakeshore_zero_pending, 1)
         panel._rte_set_field()
         self.assertEqual(h.showerror.call_args.args[:2],
-                         ("SHV field", "The LS643 is being ramped to 0 A (Zero / OFF): wait for it, then set the "
+                         ("SHHV field", "The LS643 is being ramped to 0 A (Zero / OFF): wait for it, then set the "
                                        "field"))
         gate.set()
         self.pump(h)
@@ -757,7 +757,7 @@ class ShvFieldTests(shv_runs.EndToEnd):
         self.assertTrue(panel.rte_drive_live.get().startswith("Field not set: Target +9000 G needs about +30 A"),
                         panel.rte_drive_live.get())
         title, text = h.showerror.call_args.args[:2]
-        self.assertEqual(title, "SHV field")
+        self.assertEqual(title, "SHHV field")
         self.assertTrue(text.endswith("The KEPCO is left at its last current; its Zero / OFF zeroes it."), text)
         self.assertNotIn("OUTP OFF", self.card.writes)
         self.assertFalse(panel.ppms_environment_busy)
@@ -765,7 +765,7 @@ class ShvFieldTests(shv_runs.EndToEnd):
     def test_the_ls643_is_ramped_step_by_step_to_the_target(self):
         h = self.page(target="2400")
         panel = h.panel
-        controller, fake, _clock = connected_supply("643", owner="SHV")
+        controller, fake, _clock = connected_supply("643", owner="SHHV")
         self.addCleanup(app._INSTRUMENT_LEASES.clear)
         panel.rte_controllers["lakeshore"] = controller
         panel.rte_magnet_rate.set("5")

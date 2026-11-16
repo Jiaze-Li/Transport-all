@@ -4,17 +4,17 @@ the step up for ever (user, 2026-11-16: "when the measured voltage is below
 function work well and not get stuck in an endless auto-ranging loop").
 
 The rule was 15 % of the range on ST-FMR and Non-local and for the Zurich,
-10 % on PPMS and SHV; it is 1 % everywhere (LOCKIN_DOWNRANGE_FRACTION).
+10 % on PPMS and SHHV; it is 1 % everywhere (LOCKIN_DOWNRANGE_FRACTION).
 The loops it could run into, and what stops each:
 
 - an SR830 whose finer range overloads on the input while R stays small (a
   harmonic beside the fundamental): down, overload, up, down ... ST-FMR and
-  Non-local now keep the "overload floor" PPMS and SHV had;
+  Non-local now keep the "overload floor" PPMS and SHHV had;
 - the Zurich, whose firmware chooses the range: a "low" autorange that
   keeps the range was asked for again every few readings for good.
 
 Here: the ST-FMR and Non-local SR830 rules and the Zurich's, each against a
-stand-in instrument.  The PPMS / SHV rule is in test_review_fixes,
+stand-in instrument.  The PPMS / SHHV rule is in test_review_fixes,
 test_ppms_sr830_tc and test_rte_panel.
 """
 import inspect
@@ -455,7 +455,7 @@ class ZurichTests(unittest.TestCase):
                          ["RANGE 0.1->0.01 V (low)", "RANGE 0.01->0.01 V (low)"])
 
     def test_the_point_reads_of_stfmr_ppms_and_shv_come_through_the_same_guard(self):
-        """read_stfmr_mfli, as the ST-FMR, PPMS and SHV pages read the
+        """read_stfmr_mfli, as the ST-FMR, PPMS and SHHV pages read the
         Zurich, with the real autorange behind it."""
         controller, firmware = self.make(0.1, 0.01, 0.1, 0.1)
         sample = {"input_overload": False, "input_extrema_valid": True, "input_utilization": 0.002}

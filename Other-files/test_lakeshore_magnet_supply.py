@@ -181,7 +181,7 @@ class Manager:
         return ()
 
 
-def connected_supply(model="643", owner="SHV", module=None, **fake_options):
+def connected_supply(model="643", owner="SHHV", module=None, **fake_options):
     """A controller connected to a FakeLS64x, on a virtual clock: (controller,
     fake, clock).  ``module``: the program module the page under test was
     loaded as (some harnesses import it under its own name)."""
@@ -409,11 +409,11 @@ class ZeroTests(unittest.TestCase):
         self.assertTrue(controller.output_on, "kept on for the interlocks")
 
     def test_two_pages_cannot_hold_the_same_supply(self):
-        first, fake, _clock = connected_supply("643", owner="SHV")
+        first, fake, _clock = connected_supply("643", owner="SHHV")
         second = app.LakeShoreMagnetSupplyController(Mock(), "643", owner_scope="STFMR")
         with patch.object(app, "pyvisa", object()), \
                 patch.object(app, "acquire_shared_visa_manager", return_value=Manager(fake)):
-            with self.assertRaisesRegex(RuntimeError, "already connected by \"SHV / Lake Shore 643\""):
+            with self.assertRaisesRegex(RuntimeError, "already connected by \"SHHV / Lake Shore 643\""):
                 second.connect("GPIB0::12")
         release(first)
 

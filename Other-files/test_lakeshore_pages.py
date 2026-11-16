@@ -1,10 +1,10 @@
-"""The Lake Shore 643 / 648 on the SHV, ST-FMR and FMR pages (user,
-2026-10-21: "Add LS643 connection & control for SHV and STFMR. Add LS648
+"""The Lake Shore 643 / 648 on the SHHV, ST-FMR and FMR pages (user,
+2026-10-21: "Add LS643 connection & control for SHHV and STFMR. Add LS648
 connection & control for FMR"; each page chooses its magnet supply, the KEPCO
 4886 by default).
 
 The real controller on test_lakeshore_magnet_supply's FakeLS64x (its ramp on
-a virtual clock) inside each page's own window-free harness: SHV's
+a virtual clock) inside each page's own window-free harness: SHHV's
 test_rte_angle_end_to_end (the real RTEPanel on stand-in widgets, a real
 rte-control worker), the ST-FMR sweep harness and the FMR scans' bare page,
 both with a real one-thread worker here.  Every supply command records its
@@ -62,12 +62,12 @@ def at_least_seconds(text):
     return float(match.group(1)) * (60.0 if match.group(2) == "min" else 1.0)
 
 
-# ---- SHV: the LS643 ---------------------------------------------------------------------------
+# ---- SHHV: the LS643 ---------------------------------------------------------------------------
 class ShvLakeShoreTests(ete.EndToEnd):
     events = staticmethod(ete.RunLogBase.events)
 
     def lakeshore(self, h, rate="2", choose=True, **fake_options):
-        controller, fake, _clock = connected_supply("643", owner="SHV", **fake_options)
+        controller, fake, _clock = connected_supply("643", owner="SHHV", **fake_options)
         self.addCleanup(app._INSTRUMENT_LEASES.clear)
         fake.journal = h.log
         h.panel.rte_controllers["lakeshore"] = h.ls = controller
@@ -151,7 +151,7 @@ class ShvLakeShoreTests(ete.EndToEnd):
         # The estimate counts the ramps: from 0 A through -1, 0, +1 A and
         # back to 0 A at 2 A/s, 2 s, and LAKESHORE_SETPOINT_OVERHEAD_S of
         # read-backs per setpoint.
-        line = next(text for text in h.logged if text.startswith("SHV Field scan;"))
+        line = next(text for text in h.logged if text.startswith("SHHV Field scan;"))
         self.assertIn("LS643 ramps at 2 A/s", line)
         with_ramps = at_least_seconds(line)
         expected = app.lakeshore_scan_ramp_seconds([0.0, -1.0, 0.0, 1.0, 0.0], 2.0)
@@ -160,7 +160,7 @@ class ShvLakeShoreTests(ete.EndToEnd):
         self.field_scan(other)
         other.panel.rte_controllers["kepco"] = other.kepco
         self.start(other)
-        without = at_least_seconds(next(text for text in other.logged if text.startswith("SHV Field scan;")))
+        without = at_least_seconds(next(text for text in other.logged if text.startswith("SHHV Field scan;")))
         # The line shows whole seconds.
         self.assertAlmostEqual(with_ramps - without, expected, delta=1.0)
 
@@ -257,7 +257,7 @@ class ShvLakeShoreTests(ete.EndToEnd):
         self.assertIn("zero it first (LS643 to 0 A)", h.showerror.call_args.args[1])
 
     def test_shv_and_stfmr_start_on_the_ls643(self):
-        """User, 2026-10-23: "change SHV and STFMR to default use LS643"."""
+        """User, 2026-10-23: "change SHHV and STFMR to default use LS643"."""
         import inspect
         import test_rte_angle_end_to_end as ete
         panel = ete.build_page(kepco=False)
@@ -297,7 +297,7 @@ class ShvLakeShoreTests(ete.EndToEnd):
         h.panel.rte_magnet_choice_var.set("Lake Shore 643")
         h.panel._rte_magnet_choice_changed()
         self.assertFalse(h.panel._rte_lakeshore_chosen())
-        self.assertIn("SHV is busy", h.showerror.call_args.args[1])
+        self.assertIn("SHHV is busy", h.showerror.call_args.args[1])
         h.panel.ppms_field_scan_running = False
         h.panel.rte_magnet_choice_var.set("Lake Shore 643")
         h.panel._rte_magnet_choice_changed()
@@ -541,7 +541,7 @@ class StfmrStageInterlockTests(unittest.TestCase):
         a, kepco, _lakeshore = self.page()
         a.rte_panel = mock.Mock()
         a.rte_panel.__dict__["rte_controllers"] = {"lakeshore": mock.Mock(output_on=True), "kepco": None}
-        with self.assertRaisesRegex(RuntimeError, "SHV page's LS643 output is not at zero"):
+        with self.assertRaisesRegex(RuntimeError, "SHHV page's LS643 output is not at zero"):
             a._stfmr_lockin_require_4886_off()
         # The FMR page's LS648 drives a different magnet (user, 2026-10-21,
         # after review): it never blocks this stage.

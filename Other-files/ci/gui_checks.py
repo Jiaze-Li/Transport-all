@@ -28,7 +28,7 @@ from pathlib import Path
 
 PROGRAM = Path(__file__).resolve().parents[2] / "Transport_all.py"
 COMPACT = ("CIDWM", "STFMR", "FMR")
-REPORTED = ("MOKE light", "MOKE motor", "MOKE magnet", "MOKE-24", "Non-local", "PPMS", "SHV")
+REPORTED = ("MOKE light", "MOKE motor", "MOKE magnet", "MOKE-24", "Non-local", "PPMS", "SHHV")
 SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (2560, 1440, 2000),  # the lab PC, window widened by hand
     (2560, 1440, 0),     # the lab PC, the program's default window
@@ -36,7 +36,7 @@ SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (1600, 1586, 0),
 )
 SHOT_PAGES = ("MOKE light", "MOKE motor", "MOKE magnet", "CIDWM", "MOKE-24",
-              "Non-local", "PPMS", "SHV", "FMR", "STFMR")
+              "Non-local", "PPMS", "SHHV", "FMR", "STFMR")
 # The Non-local page's measurements are sub-tabs; each is checked and shot.
 SUB_TABS = {"Non-local": ("nonlocal_measurements", ("resistance", "iv", "iv6221", "gate"))}
 

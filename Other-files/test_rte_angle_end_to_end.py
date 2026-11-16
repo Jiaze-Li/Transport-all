@@ -36,7 +36,7 @@ from test_ppms_two_panels import ImmediateExecutor, Var
 from test_rte_angle_scan import Clock, EndsShort, Recorder, RecordingDLL, Sim, script
 
 _guards = []
-# The end of every SHV scan (user, 2026-10-18): the 6221 off and read back,
+# The end of every SHHV scan (user, 2026-10-18): the 6221 off and read back,
 # then the KEPCO's Zero / OFF.
 ZEROED = [("6221", "off"), ("6221", "OUTP?"), ("kepco", "force_off")]
 
@@ -122,7 +122,7 @@ class Gauss:
 
 
 def kepco_chosen(panel):
-    """SHV starts on the Lake Shore 643 since 2026-10-23 (user); these
+    """SHHV starts on the Lake Shore 643 since 2026-10-23 (user); these
     tests drive the KEPCO 4886 path, chosen as the combobox would."""
     panel.rte_magnet_choice_var.set(app.MAGNET_SUPPLY_KEPCO)
     panel._rte_magnet_choice_changed()
@@ -154,7 +154,7 @@ class EndToEnd(unittest.TestCase):
              tc_zurich="0.001"):
         """The page, ready for an Angle scan: the safety tick, every
         instrument connected (the stage through its real Connect, on the
-        worker), Angle chosen and the range set; ``meter``: "zurich" (SHV's
+        worker), Angle chosen and the range set; ``meter``: "zurich" (SHHV's
         default, the Zurich alone at 1+2 since 2026-10-18) or "sr830" (SR830-1
         alone at 1+2+3, three harmonic passes)."""
         panel = build_page()
@@ -196,7 +196,7 @@ class EndToEnd(unittest.TestCase):
         self.addCleanup(guard.stop)
         h.sim = Sim() if sim is None else sim
         h.dll = RecordingDLL(h.sim)
-        stage = app.NewmarkNSCA1Controller(h.logged.append, owner_scope="SHV",
+        stage = app.NewmarkNSCA1Controller(h.logged.append, owner_scope="SHHV",
                                            loader=lambda: (h.dll, "fake PerformaxCom.dll"))
         stage._now, stage._sleep = h.clock.now, h.clock.sleep
         real_move = stage.move_to_deg
@@ -220,7 +220,7 @@ class EndToEnd(unittest.TestCase):
                                                         disconnect_mfli=lambda: None)
         panel.zurich_timeconstant.set(tc_zurich)
         if meter == "zurich":
-            # The Zurich alone, chosen here: SHV starts with SR830-1 and
+            # The Zurich alone, chosen here: SHHV starts with SR830-1 and
             # SR830-2 measured since 2026-10-20 (user's figure).
             for key in app.PPMS_SR830_KEYS:
                 panel.ppms_lockin_selection[key].set(False)
@@ -374,7 +374,7 @@ class AngleScanTests(EndToEnd):
         self.assertEqual(points, expected)
         self.assertEqual([e[2:5] for e in h.log if e[:2] == ("kepco", "set_output")], [("CURR", 1.5, 5.0)])
         # The end: the 6221 off and read back, then the KEPCO zeroed (user,
-        # 2026-10-18: "when finish scan in SHV, automatically zero the Kepco
+        # 2026-10-18: "when finish scan in SHHV, automatically zero the Kepco
         # and 6221 pls"; both were held until then).
         self.assertEqual(sequence[-3:], ZEROED)
         self.assertEqual(self.names(h, "kepco", "6221"), [("6221", "on"), ("kepco", "set_output")] + ZEROED)
@@ -390,7 +390,7 @@ class AngleScanTests(EndToEnd):
         self.assertEqual([float(r["stage_angle_deg"]) for r in rows], [0.0, 10.0, 20.0, 10.0, 0.0])
         self.assertEqual([int(r["stage_position_steps"]) for r in rows], [0, 100000, 200000, 100000, 0])
         self.assertEqual({r["stage_steps_per_degree"] for r in rows}, {"10000"})
-        self.assertEqual({(r["module"], r["scan_mode"], r["loop"]) for r in rows}, {("SHV", "Angle", "1")})
+        self.assertEqual({(r["module"], r["scan_mode"], r["loop"]) for r in rows}, {("SHHV", "Angle", "1")})
         self.assertEqual([r["point"] for r in rows], ["1", "2", "3", "4", "5"])
         self.assertEqual({r["kepco_programmed_current_a"] for r in rows}, {"1.5"})
         self.assertEqual({r["measured_field_g"] for r in rows}, {"123.0"})
@@ -531,7 +531,7 @@ class AngleScanStopTests(EndToEnd):
                         "the stopped move (STOP confirmed) before the zeroing; the stage is not moved again")
         self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0, 90.0])
         self.assertFalse(panel.ppms_field_scan_running)
-        self.assertIn(f"SHV Newmark NSC-A1 connected (Ace-Series-SDE, V231BL): {h.stage.scale_text()}", h.logged)
+        self.assertIn(f"SHHV Newmark NSC-A1 connected (Ace-Series-SDE, V231BL): {h.stage.scale_text()}", h.logged)
 
     def test_stop_during_a_settle(self):
         # 1 s settle a point (the Zurich's 1 s time constant): Stop from the
@@ -565,7 +565,7 @@ class AngleScanStopTests(EndToEnd):
                          [("6221", "on"), ("kepco", "set_output"), ("6221", "off")] + ZEROED,
                          "a stage failure: the 6221 off at once, then the end's zeroing of both")
         self.assertIn("At the end: 6221 zeroed; KEPCO zeroed", message)
-        self.assertIn("SHV Angle scan, after the stage failure: stage stopped at +9.999°", h.logged)
+        self.assertIn("SHHV Angle scan, after the stage failure: stage stopped at +9.999°", h.logged)
         self.assertEqual([float(r["stage_angle_deg"]) for r in self.rows(h)], [0.0])
 
     def test_closing_during_a_scan_stops_it_and_closes_the_stage_on_the_worker(self):
@@ -607,20 +607,20 @@ class RunLogBase(EndToEnd):
         h = super().make(*args, **kwargs)
         # Which thread wrote each event, from the recorder's own event().
         h.writes = []
-        real = app.SHVScanRecorder.event
+        real = app.SHHVScanRecorder.event
 
         def event(recorder, name, **details):
             h.writes.append((name, threading.get_ident()))
             return real(recorder, name, **details)
-        guard = patch.object(app.SHVScanRecorder, "event", event)
+        guard = patch.object(app.SHHVScanRecorder, "event", event)
         guard.start()
         self.addCleanup(guard.stop)
-        real_close = app.SHVScanRecorder.close
+        real_close = app.SHHVScanRecorder.close
 
         def close(recorder, outcome, **details):
             h.writes.append(("close", threading.get_ident()))
             return real_close(recorder, outcome, **details)
-        guard = patch.object(app.SHVScanRecorder, "close", close)
+        guard = patch.object(app.SHHVScanRecorder, "close", close)
         guard.start()
         self.addCleanup(guard.stop)
         return h
@@ -655,8 +655,8 @@ class RunLogBase(EndToEnd):
 
 
 class RunLogTests(RunLogBase):
-    """The SHV run folder and its log (user, 2026-10-18: "like ST-FMR, pls
-    also write a log of SHV and save results in a folder"), on the real
+    """The SHHV run folder and its log (user, 2026-10-18: "like ST-FMR, pls
+    also write a log of SHHV and save results in a folder"), on the real
     page, worker and stage controller of the scans above."""
 
     def test_a_whole_angle_scan_is_logged_in_order(self):
@@ -734,11 +734,11 @@ class RunLogTests(RunLogBase):
         self.assertEqual(finished["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
         (zeroed,) = [e for e in events if e["event"] == "outputs_zeroed"]
         self.assertEqual((zeroed["6221"], zeroed["kepco"]), ("zeroed", "zeroed"))
-        # Every SHV log line of the run is a note, the Start line naming the folder.
+        # Every SHHV log line of the run is a note, the Start line naming the folder.
         notes = [event["text"] for event in events if event["event"] == "note"]
-        self.assertTrue(notes[0].startswith(f"SHV Angle scan; run folder: {folder} (angle.csv and angle.log)"), notes)
+        self.assertTrue(notes[0].startswith(f"SHHV Angle scan; run folder: {folder} (angle.csv and angle.log)"), notes)
         self.assertTrue(set(notes) <= set(h.logged))
-        self.assertIn(f"SHV run folder {folder}: completed; angle.csv and angle.log closed", h.logged)
+        self.assertIn(f"SHHV run folder {folder}: completed; angle.csv and angle.log closed", h.logged)
         self.assert_closed(h)
         # Both threads wrote: the Tk thread at Start and at the finish, the
         # worker during the scan; every DLL call stayed on the worker.
@@ -773,10 +773,10 @@ class RunLogTests(RunLogBase):
             self.assertEqual(len(self.rows(h)), 2)
         self.assertEqual({p.name: p.read_bytes() for p in first.iterdir()}, kept, "the first run untouched")
         self.assertEqual((Path(h.folder.name) / "angle_01").read_text(encoding="utf-8"), "not a folder")
-        # A blank name: SHV_<date>_<time>.
+        # A blank name: SHHV_<date>_<time>.
         with patch.object(app.simpledialog, "askstring", return_value=""):
             self.start(h)
-        self.assertRegex(h.panel.rte_run_folder.name, r"^SHV_\d{8}_\d{6}(_\d\d)?$")
+        self.assertRegex(h.panel.rte_run_folder.name, r"^SHHV_\d{8}_\d{6}(_\d\d)?$")
 
     def test_a_folder_that_cannot_be_made_starts_nothing(self):
         h = self.make()
@@ -784,7 +784,7 @@ class RunLogTests(RunLogBase):
         with patch.object(app.filedialog, "askdirectory", return_value=str(missing)):
             self.start(h)
         h.showerror.assert_called_once()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV run folder")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV run folder")
         self.assertIn("the scan was not started", h.showerror.call_args.args[1])
         self.assertEqual([e for e in h.log if e[0] in ("6221", "kepco", "lockins")], [], "nothing switched on")
         self.assertEqual([e for e in h.log if e[:2] == ("stage", "move")], [])
@@ -802,7 +802,7 @@ class RunLogTests(RunLogBase):
             return real(name, details)
         with patch.object(app, "scan_log_line", line):
             self.start(h)
-        self.assertEqual(h.showerror.call_args.args[0], "SHV run folder")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV run folder")
         self.assertIn("Could not write the run log", h.showerror.call_args.args[1])
         self.assertEqual([e for e in h.log if e[0] in ("6221", "kepco", "lockins", "stage")], [])
         folder = Path(h.folder.name) / "angle"
@@ -868,7 +868,7 @@ class RunLogTests(RunLogBase):
         self.assertEqual((finished["outcome"], finished["error"], finished["points_saved"]), ("stopped", "", 1))
         self.assertTrue(finished["stage"].startswith("stage stopped at +"), finished)
         self.assertEqual(finished["status"], panel.ppms_field_scan_status_var.get())
-        self.assertIn("SHV stopped at a stage move", finished["stop_reason"])
+        self.assertIn("SHHV stopped at a stage move", finished["stop_reason"])
         self.assert_closed(h)
 
     def test_a_stage_failure_is_logged(self):
@@ -887,7 +887,7 @@ class RunLogTests(RunLogBase):
                          ("error", 1, "stage stopped at +9.999°"))
         self.assertIn("not at the target", finished["error"])
         self.assertTrue(finished["status"].startswith("Failed: "))
-        self.assertIn("SHV Angle scan, after the stage failure: stage stopped at +9.999°",
+        self.assertIn("SHHV Angle scan, after the stage failure: stage stopped at +9.999°",
                       [e["text"] for e in events if e["event"] == "note"])
         self.assert_closed(h)
 
@@ -898,9 +898,9 @@ class RunLogTests(RunLogBase):
         h.move_hooks[20.0] = lambda: fail_next_log_write(panel.rte_recorder)
         self.start(h)
         h.showerror.assert_called_once()
-        self.assertEqual(h.showerror.call_args.args[0], "SHV scan")
-        self.assertIn("The SHV log could not be written", h.showerror.call_args.args[1])
-        self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Failed: The SHV log could not be written"))
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV scan")
+        self.assertIn("The SHHV log could not be written", h.showerror.call_args.args[1])
+        self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Failed: The SHHV log could not be written"))
         # The normal failure path, as for a failed live-CSV row: the 6221 off,
         # the KEPCO's field held, the stage at rest where it was (no STOP).
         self.assertEqual(self.names(h, "kepco", "6221"),
@@ -973,7 +973,7 @@ class RunLogTests(RunLogBase):
         panel.ppms_executor = refusing
         panel.start_ppms_field_scan()
         self.pump(h)        # the dialog opens from the Tk event loop (review, 2026-10-18)
-        self.assertEqual(h.showerror.call_args.args[0], "SHV scan not started")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV scan not started")
         self.assertFalse(panel.ppms_field_scan_running)
         events = self.events(h)
         self.assertEqual(self.without_notes(events), ["run_prepared", "run_finished"])
@@ -983,7 +983,7 @@ class RunLogTests(RunLogBase):
 
 
 class ScanEndZeroTests(RunLogBase):
-    """User, 2026-10-18: "when finish scan in SHV, automatically zero the
+    """User, 2026-10-18: "when finish scan in SHHV, automatically zero the
     Kepco and 6221 pls": each ending zeroes the 6221 (off, read back), then
     the KEPCO (its Zero / OFF), on the worker, each step tried whatever the
     other did; a zero that fails is said on the status line, in a dialog
@@ -1002,7 +1002,7 @@ class ScanEndZeroTests(RunLogBase):
         self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; 6221 zeroed; KEPCO zero FAILED; stage at +10.000°")
         h.showerror.assert_called_once()
         title, message = h.showerror.call_args.args
-        self.assertEqual(title, "SHV outputs")
+        self.assertEqual(title, "SHHV outputs")
         self.assertIn("CHECK IT", message)
         self.assertIn("KEPCO zero FAILED: KEPCO 4886 zero/OFF not confirmed: 'OUTP OFF' VI_ERROR_TMO", message)
         self.assertNotEqual(panel.rte_drive_live.get(), "KEPCO: zeroed and output OFF")
@@ -1010,7 +1010,7 @@ class ScanEndZeroTests(RunLogBase):
         self.assertEqual(finished["outputs"]["kepco"],
                          "zero FAILED: KEPCO 4886 zero/OFF not confirmed: 'OUTP OFF' VI_ERROR_TMO")
         self.assertEqual(finished["outcome"], "completed")
-        self.assertIn("SHV scan end: 6221 zeroed; KEPCO zero FAILED: KEPCO 4886 zero/OFF not confirmed: "
+        self.assertIn("SHHV scan end: 6221 zeroed; KEPCO zero FAILED: KEPCO 4886 zero/OFF not confirmed: "
                       "'OUTP OFF' VI_ERROR_TMO", h.logged)
         self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
 
@@ -1026,7 +1026,7 @@ class ScanEndZeroTests(RunLogBase):
         self.assertEqual(self.names(h, "kepco", "6221")[-2:], [("6221", "off"), ("kepco", "force_off")],
                          "the KEPCO after the failed 6221 off (no read-back of a refused off)")
         self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; 6221 zero FAILED; KEPCO zeroed: check it")
-        self.assertEqual(h.showerror.call_args.args[0], "SHV outputs")
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV outputs")
         self.assertEqual(self.events(h)[-1]["outputs"],
                          {"6221": "zero FAILED: 6221 output OFF not confirmed: VI_ERROR_TMO", "kepco": "zeroed"})
         self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
@@ -1042,7 +1042,7 @@ class ScanEndZeroTests(RunLogBase):
         status = h.panel.ppms_field_scan_status_var.get()
         self.assertEqual(status, "Failed: LS475 read failed", "a failure keeps its text")
         title, message = h.showerror.call_args.args
-        self.assertEqual(title, "SHV scan")
+        self.assertEqual(title, "SHHV scan")
         self.assertTrue(message.endswith("At the end: 6221 zeroed; KEPCO zeroed"), message)
         self.assertEqual(self.events(h)[-1]["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
 
@@ -1121,7 +1121,7 @@ class OuterScanTests(RunLogBase):
         panel = h.panel
         h.showerror.assert_not_called()
         title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHV Angle+Field scan")
+        self.assertEqual(title, "SHHV Angle+Field scan")
         self.assertIn("3 field steps x 2 angles x 1 harmonic pass(es) = 6 points.", question)
         self.assertIn("6 stage moves (2 of them back to 0°), 50° of turning in all", question)
         # Per field: the KEPCO (set_output for the first, set_scan_current
@@ -1276,7 +1276,7 @@ class OuterScanTests(RunLogBase):
         panel = h.panel
         h.showerror.assert_not_called()
         title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHV Angle+Current scan")
+        self.assertEqual(title, "SHHV Angle+Current scan")
         self.assertIn("the KEPCO is set once to +1.5 A (voltage limit 5 V)", question)
         settle = [("gauss", "read")] * app.STFMR_FIELD_SETTLE_REQUIRED_SAMPLES
         # The 6221 on at the first current, the field set once and settled,
