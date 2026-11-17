@@ -3907,9 +3907,11 @@ STFMR_LOCKIN_DEFAULT_SETTLE_S = 1.0
 # in FMR scan module"): once the 475 has settled at a point, the 475 and the
 # PNA are read again and again, back to back, for Acquire s, and the row
 # saves the mean field and the mean of each S-parameter (dB, as read) with
-# the number of readings.  0 s (the start-up value) is one reading, the scan
-# as it was; the same one-hour bound as Settle / Acquire on the ST-FMR page.
-STFMR_FMR_DEFAULT_ACQUIRE_S = 0.0
+# the number of readings.  0 s is one reading, the scan as it was before
+# Acquire s.  Start-up value 2 s (user, 2026-11-17: "set FMR acquire s
+# default to 2 s"; 0 s when the box came in that day).  The same one-hour
+# bound as Settle / Acquire on the ST-FMR page.
+STFMR_FMR_DEFAULT_ACQUIRE_S = 2.0
 STFMR_FMR_MAX_ACQUIRE_S = 3600.0
 
 
@@ -29973,7 +29975,9 @@ class CombinedControlApp:
             self._finish_stfmr_fmr_scan(stopped=True)
             return
 
-        acquire_s = float(self.__dict__.get("stfmr_fmr_acquire_s", STFMR_FMR_DEFAULT_ACQUIRE_S))
+        # Start sets it; a page that never went through Start (the offline
+        # stand-ins) reads once.
+        acquire_s = float(self.__dict__.get("stfmr_fmr_acquire_s", 0.0))
         stop_event = self.stfmr_fmr_stop_event
         gauss, vna, selected = self.stfmr_controllers["gauss"], self.stfmr_controllers["vna"], self.stfmr_fmr_selected
 

@@ -615,6 +615,8 @@ class PanelDefaultTests(unittest.TestCase):
                          {"lakeshore": "GPIB0::10::INSTR", "gauss": "GPIB0::12::INSTR", "vna": "GPIB0::16::INSTR"})
         self.assertTrue(a._stfmr_lakeshore_chosen())
         self.assertEqual(a._stfmr_supply_label(), "LS648")
+        # The field sweep's Settle s 0.2 and Acquire s 2 (user, 2026-11-17).
+        self.assertEqual((a.stfmr_fmr_settle_var.get(), a.stfmr_fmr_acquire_var.get()), ("0.2", "2"))
 
         def shown(key):
             return [bool(widget.winfo_manager()) for widget in a.stfmr_supply_widgets[key]]

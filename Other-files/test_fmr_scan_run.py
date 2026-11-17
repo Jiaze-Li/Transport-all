@@ -389,6 +389,10 @@ class AcquireTests(FmrRun):
         self.assertEqual(self.events(self.folder)[-1]["outcome"], "stopped")
         self.error.assert_not_called()
 
+    def test_the_start_up_value_is_2_s(self):
+        # User, 2026-11-17: "set FMR acquire s default to 2 s".
+        self.assertEqual(app.STFMR_FMR_DEFAULT_ACQUIRE_S, 2.0)
+
     def test_the_box_is_checked(self):
         a = bare_app()
         for text in ("0", "2", "3600", " 1.5 "):

@@ -14,7 +14,7 @@
   wider. After Settle s and the 475 settle, the 475 and the PNA are read back to back until Acquire s has passed
   since the first reading began (at least one), and the row saves the mean field and the mean of each
   S-parameter in dB as read (`stfmr_fmr_mean_reading`; a 475 unit change part way fails the point). Start-up
-  value 0 s: one reading, the scan as it was. Checked at Start: 0 to `STFMR_FMR_MAX_ACQUIRE_S` = 3600 s. A Stop
+  value 2 s (user: "set FMR acquire s default to 2 s"; 0 s, one reading as before, when the box came in). Checked at Start: 0 to `STFMR_FMR_MAX_ACQUIRE_S` = 3600 s. A Stop
   ends the readings and the point is not saved. The Yes/No names Settle s and Acquire s; the time estimate counts
   Acquire s; `run_prepared` has `acquire_s`; CSV columns `acquire_s`, `pna_reading_count` last. The
   fixed-field frequency sweep is unchanged.
