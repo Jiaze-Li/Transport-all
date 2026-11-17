@@ -3624,12 +3624,27 @@ RTE_OUTER_ROWS = {
                           index_column='outer_current_index'),
 }
 # Angle+Field2's list: at most this many fields (the 100000-point limit
-# counts them too), and the box's width in characters.
+# counts them too).
 RTE_OUTER_LIST_MAX = 1000
 # The largest field that may be typed (user, 2026-11-17: "max input field is
 # 7300Oe"), in G as the LS475 reads it (1 G = 1 Oe in air).
 RTE_OUTER_FIELD_MAX_G = 7300.0
+# The list box's width in characters where the font cannot be measured (the
+# offline tests' stand-ins).  On screen the box is as wide as the start-up
+# series (user, 2026-11-17: "make the field list box wider so the whole
+# series shows"), measured in its own font: rte_outer_list_chars.
 RTE_OUTER_LIST_ENTRY_CHARS = 24
+
+
+def rte_outer_list_chars(text, measure, zero_width):
+    """The Entry width, in characters of '0', that shows ``text`` whole:
+    its measured width plus one character's room.  ``measure`` is the box
+    font's measure(); at least RTE_OUTER_LIST_ENTRY_CHARS."""
+    zero = float(zero_width)
+    if not math.isfinite(zero) or zero <= 0:
+        return RTE_OUTER_LIST_ENTRY_CHARS
+    return max(RTE_OUTER_LIST_ENTRY_CHARS, math.ceil(float(measure(text)) / zero) + 1)
+
 # _rte_settle_field reads the LS475 every 0.2 s; the shortest settle is
 # STFMR_FIELD_SETTLE_REQUIRED_SAMPLES of them (the time estimates count it).
 RTE_FIELD_SETTLE_POLL_S = 0.2
@@ -57467,18 +57482,32 @@ class RTEPanel(PPMSPanel):
             widget.grid_remove()
         # Angle+Field2's outer row (user, 2026-11-17): its label, then one
         # box of fields in G in the order to scan, under Start / End / Step's
-        # columns (or beside the main row, as the range row).  Its own widgets,
-        # shown only in that mode, so the range row is laid out as before.
+        # columns.  Its own widgets, shown only in that mode, so the range row
+        # is laid out as before.  The box is as wide as the start-up series,
+        # measured in its font (user: "make the field list box wider so the
+        # whole series shows"); a longer list scrolls in it.
         list_label = ttk.Label(scan_rows, textvariable=self.rte_outer_label)
+        try:
+            entry_font = tkfont.nametofont('TkTextFont', root=self.root)
+            list_chars = rte_outer_list_chars(RTE_OUTER_ROWS['Angle+Field2']['defaults'][0],
+                                              entry_font.measure, entry_font.measure('0'))
+        except Exception:
+            list_chars = RTE_OUTER_LIST_ENTRY_CHARS     # no font to measure (the offline stand-ins)
+        self.rte_outer_list_chars = list_chars
         self.rte_outer_list_entry = ttk.Entry(scan_rows, textvariable=self.rte_outer_ranges['Angle+Field2'][0],
-                                              width=RTE_OUTER_LIST_ENTRY_CHARS)
+                                              width=list_chars)
         self.rte_edit_widgets.append((self.rte_outer_list_entry, 'normal'))
         self.rte_outer_list_widgets = [
             (list_label, dict(row=3, column=0, sticky='e', padx=0)),
             (self.rte_outer_list_entry, dict(row=3, column=1, columnspan=6, padx=(4, 2), sticky='ew'))]
+        # Beside the main row (the 1101 px window): the label right of the
+        # main row's first line and the box under it, right of its second
+        # line (Loops / Settle s / Acquire s), so the wide box needs only its
+        # own width there and costs no height (the main row's lines 2 and 3
+        # have nothing right of them).
         self.rte_outer_list_beside_options = [
-            dict(row=0, column=7, sticky='e', padx=(6, 0)),
-            dict(row=0, column=8, columnspan=6, padx=(3, 2), sticky='ew')]
+            dict(row=0, column=7, sticky='w', padx=(6, 0)),
+            dict(row=1, column=7, columnspan=7, padx=(6, 2), sticky='ew')]
         for widget, options in self.rte_outer_list_widgets:
             widget.grid(**options)
             widget.grid_remove()
@@ -57698,8 +57727,12 @@ class RTEPanel(PPMSPanel):
                     widgets, beside_options = shown
                     stacked = getattr(controls, '_pair_side_by_side', None) is False
                     room = scan.winfo_width() - self._pair_inset(scan)
-                    beside_width = sum(widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options
-                                       in zip(widgets, beside_options))
+                    widths = [widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options
+                              in zip(widgets, beside_options)]
+                    # The range row's widgets side by side; Angle+Field2's
+                    # label over its box (2026-11-17).
+                    beside_width = (max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets')
+                                    else sum(widths))
                     # Beside, the main rows keep only their own widgets in
                     # columns 0 to 6 (the outer label no longer widens column
                     # 0) and the outer row takes columns 7 to 13: exactly the

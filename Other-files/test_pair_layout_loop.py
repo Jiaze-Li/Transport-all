@@ -453,14 +453,24 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                 for mode in ("Angle", "Angle+Field2"):
                     choose(mode, width, height)
                     heights[(mode, width)] = scan.winfo_height()
+                series = panel.rte_outer_ranges["Angle+Field2"][0].get()
+                text_font = tkinter.font.nametofont("TkTextFont")
                 print(f"SHHV Angle+Field2 at {width} px: list row {panel.rte_outer_place}, "
                       f"{getattr(panel, 'rte_outer_numbers', None)}, box {entry.winfo_width()} px "
-                      f"(asks {entry.winfo_reqwidth()} px), scan box {heights[('Angle+Field2', width)]} px tall")
+                      f"(asks {entry.winfo_reqwidth()} px, {panel.rte_outer_list_chars} chars; the series "
+                      f"{text_font.measure(series)} px), scan box {heights[('Angle+Field2', width)]} px tall")
                 with self.subTest(width=width):
                     self.assertTrue(label.winfo_ismapped() and entry.winfo_ismapped())
                     self.assertFalse(any(w.winfo_ismapped() for w in outer), "the range row hidden")
                     self.assertEqual(panel.rte_outer_place, "beside" if width == 1101 else "under")
                     self.assertGreaterEqual(entry.winfo_width(), entry.winfo_reqwidth(), "the box in full")
+                    # The whole start-up series shows (user, 2026-11-17: "make the field list box wider so
+                    # the whole series shows"), with the box's own few pixels of border and padding.
+                    self.assertLessEqual(text_font.measure(series) + 6, entry.winfo_width(), series)
+                    if width == 1101:
+                        # Beside: the label right of the main row's first line, the box under it.
+                        self.assertEqual((int(label.grid_info()["row"]), int(entry.grid_info()["row"])), (0, 1))
+                        self.assertGreater(entry.winfo_rooty(), label.winfo_rooty())
                     right = scan.winfo_rootx() + scan.winfo_width()
                     for widget in (label, entry):
                         self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(), right, "inside the box")

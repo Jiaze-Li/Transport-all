@@ -3101,6 +3101,19 @@ class OuterListTests(unittest.TestCase):
         self.assertLessEqual(len(note), 40, "the note's 40-character box")
         self.assertEqual(note, "Angle+Field2: Stage °; outer: field G")
 
+    def test_the_box_is_as_wide_as_the_series(self):
+        """User, 2026-11-17: "make the field list box wider so the whole
+        series shows": its text's measured width plus one character, in
+        characters of '0', never under the old 24."""
+        measure = lambda text: 7 * len(text)
+        series = app.RTE_OUTER_ROWS["Angle+Field2"]["defaults"][0]
+        self.assertEqual(app.rte_outer_list_chars(series, measure, 7), len(series) + 1)
+        self.assertEqual(app.rte_outer_list_chars("100", measure, 7), app.RTE_OUTER_LIST_ENTRY_CHARS)
+        self.assertEqual(app.rte_outer_list_chars("10, 20", lambda text: 100, 9), app.RTE_OUTER_LIST_ENTRY_CHARS)
+        self.assertEqual(app.rte_outer_list_chars("x" * 50, lambda text: 401, 9), 46, "ceil(401 / 9) + 1")
+        for zero in (0, -1, float("nan")):
+            self.assertEqual(app.rte_outer_list_chars(series, measure, zero), app.RTE_OUTER_LIST_ENTRY_CHARS)
+
     def test_the_values_text(self):
         self.assertEqual(app.rte_outer_values_text((500.0, 100.0, -300.0)), "+500, +100, -300 G")
         self.assertEqual(app.rte_outer_values_text(tuple(range(14)), 3), "+0, +1, +2, ... G")
