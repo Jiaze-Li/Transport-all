@@ -41,7 +41,7 @@ class FMRLiveSaveTests(unittest.TestCase):
     def test_cancel_prevents_hardware_start(self):
         obj = self.obj
         obj.stfmr_fmr_running = obj.stfmr_frequency_running = False
-        obj._stfmr_fmr_inputs = Mock(return_value=(('S21',), [3e9], 0, [-1, 1], 5, .2))
+        obj._stfmr_fmr_inputs = Mock(return_value=(('S21',), [3e9], 0, [-1, 1], 5, .2, 0.0))
         obj._configure_stfmr_fmr_frequency = Mock()
         obj.stfmr_resource_vars = {}
         obj.stfmr_safety_var = Mock(get=Mock(return_value=True))

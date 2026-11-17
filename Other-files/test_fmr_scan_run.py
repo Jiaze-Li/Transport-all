@@ -156,7 +156,7 @@ class FmrRun(unittest.TestCase):
         a.stfmr_frequency_feedback_points = []
         a._set_stfmr_scan_busy = lambda busy: None
         a._redraw_stfmr_fmr_plot = a._redraw_stfmr_frequency_plot = lambda: None
-        a._stfmr_fmr_inputs = lambda: (("S21",), [5e9, 6e9], -10.0, [-0.5, 0.0, 0.5], 5.0, 0.2)
+        a._stfmr_fmr_inputs = lambda: (("S21",), [5e9, 6e9], -10.0, [-0.5, 0.0, 0.5], 5.0, 0.2, 0.0)
         a._stfmr_frequency_inputs = lambda: (("S21",), [5e9, 6e9, 7e9], -10.0, 300.0, 5.0, 5.0, 0.3)
         return a
 
@@ -337,6 +337,76 @@ class FieldScanTests(FmrRun):
                        "Failed: " + app.short_status_error(RuntimeError("x" * 80), 40)):
             with self.subTest(status=status):
                 self.assertLessEqual(width_in_zeros(status), 48)
+
+
+class AcquireTests(FmrRun):
+    """The FMR scan's Acquire s (user, 2026-11-17: "add acquire time in FMR
+    scan module"): the 475 and the PNA read back to back for Acquire s once
+    the field has settled; the row is their mean, with how many readings."""
+
+    def acquiring(self, acquire_s, read_s=0.3):
+        a = self.make()
+        a._stfmr_fmr_inputs = lambda: (("S21",), [5e9], -10.0, [0.5], 5.0, 0.2, acquire_s)
+        pna = a.stfmr_controllers["vna"]
+        original = pna.trigger_and_read
+
+        def timed(selected):
+            self.clock.now += read_s        # each reading takes read_s
+            return original(selected)
+        pna.trigger_and_read = timed
+        return a
+
+    def test_readings_for_acquire_s_and_their_mean_saved(self):
+        a = self.acquiring(1.0)
+        self.drive(a, a.start_stfmr_fmr_scan)
+        self.error.assert_not_called()
+        # Readings end at 0.3, 0.6, 0.9 and 1.2 s: the fourth is the first at or past 1 s.
+        self.assertEqual(a.stfmr_controllers["vna"].reads, 4)
+        (row,) = a.stfmr_fmr_rows
+        self.assertEqual((row["acquire_s"], row["pna_reading_count"]), (1.0, 4))
+        self.assertAlmostEqual(row["S21"], -3.0 - (1 + 2 + 3 + 4) / 4)
+        self.assertAlmostEqual(row["measured_field_g"], 150.0)
+        header = self.rows(self.folder)[0]
+        self.assertEqual(header[-2:], ["acquire_s", "pna_reading_count"], "last, older columns in place")
+        self.assertIn("Acquire s 1: the 475 and PNA read repeatedly, the means saved",
+                      self.confirm.call_args.args[1])
+        self.assertEqual(self.events(self.folder)[0]["settings"]["acquire_s"], 1.0)
+
+    def test_zero_is_one_reading_as_before(self):
+        a = self.acquiring(0.0)
+        self.drive(a, a.start_stfmr_fmr_scan)
+        self.assertEqual(a.stfmr_controllers["vna"].reads, 1)
+        self.assertEqual(a.stfmr_fmr_rows[0]["pna_reading_count"], 1)
+        self.assertIn("Acquire s 0: one 475 and PNA reading", self.confirm.call_args.args[1])
+
+    def test_a_stop_during_acquire_ends_the_readings_and_saves_no_row(self):
+        a = self.acquiring(100.0)
+        a.stfmr_controllers["vna"].on_read[2] = a.stop_stfmr_fmr_scan
+        self.drive(a, a.start_stfmr_fmr_scan)
+        self.assertEqual(a.stfmr_controllers["vna"].reads, 2, "no reading after the stop")
+        self.assertEqual(a.stfmr_fmr_rows, [])
+        self.assertEqual(self.events(self.folder)[-1]["outcome"], "stopped")
+        self.error.assert_not_called()
+
+    def test_the_box_is_checked(self):
+        a = bare_app()
+        for text in ("0", "2", "3600", " 1.5 "):
+            a.stfmr_fmr_acquire_var = Var(text)
+            self.assertEqual(a._stfmr_fmr_acquire_input(), float(text))
+        for text, words in (("-1", "from 0 (one reading) to 3600 s"), ("3601", "to 3600 s"),
+                            ("nan", "from 0"), ("x", 'Acquire s: "x" is not a number')):
+            a.stfmr_fmr_acquire_var = Var(text)
+            with self.subTest(text=text), self.assertRaises(ValueError) as caught:
+                a._stfmr_fmr_acquire_input()
+            self.assertIn(words, str(caught.exception))
+
+    def test_the_mean_refuses_a_unit_change(self):
+        readings = [({"field": 1.0, "unit": "G", "unit_code": 1}, {"S21": -3.0}),
+                    ({"field": 1.0, "unit": "T", "unit_code": 2}, {"S21": -5.0})]
+        with self.assertRaisesRegex(RuntimeError, "unit changed"):
+            app.stfmr_fmr_mean_reading(readings)
+        field, values, field_g, count = app.stfmr_fmr_mean_reading(readings[:1] * 2)
+        self.assertEqual((field["field"], field["unit"], values, field_g, count), (1.0, "G", {"S21": -3.0}, 1.0, 2))
 
 
 class FrequencySweepTests(FmrRun):

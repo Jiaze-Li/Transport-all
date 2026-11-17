@@ -1,5 +1,26 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## FMR scan Acquire s and LS648 at GPIB0::10; SHHV starts on the user's Angle+Field2 figure (user, 2026-11-17)
+
+- **FMR connections:** "FMR default setting as the figure." The LS648 starts at GPIB0::10 (was GPIB0::15,
+  `LAKESHORE_MAGNET_MODELS["648"]["resource"]`); the LS648 as the supply, the LS475 at GPIB0::12 and the PNA at
+  GPIB0::16 were already the start-up values. Only Connect uses the address.
+- **FMR request:** "add acquire time in FMR scan module". The field-sweep box (PNA) has an "Acquire s:" box
+  (`stfmr_fmr_acquire_var`) at the end of its first row, over Wait s; that row had a free place, so the box is no
+  wider. After Wait s and the 475 settle, the 475 and the PNA are read back to back until Acquire s has passed
+  since the first reading began (at least one), and the row saves the mean field and the mean of each
+  S-parameter in dB as read (`stfmr_fmr_mean_reading`; a 475 unit change part way fails the point). Start-up
+  value 0 s: one reading, the scan as it was. Checked at Start: 0 to `STFMR_FMR_MAX_ACQUIRE_S` = 3600 s. A Stop
+  ends the readings and the point is not saved. The Yes/No names Wait s and Acquire s; the time estimate counts
+  Acquire s; `run_prepared` has `acquire_s`; CSV columns `acquire_s`, `pna_reading_count` last. The
+  fixed-field frequency sweep is unchanged.
+- **SHHV request:** "change default setting as fig like." Differences from the start-up values before: mode
+  Angle+Field2 (was Angle), Magnet current A 0.6 (was 5), Outer field G 200, 300, 400, 500, 600, 700, 800, 900,
+  1000, 1100 (was 7000, 200, 5000, ...). Everything else in the figure was already the start-up value (6221
+  1.5 mA RMS / 317.3 Hz / 50 V, Rate 1 A/s, SR830 harmonics 2 / 2 / 3 with SR830-1 measured, Zurich 1+2, stage
+  0 to -360 deg in 5 deg, Loops 1, Settle 0.5 s, Acquire 5 s, Round trip off). The list box is still measured
+  against the earlier, longer series (`RTE_OUTER_LIST_WIDTH_TEXT`), so it keeps the width asked for.
+
 ## SHHV Angle+Field2: the outer fields typed in any order, each reached by the field setting (user, 2026-11-17)
 
 - **Request:** "add a Angle+Field2 mode, which scan the field order manually input"; "when select angle+field2,
@@ -8,7 +29,8 @@
 - **The mode** (`RTE_SCAN_MODES`, after Angle+Field): the outer row is one box, "Outer field G:"
   (`rte_outer_list_widgets`), of target fields in G (= Oe in air), separated by commas, semicolons or spaces,
   scanned in the order typed; a field may come more than once. Start-up series the user's (2026-11-17):
-  7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000. The box is as wide as that series, measured in
+  7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000 (superseded the same day by 200 to 1100 G, see
+  above). The box is as wide as that series, measured in
   its own font (`rte_outer_list_chars`; user: "make the field list box wider so the whole series shows"); a
   longer list scrolls in it. `rte_outer_list_plan` parses it: finite, within +/-`RTE_OUTER_FIELD_MAX_G` = 7300 G, at most
   `RTE_OUTER_LIST_MAX` = 1000 fields.

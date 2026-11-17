@@ -3585,10 +3585,11 @@ RTE_TRANSPORT_CURRENT_RMS_MA = 1.5
 # -360 deg in 5 deg steps, Acquire s 2 (Settle s 0.5 and Loops 1 as before),
 # round trip off since 2026-10-18 (user: "default not click Round trip").
 # The Angle range is also what choosing Angle puts in the boxes.
-# SHHV starts on Angle again (user's figure, 2026-11-16); from 2026-10-19 it
-# started on Angle+Field, outer KEPCO 3 to 9 A in 1 A steps (still that row's
-# start-up range).
-RTE_DEFAULT_SCAN_MODE = 'Angle'
+# SHHV starts on Angle+Field2 (user's figure, 2026-11-17: "change default
+# setting as fig like."); on Angle from 2026-11-16, and from 2026-10-19 on
+# Angle+Field, outer KEPCO 3 to 9 A in 1 A steps (still that row's start-up
+# range).
+RTE_DEFAULT_SCAN_MODE = 'Angle+Field2'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # The SHHV scan modes.  Angle+Field and Angle+Current (user, 2026-10-18: "add
 # the angle + field scan mode, field is the outside loop"; "also angle+current
@@ -3614,11 +3615,11 @@ RTE_FIELD_OUTER_MODES = ('Angle+Field', 'Angle+Field2')
 RTE_OUTER_ROWS = {
     'Angle+Field': dict(label='Outer KEPCO A:', defaults=('3', '9', '1'), index_column='outer_field_index'),
     # One box, not three: the fields in G in the order typed; ``listed``
-    # marks it.  The start-up series is the user's (2026-11-17: "use this for
-    # default field series 7000 200 5000 500 2000 300 6000 1000 3500 200
-    # 7000 Oe").
+    # marks it.  The start-up series is the user's figure (2026-11-17,
+    # later: "change default setting as fig like."): 200 to 1100 G in 100 G
+    # steps; before that 7000, 200, 5000, ... (RTE_OUTER_LIST_WIDTH_TEXT).
     'Angle+Field2': dict(label='Outer field G:',
-                         defaults=('7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000',),
+                         defaults=('200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100',),
                          index_column='outer_field_index', listed=True),
     'Angle+Current': dict(label='Outer 6221 mA RMS:', defaults=('0.01', '1', '0.01'),
                           index_column='outer_current_index'),
@@ -3634,6 +3635,11 @@ RTE_OUTER_FIELD_MAX_G = 7300.0
 # series (user, 2026-11-17: "make the field list box wider so the whole
 # series shows"), measured in its own font: rte_outer_list_chars.
 RTE_OUTER_LIST_ENTRY_CHARS = 24
+# The text the box is measured against: the user's earlier, longer series
+# (2026-11-17: "use this for default field series 7000 200 5000 500 2000 300
+# 6000 1000 3500 200 7000 Oe"), so the box keeps the width the user asked
+# for when the shorter start-up series came in.
+RTE_OUTER_LIST_WIDTH_TEXT = '7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000'
 
 
 def rte_outer_list_chars(text, measure, zero_width):
@@ -3650,11 +3656,12 @@ def rte_outer_list_chars(text, measure, zero_width):
 RTE_FIELD_SETTLE_POLL_S = 0.2
 # Acquire s at start-up: 5 s (user's figure, 2026-11-16; 2 s since 2026-10-18).
 RTE_ACQUISITION_S = 5.0
-# The "Magnet current A" box at start-up, the field an Angle scan holds: 5 A
-# (user's figure, 2026-11-16; 8 A since 2026-10-18, before that 0 A).  Only
+# The "Magnet current A" box at start-up, the field an Angle scan holds: 0.6 A
+# (user's figure, 2026-11-17; 5 A since 2026-11-16, 8 A since 2026-10-18,
+# before that 0 A).  Only
 # Apply KEPCO / Apply LS643 or an Angle scan's Start, each after its Yes/No
 # naming the current, sends it.
-RTE_KEPCO_DEFAULT_CURRENT_A = 5.0
+RTE_KEPCO_DEFAULT_CURRENT_A = 0.6
 # The Zurich's harmonics at start-up (user's figure, 2026-10-18; was 1+2+3).
 RTE_ZURICH_DEFAULT_HARMONICS = '1+2'
 PPMS_TRANSPORT_COMPLIANCE_V = 50.0
@@ -3725,9 +3732,10 @@ STFMR_FMR_MAGNET_CHOICES = ("KEPCO4886", "LS648")
 LAKESHORE_MAGNET_MODELS = {
     "643": {"label": "Lake Shore 643", "short": "LS643", "model": "MODEL643", "max_current_a": 40.0,
             "resource": "GPIB0::12::INSTR", "tolerance_a": 0.05, "tolerance_rel": 0.002},
-    # GPIB0::15 since 2026-11-13 (the user's picture of the FMR connections).
+    # GPIB0::10 since 2026-11-17 (the user's picture of the FMR connections:
+    # "FMR default setting as the figure."); GPIB0::15 from 2026-11-13.
     "648": {"label": "Lake Shore 648", "short": "LS648", "model": "MODEL648", "max_current_a": 100.0,
-            "resource": "GPIB0::15::INSTR", "tolerance_a": 0.05, "tolerance_rel": 0.002},
+            "resource": "GPIB0::10::INSTR", "tolerance_a": 0.05, "tolerance_rel": 0.002},
 }
 # The choice on each page: SHHV and ST-FMR have the 643, FMR the 648.
 MAGNET_SUPPLY_KEPCO = "KEPCO 4886"
@@ -3895,6 +3903,34 @@ STFMR_LOCKIN_DEFAULT_STEP_A = 0.02
 # page's: an hour per point is beyond any STFMR sweep, so a slipped digit is
 # refused rather than started.
 STFMR_LOCKIN_DEFAULT_SETTLE_S = 1.0
+# The FMR (PNA) field scan's "Acquire s" (user, 2026-11-17: "add acquire time
+# in FMR scan module"): once the 475 has settled at a point, the 475 and the
+# PNA are read again and again, back to back, for Acquire s, and the row
+# saves the mean field and the mean of each S-parameter (dB, as read) with
+# the number of readings.  0 s (the start-up value) is one reading, the scan
+# as it was; the same one-hour bound as Settle / Acquire on the ST-FMR page.
+STFMR_FMR_DEFAULT_ACQUIRE_S = 0.0
+STFMR_FMR_MAX_ACQUIRE_S = 3600.0
+
+
+def stfmr_fmr_mean_reading(readings):
+    """An FMR point's Acquire s readings, [(475 reading, {S-parameter: dB})],
+    as one: (the 475 reading with the mean field in its unit, the mean of
+    each S-parameter, the mean field in G, the number of readings).  A unit
+    change part way (the 475 is not changed by the scan) is an error, not a
+    mean of mixed units."""
+    if not readings:
+        raise RuntimeError("no 475 / PNA reading was taken at this point")
+    first = readings[0][0]
+    unit = first["unit"]
+    if any(field["unit"] != unit for field, _values in readings):
+        raise RuntimeError("the 475's unit changed during Acquire s; this point was not recorded")
+    count = len(readings)
+    field = dict(first, field=sum(float(field["field"]) for field, _values in readings) / count)
+    field_g = sum(STFMRGauss475Controller.value_in_gauss(item) for item, _values in readings) / count
+    names = list(readings[0][1])
+    values = {name: sum(float(item[name]) for _field, item in readings) / count for name in names}
+    return field, values, field_g, count
 STFMR_LOCKIN_DEFAULT_ACQUIRE_S = 2.0
 STFMR_LOCKIN_MAX_SETTLE_S = 3600.0
 STFMR_LOCKIN_MAX_ACQUIRE_S = 3600.0
@@ -20485,6 +20521,7 @@ class CombinedControlApp:
         self.stfmr_fmr_step_current_var = tk.StringVar(value="0.05")
         self.stfmr_fmr_voltage_limit_var = tk.StringVar(value="5")
         self.stfmr_fmr_settle_var = tk.StringVar(value="0.2")
+        self.stfmr_fmr_acquire_var = tk.StringVar(value=f"{STFMR_FMR_DEFAULT_ACQUIRE_S:g}")
         # The FMR scans' run folders (user, 2026-10-18): the parent last
         # chosen, and each scan's last run folder, where Save CSV + PNG opens.
         self.stfmr_fmr_save_directory: Path | None = None
@@ -22749,6 +22786,9 @@ class CombinedControlApp:
             ("f stop GHz:", self.stfmr_fmr_frequency_stop_var),
             ("f step GHz:", self.stfmr_fmr_frequency_step_var),
             ("PNA power dBm:", self.stfmr_fmr_power_var),
+            # Acquire s (user, 2026-11-17) ends the first row, over Wait s:
+            # that row had a free place, so the box is no wider.
+            ("Acquire s:", self.stfmr_fmr_acquire_var),
         )
         current_fields = (
             ("Start A:", self.stfmr_fmr_start_current_var),
@@ -29005,12 +29045,25 @@ class CombinedControlApp:
         settle = float(self.stfmr_fmr_settle_var.get())
         if not math.isfinite(settle) or settle < 0.0:
             raise ValueError("Wait per point must not be negative")
+        acquire = self._stfmr_fmr_acquire_input()
         # Reuse the hardware-safety validation before asking for confirmation.
         if not math.isfinite(voltage_limit) or not (
             0.0 < voltage_limit <= STFMR_KEPCO_MAX_VOLTAGE_V
         ):
             raise ValueError("FMR voltage limit must be within 0–20 V")
-        return selected, frequencies, power_dbm, currents, voltage_limit, settle
+        return selected, frequencies, power_dbm, currents, voltage_limit, settle, acquire
+
+    def _stfmr_fmr_acquire_input(self) -> float:
+        """The FMR scan's Acquire s box (user, 2026-11-17), checked:
+        0 (one reading) to STFMR_FMR_MAX_ACQUIRE_S."""
+        text = str(self.stfmr_fmr_acquire_var.get()).strip()
+        try:
+            acquire = float(text)
+        except ValueError:
+            raise ValueError(f"Acquire s: \"{text}\" is not a number") from None
+        if not math.isfinite(acquire) or not 0.0 <= acquire <= STFMR_FMR_MAX_ACQUIRE_S:
+            raise ValueError(f"Acquire s must be from 0 (one reading) to {STFMR_FMR_MAX_ACQUIRE_S:g} s")
+        return acquire
 
     def _stfmr_frequency_inputs(self):
         required = (self._stfmr_magnet_key(), "gauss", "vna")
@@ -29402,7 +29455,9 @@ class CombinedControlApp:
         # 2026-10-21); current_setpoint_a is either supply's programmed one.
         return ("index", "elapsed_s", "current_setpoint_a", "pna_frequency_hz",
                 "pna_power_dbm", "pna_actual_power_dbm", "field_raw", "field_raw_unit",
-                "measured_field_g", *STFMR_S_PARAMETERS, "magnet_supply", "magnet_measured_current_a")
+                "measured_field_g", *STFMR_S_PARAMETERS, "magnet_supply", "magnet_measured_current_a",
+                # Acquire s (user, 2026-11-17), last.
+                "acquire_s", "pna_reading_count")
 
     @staticmethod
     def _stfmr_frequency_csv_fields():
@@ -29586,7 +29641,7 @@ class CombinedControlApp:
         if self._stfmr_scans_busy() or self._stfmr_magnet_jobs_pending():
             return
         try:
-            selected, frequencies, power_dbm, currents, limit, settle = (
+            selected, frequencies, power_dbm, currents, limit, settle, acquire = (
                 self._stfmr_fmr_inputs()
             )
         except BaseException as error:
@@ -29598,6 +29653,7 @@ class CombinedControlApp:
             max(settle, 0.4)
             + (STFMR_FIELD_SETTLE_REQUIRED_SAMPLES - 1) * settle_poll
             + 0.15
+            + acquire
         )
         # The LS648 ramps where the 4886 jumps (user, 2026-10-21): each
         # frequency from 0 A through every current and back to 0 A (zeroed
@@ -29623,7 +29679,11 @@ class CombinedControlApp:
                 f"{frequencies[-1] / 1e9:g} GHz, {len(frequencies)} frequencies\n"
                 f"PNA stimulus power: {power_dbm:g} dBm\n"
                 f"Current: {currents[0]:g} → {currents[-1]:g} A, {len(currents)} points\n"
-                f"S-parameters: {', '.join(selected)}\nEstimated at least: {estimated:.1f} s"
+                f"S-parameters: {', '.join(selected)}\n"
+                f"Wait s {settle:g}, then "
+                + (f"Acquire s {acquire:g}: the 475 and PNA read repeatedly, the means saved"
+                   if acquire > 0 else "Acquire s 0: one 475 and PNA reading")
+                + f" at each point\nEstimated at least: {estimated:.1f} s"
                 + (f" ({ramp_s:.0f} s of LS648 ramps at {supply.rate_a_s:g} A/s)" if supply.lakeshore else "")
                 + f"{source_note}\n\nAt the end (completed, stopped or failed) the {name} is "
                 + ("ramped to 0 A" if supply.lakeshore else "zeroed and turned off")
@@ -29635,7 +29695,7 @@ class CombinedControlApp:
         settings = self._stfmr_fmr_settings(
             "fmr", selected, frequencies, power_dbm, limit,
             currents_a=list(currents), current_start_a=currents[0], current_stop_a=currents[-1],
-            current_step_a=self.stfmr_fmr_step_current_var.get(), wait_s=settle,
+            current_step_a=self.stfmr_fmr_step_current_var.get(), wait_s=settle, acquire_s=acquire,
             total_points=total_points, estimated_s=estimated,
             magnet_supply=self._stfmr_magnet_settings(supply, ramp_s),
         )
@@ -29652,6 +29712,7 @@ class CombinedControlApp:
         # magnet on (review, 2026-10-09).
         self.stfmr_fmr_voltage_limit_v = limit
         self.stfmr_fmr_settle_s = settle
+        self.stfmr_fmr_acquire_s = acquire
         self.stfmr_fmr_index = 0
         self.stfmr_fmr_frequency_index = 0
         self.stfmr_fmr_current_index = 0
@@ -29910,12 +29971,22 @@ class CombinedControlApp:
             self._finish_stfmr_fmr_scan(stopped=True)
             return
 
+        acquire_s = float(self.__dict__.get("stfmr_fmr_acquire_s", STFMR_FMR_DEFAULT_ACQUIRE_S))
+        stop_event = self.stfmr_fmr_stop_event
+        gauss, vna, selected = self.stfmr_controllers["gauss"], self.stfmr_controllers["vna"], self.stfmr_fmr_selected
+
         def work():
-            field_result = self.stfmr_controllers["gauss"].read_field()
-            s_values = self.stfmr_controllers["vna"].trigger_and_read(
-                self.stfmr_fmr_selected
-            )
-            return field_result, s_values
+            # One 475 + PNA reading, then more back to back until Acquire s
+            # has passed since the first began (user, 2026-11-17); a Stop
+            # ends the readings (the point is then not saved).
+            started = time.monotonic()
+            readings = []
+            while True:
+                field_result = gauss.read_field()
+                readings.append((field_result, vna.trigger_and_read(selected)))
+                if stop_event.is_set() or time.monotonic() - started >= acquire_s:
+                    break
+            return stfmr_fmr_mean_reading(readings)
 
         self.stfmr_fmr_future = self.stfmr_executor.submit(work)
 
@@ -29929,8 +30000,7 @@ class CombinedControlApp:
                 self._finish_stfmr_fmr_scan(stopped=True)
                 return
             try:
-                field_result, s_values = future.result()
-                field_g = STFMRGauss475Controller.value_in_gauss(field_result)
+                field_result, s_values, field_g, count = future.result()
             except BaseException as error:
                 self._finish_stfmr_fmr_scan(error=error)
                 return
@@ -29963,6 +30033,11 @@ class CombinedControlApp:
                 # 2026-10-21); blank for the write-only 4886.
                 "magnet_supply": self.__dict__.get("stfmr_scan_supply_name", MAGNET_SUPPLY_KEPCO),
                 "magnet_measured_current_a": self._stfmr_supply().measured_current_a(),
+                # Acquire s and how many 475 + PNA readings the row is the
+                # mean of (user, 2026-11-17).  Last, so every older column
+                # keeps its place.
+                "acquire_s": acquire_s,
+                "pna_reading_count": count,
             }
             self.stfmr_fmr_rows.append(row)
             try:
@@ -57051,9 +57126,10 @@ class RTEPanel(PPMSPanel):
         for key, measured in (('830_a', True), ('830_b', False),
                               ('830_c', False), ('zurich', False)):
             self.ppms_lockin_selection[key].set(measured)
-        # The start-up scan (user's figures, 2026-10-18 and 2026-11-16): Angle,
-        # 0 to -360 deg in 5 deg steps, Settle s 0.5, Acquire s 5, Loops 1,
-        # round trip off (user, 2026-10-18).
+        # The start-up scan (user's figures, 2026-10-18, 2026-11-16 and
+        # 2026-11-17): Angle+Field2, the stage 0 to -360 deg in 5 deg steps,
+        # Settle s 0.5, Acquire s 5, Loops 1, round trip off (user,
+        # 2026-10-18), outer fields 200 to 1100 G.
         # The mode change sets the range, round trip, units label, scan note,
         # outer row (removed) and plot axis, as choosing Angle does.
         self.ppms_acquisition_time_var.set(f'{RTE_ACQUISITION_S:g}')
@@ -57485,12 +57561,14 @@ class RTEPanel(PPMSPanel):
         # columns.  Its own widgets, shown only in that mode, so the range row
         # is laid out as before.  The box is as wide as the start-up series,
         # measured in its font (user: "make the field list box wider so the
-        # whole series shows"); a longer list scrolls in it.
+        # whole series shows"; the wider of RTE_OUTER_LIST_WIDTH_TEXT and the
+        # start-up series); a longer list scrolls in it.
         list_label = ttk.Label(scan_rows, textvariable=self.rte_outer_label)
         try:
             entry_font = tkfont.nametofont('TkTextFont', root=self.root)
-            list_chars = rte_outer_list_chars(RTE_OUTER_ROWS['Angle+Field2']['defaults'][0],
-                                              entry_font.measure, entry_font.measure('0'))
+            sample = max((RTE_OUTER_LIST_WIDTH_TEXT, RTE_OUTER_ROWS['Angle+Field2']['defaults'][0]),
+                         key=entry_font.measure)
+            list_chars = rte_outer_list_chars(sample, entry_font.measure, entry_font.measure('0'))
         except Exception:
             list_chars = RTE_OUTER_LIST_ENTRY_CHARS     # no font to measure (the offline stand-ins)
         self.rte_outer_list_chars = list_chars

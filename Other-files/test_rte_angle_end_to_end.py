@@ -507,10 +507,10 @@ class AngleScanTests(EndToEnd):
 
     def test_the_mode_change_sets_the_angle_boxes(self):
         panel = build_page()
-        # The page starts on the user's Angle scan (2026-11-16; Angle+Field
-        # from 2026-10-19).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
-        self.assertTrue(panel.rte_scan_note.get().startswith("Angle: Stage °; field: "), panel.rte_scan_note.get())
+        # The page starts on the user's Angle+Field2 scan (2026-11-17; Angle
+        # from 2026-11-16, Angle+Field from 2026-10-19).
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
+        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
             panel.ppms_simple_mode.set("Field")
             panel._rte_mode_changed()

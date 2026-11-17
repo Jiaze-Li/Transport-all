@@ -412,7 +412,7 @@ class ShvTests(shv_runs.RunLogBase):
 # ------------------------------------------------------- the FMR connections
 class FmrDefaultTests(unittest.TestCase):
     def test_the_start_up_addresses_are_those_of_the_users_picture(self):
-        self.assertEqual(app.LAKESHORE_MAGNET_MODELS["648"]["resource"], "GPIB0::15::INSTR")
+        self.assertEqual(app.LAKESHORE_MAGNET_MODELS["648"]["resource"], "GPIB0::10::INSTR")
         self.assertEqual(app.STFMR_DEFAULT_RESOURCES["gauss"], "GPIB0::12::INSTR")
         self.assertEqual(app.STFMR_DEFAULT_RESOURCES["vna"], "GPIB0::16::INSTR")
         self.assertEqual(app.STFMR_FMR_MAGNET_CHOICES[1], "LS648")

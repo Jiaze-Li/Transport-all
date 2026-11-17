@@ -1923,10 +1923,12 @@ class AnglePageTests(unittest.TestCase):
         # Three scan rows (mode/Start/End/Step; units/Loops/Settle s/Acquire
         # s; Start scan/Stop/Save CSV as/Round trip), and the outer row of
         # Angle+Field and Angle+Current (user, 2026-10-18), hidden at
-        # start-up, since the page starts on Angle (user, 2026-11-16; it
-        # started on Angle+Field from 2026-10-19).
+        # start-up; the page starts on Angle+Field2, whose list row is row 3
+        # here (user's figure, 2026-11-17; on Angle from 2026-11-16, on
+        # Angle+Field from 2026-10-19).
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
-                          if w.parent is rows and "row" in w.grid_options and not w.grid_removed}, {0, 1, 2})
+                          if w.parent is rows and "row" in w.grid_options and not w.grid_removed}, {0, 1, 2, 3})
+        self.assertEqual({w.grid_options["row"] for w, _options in panel.rte_outer_list_widgets}, {3})
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
                           if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {3})
         labels = {w.options["text"]: w for w in Recorder.made
@@ -1957,8 +1959,9 @@ class AnglePageTests(unittest.TestCase):
         # stay full width under the scan rows.
         self.assertIs(panel.ppms_field_scan_progress.parent.parent, scan)
         note = next(w for w in Recorder.made if w.options.get("textvariable") is panel.rte_scan_note)
-        # The page starts on the user's Angle scan (2026-11-16).
-        self.assertEqual(panel.rte_scan_note.get(), "Angle: Stage °; field: KEPCO current A")
+        # The page starts on the user's Angle+Field2 scan (2026-11-17; Angle
+        # from 2026-11-16).
+        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")
         self.assertIs(note.parent.parent, scan)
         self.assertEqual((rows.grid_options["row"], panel.ppms_field_scan_progress.parent.grid_options["row"],
                           note.parent.grid_options["row"]), (0, 1, 2))
@@ -3094,8 +3097,12 @@ class OuterListTests(unittest.TestCase):
         row = app.RTE_OUTER_ROWS["Angle+Field2"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))
-        # The user's start-up series (2026-11-17), within the 7300 Oe.
+        # The user's start-up series (their figure, 2026-11-17; 7000, 200,
+        # 5000, ... before), within the 7300 Oe.  The box is still measured
+        # against the earlier, longer series.
         self.assertEqual(app.rte_outer_list_plan(row["defaults"][0]),
+                         (200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0))
+        self.assertEqual(app.rte_outer_list_plan(app.RTE_OUTER_LIST_WIDTH_TEXT),
                          (7000.0, 200.0, 5000.0, 500.0, 2000.0, 300.0, 6000.0, 1000.0, 3500.0, 200.0, 7000.0))
         note = app.RTE_SCAN_NOTES["Angle+Field2"]
         self.assertLessEqual(len(note), 40, "the note's 40-character box")
@@ -3146,9 +3153,10 @@ class OuterRowPageTests(unittest.TestCase):
         outer = [widget for widget, _options in panel.rte_outer_widgets]
         others = [w for w in Recorder.made if w.parent is rows and w not in outer]
         layout = lambda: [(w, dict(w.grid_options), w.grid_removed) for w in others]
-        # The page starts on Angle, without the outer row (user, 2026-11-16;
-        # Angle+Field with its outer row from 2026-10-19).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
+        # The page starts on Angle+Field2, whose list row replaces the range
+        # row (user's figure, 2026-11-17; Angle from 2026-11-16, Angle+Field
+        # with its outer row from 2026-10-19).
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
         self.assertTrue(all(w.grid_removed for w in outer))
         self.mode(panel, "Angle")
         before = layout()
@@ -3203,7 +3211,14 @@ class OuterRowPageTests(unittest.TestCase):
         outer = [widget for widget, _options in panel.rte_outer_widgets]
         listed = [widget for widget, _options in panel.rte_outer_list_widgets]
         self.assertEqual(len(listed), 2, "its label and its box")
-        self.assertTrue(all(w.grid_removed for w in listed), "removed at start-up (Angle)")
+        # Shown at start-up (Angle+Field2, the user's figure, 2026-11-17),
+        # with the figure's 200 to 1100 G.
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
+        self.assertFalse(any(w.grid_removed for w in listed), "shown at start-up")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
+                         "200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100")
+        self.mode(panel, "Angle")
+        self.assertTrue(all(w.grid_removed for w in listed), "removed on Angle")
         self.mode(panel, "Angle+Field2")
         self.assertFalse(any(w.grid_removed for w in listed), "shown")
         self.assertTrue(all(w.grid_removed for w in outer), "the range row removed")
@@ -3211,7 +3226,8 @@ class OuterRowPageTests(unittest.TestCase):
         self.assertIs(label.options["textvariable"], panel.rte_outer_label)
         self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
         self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
-        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
+                         "200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100")
         self.assertEqual((entry.grid_options["row"], entry.grid_options["column"], entry.grid_options["columnspan"]),
                          (3, 1, 6))
         self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")

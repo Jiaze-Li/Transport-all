@@ -55,16 +55,20 @@ class PanelDefaultTests(unittest.TestCase):
         self.assertEqual(panel.ppms_transport_current_var.get(), "1.5")
         self.assertEqual(panel.ppms_transport_frequency_var.get(), "317.3")
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "50")
-        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("5", "5"))
+        # Magnet current A 0.6 (user's figure, 2026-11-17; 5 from 2026-11-16).
+        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("0.6", "5"))
         self.assertEqual(panel.zurich_expected_frequency, 317.3)
         # The PPMS page keeps its own excitation.
         self.assertEqual(self.app.ppms_panel.ppms_transport_frequency_var.get(), "317.3")
-        # The start-up scan (user's figures, 2026-10-18 and 2026-11-16): Angle,
-        # 0 to -360 deg in 5 deg steps, Settle s 0.5, Acquire s 5, Loops 1;
+        # The start-up scan (user's figures, 2026-10-18, 2026-11-16 and
+        # 2026-11-17): Angle+Field2, the stage 0 to -360 deg in 5 deg steps,
+        # Settle s 0.5, Acquire s 5, Loops 1, outer fields 200 to 1100 G;
         # round trip off since 2026-10-18 (user: "default not click Round
         # trip").  Angle+Field (from 2026-10-19 to 2026-11-16 the start-up
         # mode) keeps its outer KEPCO 3 to 9 A in 1 A steps.
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle")
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
+                         "200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100")
         self.assertEqual([v.get() for v in panel.rte_outer_ranges["Angle+Field"]], ["3", "9", "1"])
         self.assertEqual([v.get() for v in panel.ppms_simple_range], ["0", "-360", "5"])
         self.assertIs(panel.rte_round_trip.get(), False)
@@ -600,14 +604,15 @@ class PanelDefaultTests(unittest.TestCase):
 
     def test_the_fmr_page_starts_on_the_ls648_as_the_users_picture(self):
         """The FMR connections at start-up (user's picture of the page,
-        2026-11-13): the magnet supply is the LS648 at GPIB0::15, the LS475
+        2026-11-13 and 2026-11-17): the magnet supply is the LS648 at
+        GPIB0::10 (GPIB0::15 until 2026-11-17), the LS475
         is at GPIB0::12 and the PNA at GPIB0::16.  The LS648's row and
         field-output panel are the ones shown; the KEPCO 4886 stays one
         choice away."""
         a = self.app
         self.assertEqual((a.stfmr_magnet_choice, a.stfmr_magnet_choice_var.get()), ("LS648", "LS648"))
         self.assertEqual({key: a.stfmr_resource_vars[key].get() for key in ("lakeshore", "gauss", "vna")},
-                         {"lakeshore": "GPIB0::15::INSTR", "gauss": "GPIB0::12::INSTR", "vna": "GPIB0::16::INSTR"})
+                         {"lakeshore": "GPIB0::10::INSTR", "gauss": "GPIB0::12::INSTR", "vna": "GPIB0::16::INSTR"})
         self.assertTrue(a._stfmr_lakeshore_chosen())
         self.assertEqual(a._stfmr_supply_label(), "LS648")
 

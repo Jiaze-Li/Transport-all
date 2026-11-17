@@ -716,8 +716,9 @@ class FmrLakeShoreTests(fmr_run.FmrRun):
         self.assertEqual(fake.page_threads(), {a.stfmr_executor.ident})
         rows = self.rows(self.folder)
         header = rows[0]
-        self.assertEqual(header[-2:], ["magnet_supply", "magnet_measured_current_a"])
-        self.assertEqual({row[-2] for row in rows[1:]}, {"LS648"})
+        # The supply's two columns, then Acquire s's two (user, 2026-11-17).
+        self.assertEqual(header[-4:], ["magnet_supply", "magnet_measured_current_a", "acquire_s", "pna_reading_count"])
+        self.assertEqual({row[-4] for row in rows[1:]}, {"LS648"})
         events = self.events(self.folder)
         self.assertEqual(events[0]["settings"]["outputs_zeroed_at_end"], ["LS648", "PNA RF"])
         self.assertEqual(events[0]["settings"]["magnet_supply"]["program_max_a"], 100.0)
