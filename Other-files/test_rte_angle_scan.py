@@ -3094,7 +3094,9 @@ class OuterListTests(unittest.TestCase):
         row = app.RTE_OUTER_ROWS["Angle+Field2"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))
-        self.assertEqual(app.rte_outer_list_plan(row["defaults"][0]), (100.0, 200.0, 300.0))
+        # The user's start-up series (2026-11-17), within the 7300 Oe.
+        self.assertEqual(app.rte_outer_list_plan(row["defaults"][0]),
+                         (7000.0, 200.0, 5000.0, 500.0, 2000.0, 300.0, 6000.0, 1000.0, 3500.0, 200.0, 7000.0))
         note = app.RTE_SCAN_NOTES["Angle+Field2"]
         self.assertLessEqual(len(note), 40, "the note's 40-character box")
         self.assertEqual(note, "Angle+Field2: Stage °; outer: field G")
@@ -3196,7 +3198,7 @@ class OuterRowPageTests(unittest.TestCase):
         self.assertIs(label.options["textvariable"], panel.rte_outer_label)
         self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
         self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
-        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "100, 200, 300")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000")
         self.assertEqual((entry.grid_options["row"], entry.grid_options["column"], entry.grid_options["columnspan"]),
                          (3, 1, 6))
         self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")
@@ -3211,7 +3213,7 @@ class OuterRowPageTests(unittest.TestCase):
         self.mode(panel, "Angle")
         self.mode(panel, "Angle+Field2")
         self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "500, 100, 300")
-        panel.rte_outer_ranges["Angle+Field2"][0].set("100, 200, 300")
+        panel.rte_outer_ranges["Angle+Field2"][0].set("7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000")
         # Angle+Field: the range row, the list row removed.
         self.mode(panel, "Angle+Field")
         self.assertTrue(all(w.grid_removed for w in listed))

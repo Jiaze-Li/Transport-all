@@ -3614,8 +3614,11 @@ RTE_FIELD_OUTER_MODES = ('Angle+Field', 'Angle+Field2')
 RTE_OUTER_ROWS = {
     'Angle+Field': dict(label='Outer KEPCO A:', defaults=('3', '9', '1'), index_column='outer_field_index'),
     # One box, not three: the fields in G in the order typed; ``listed``
-    # marks it.  A small start-up list (the user gave none).
-    'Angle+Field2': dict(label='Outer field G:', defaults=('100, 200, 300',),
+    # marks it.  The start-up series is the user's (2026-11-17: "use this for
+    # default field series 7000 200 5000 500 2000 300 6000 1000 3500 200
+    # 7000 Oe").
+    'Angle+Field2': dict(label='Outer field G:',
+                         defaults=('7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000',),
                          index_column='outer_field_index', listed=True),
     'Angle+Current': dict(label='Outer 6221 mA RMS:', defaults=('0.01', '1', '0.01'),
                           index_column='outer_current_index'),

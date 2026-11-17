@@ -7,8 +7,8 @@
   current"; "max input field is 7300Oe"; "the max magnet current is 40A in the SHHV".
 - **The mode** (`RTE_SCAN_MODES`, after Angle+Field): the outer row is one box, "Outer field G:"
   (`rte_outer_list_widgets`), of target fields in G (= Oe in air), separated by commas, semicolons or spaces,
-  scanned in the order typed; a field may come more than once. Start-up list 100, 200, 300 (the user gave
-  none). `rte_outer_list_plan` parses it: finite, within +/-`RTE_OUTER_FIELD_MAX_G` = 7300 G, at most
+  scanned in the order typed; a field may come more than once. Start-up series the user's (2026-11-17):
+  7000, 200, 5000, 500, 2000, 300, 6000, 1000, 3500, 200, 7000 (the box scrolls to show it all). `rte_outer_list_plan` parses it: finite, within +/-`RTE_OUTER_FIELD_MAX_G` = 7300 G, at most
   `RTE_OUTER_LIST_MAX` = 1000 fields.
 - **Each step** (`_rte_scan_reach_field`): `run_magnet_field_set` without hold, as the rack's Set field: from
   where the chosen supply is, the LS475 brought within the Set field Tol. box (2 G at start-up) of the target;
