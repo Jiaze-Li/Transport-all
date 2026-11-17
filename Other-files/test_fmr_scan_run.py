@@ -377,7 +377,8 @@ class AcquireTests(FmrRun):
         self.drive(a, a.start_stfmr_fmr_scan)
         self.assertEqual(a.stfmr_controllers["vna"].reads, 1)
         self.assertEqual(a.stfmr_fmr_rows[0]["pna_reading_count"], 1)
-        self.assertIn("Acquire s 0: one 475 and PNA reading", self.confirm.call_args.args[1])
+        # "Settle s", was "Wait s" (user, 2026-11-17).
+        self.assertIn("Settle s 0.2, then Acquire s 0: one 475 and PNA reading", self.confirm.call_args.args[1])
 
     def test_a_stop_during_acquire_ends_the_readings_and_saves_no_row(self):
         a = self.acquiring(100.0)

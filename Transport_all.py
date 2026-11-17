@@ -22786,7 +22786,7 @@ class CombinedControlApp:
             ("f stop GHz:", self.stfmr_fmr_frequency_stop_var),
             ("f step GHz:", self.stfmr_fmr_frequency_step_var),
             ("PNA power dBm:", self.stfmr_fmr_power_var),
-            # Acquire s (user, 2026-11-17) ends the first row, over Wait s:
+            # Acquire s (user, 2026-11-17) ends the first row, over Settle s:
             # that row had a free place, so the box is no wider.
             ("Acquire s:", self.stfmr_fmr_acquire_var),
         )
@@ -22795,7 +22795,9 @@ class CombinedControlApp:
             ("Stop A:", self.stfmr_fmr_stop_current_var),
             ("Step A:", self.stfmr_fmr_step_current_var),
             ("Comp. V:", self.stfmr_fmr_voltage_limit_var),
-            ("Wait s:", self.stfmr_fmr_settle_var),
+            # "Settle s", was "Wait s" (user, 2026-11-17: "change wait s to
+            # settle s in FMR module"); the same wait after each current.
+            ("Settle s:", self.stfmr_fmr_settle_var),
         )
         for row, fields in enumerate((frequency_fields, current_fields)):
             for index, (label, variable) in enumerate(fields):
@@ -29044,7 +29046,7 @@ class CombinedControlApp:
         voltage_limit = float(self.stfmr_fmr_voltage_limit_var.get())
         settle = float(self.stfmr_fmr_settle_var.get())
         if not math.isfinite(settle) or settle < 0.0:
-            raise ValueError("Wait per point must not be negative")
+            raise ValueError("Settle s must not be negative")
         acquire = self._stfmr_fmr_acquire_input()
         # Reuse the hardware-safety validation before asking for confirmation.
         if not math.isfinite(voltage_limit) or not (
@@ -29680,7 +29682,7 @@ class CombinedControlApp:
                 f"PNA stimulus power: {power_dbm:g} dBm\n"
                 f"Current: {currents[0]:g} → {currents[-1]:g} A, {len(currents)} points\n"
                 f"S-parameters: {', '.join(selected)}\n"
-                f"Wait s {settle:g}, then "
+                f"Settle s {settle:g}, then "
                 + (f"Acquire s {acquire:g}: the 475 and PNA read repeatedly, the means saved"
                    if acquire > 0 else "Acquire s 0: one 475 and PNA reading")
                 + f" at each point\nEstimated at least: {estimated:.1f} s"
@@ -29929,7 +29931,7 @@ class CombinedControlApp:
                 self._measure_stfmr_fmr_point()
                 return
             # The settle timeout counts from the end of the requested wait:
-            # a fixed 15 s ended every scan with a 'Wait s' above 15 s at its
+            # a fixed 15 s ended every scan with a 'Wait s' (now Settle s) above 15 s at its
             # first point, even with a stable field (review, 2026-10-13).
             timeout_s = (
                 self.stfmr_fmr_field_settle_min_s + STFMR_FIELD_SETTLE_TIMEOUT_S
@@ -29943,7 +29945,7 @@ class CombinedControlApp:
                         f"After setting the {self.__dict__.get('stfmr_scan_supply_label', '4886')} to "
                         f"{current:+.6g} A the 475 field did not settle within "
                         f"{timeout_s:g} s; "
-                        "this transition point was not recorded; check the magnet response or increase the wait"
+                        "this transition point was not recorded; check the magnet response or increase Settle s"
                     )
                 )
                 return

@@ -1,17 +1,21 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
-## FMR scan Acquire s and LS648 at GPIB0::10; SHHV starts on the user's Angle+Field2 figure (user, 2026-11-17)
+## FMR scan Acquire s and Settle s, LS648 at GPIB0::10; SHHV starts on the user's Angle+Field2 figure (user, 2026-11-17)
 
 - **FMR connections:** "FMR default setting as the figure." The LS648 starts at GPIB0::10 (was GPIB0::15,
   `LAKESHORE_MAGNET_MODELS["648"]["resource"]`); the LS648 as the supply, the LS475 at GPIB0::12 and the PNA at
   GPIB0::16 were already the start-up values. Only Connect uses the address.
+- **FMR "Settle s":** "change wait s to settle s in FMR module". The field sweep's "Wait s:" box is now
+  "Settle s:", with the same meaning (the least wait after each current before the 475 settle check) and the
+  same 0.2 s start-up value; its error and the settle-timeout message say Settle s. `run_prepared` keeps the
+  key `wait_s`, so older logs read the same.
 - **FMR request:** "add acquire time in FMR scan module". The field-sweep box (PNA) has an "Acquire s:" box
-  (`stfmr_fmr_acquire_var`) at the end of its first row, over Wait s; that row had a free place, so the box is no
-  wider. After Wait s and the 475 settle, the 475 and the PNA are read back to back until Acquire s has passed
+  (`stfmr_fmr_acquire_var`) at the end of its first row, over Settle s; that row had a free place, so the box is no
+  wider. After Settle s and the 475 settle, the 475 and the PNA are read back to back until Acquire s has passed
   since the first reading began (at least one), and the row saves the mean field and the mean of each
   S-parameter in dB as read (`stfmr_fmr_mean_reading`; a 475 unit change part way fails the point). Start-up
   value 0 s: one reading, the scan as it was. Checked at Start: 0 to `STFMR_FMR_MAX_ACQUIRE_S` = 3600 s. A Stop
-  ends the readings and the point is not saved. The Yes/No names Wait s and Acquire s; the time estimate counts
+  ends the readings and the point is not saved. The Yes/No names Settle s and Acquire s; the time estimate counts
   Acquire s; `run_prepared` has `acquire_s`; CSV columns `acquire_s`, `pna_reading_count` last. The
   fixed-field frequency sweep is unchanged.
 - **SHHV request:** "change default setting as fig like." Differences from the start-up values before: mode
