@@ -1966,7 +1966,9 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHHV")
         self.assertIsNone(panel.rte_controllers["newmark"].dll, "no DLL is loaded before Connect")
         combo = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_simple_mode)
-        self.assertEqual(combo.options["values"], ("Field", "Current", "Angle", "Angle+Field", "Angle+Current"))
+        # Angle+Field2 after Angle+Field (user, 2026-11-17).
+        self.assertEqual(combo.options["values"],
+                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Field2", "Angle+Current"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3057,6 +3059,62 @@ class OuterPlanTests(unittest.TestCase):
                          (3.0, "step 3"))
 
 
+class OuterListTests(unittest.TestCase):
+    """Angle+Field2 (user, 2026-11-17: "add a Angle+Field2 mode, which scan
+    the field order manually input"; "I type the field directly and it auto
+    reach the current"): the outer fields in G typed as a list, in any
+    order, each reached as Set field reaches it."""
+
+    def test_the_list_in_the_order_typed(self):
+        plan = app.rte_outer_list_plan
+        self.assertEqual(plan("500, 100, 300"), (500.0, 100.0, 300.0), "the order typed")
+        self.assertEqual(plan(" 20; 0 20\t-150.5 ,"), (20.0, 0.0, 20.0, -150.5), "commas, semicolons, spaces; repeats")
+        self.assertEqual(str(plan("-0")[0]), "0.0", "no -0 in the CSV")
+        # The user's 7300 Oe (2026-11-17); within it, how far the magnet goes is the field setting's to find.
+        self.assertEqual(app.RTE_OUTER_FIELD_MAX_G, 7300.0)
+        self.assertEqual(plan("7300, -7300, 0"), (7300.0, -7300.0, 0.0))
+        for typed, message in (
+                ("", "Outer field G: type the fields in G in the order to scan"),
+                ("5, x", 'Outer field G: "x" is not a number'),
+                ("nan", 'Outer field G: "nan" is not a finite number'),
+                ("-inf", "is not a finite number"),
+                ("100, 7300.5", "Outer field G: fields must stay within +/-7300 G (7300 Oe); 7300.5 G is outside"),
+                ("-8000", "-8000 G is outside"),
+                (", ".join(["1"] * (app.RTE_OUTER_LIST_MAX + 1)), f"at most {app.RTE_OUTER_LIST_MAX} fields")):
+            with self.subTest(typed=typed[:20]):
+                with self.assertRaises(ValueError) as caught:
+                    plan(typed)
+                self.assertIn(message, str(caught.exception))
+        self.assertEqual(plan("5, ,"), (5.0,))
+
+    def test_the_mode_and_its_row(self):
+        self.assertIn("Angle+Field2", app.RTE_SCAN_MODES)
+        self.assertIn("Angle+Field2", app.RTE_ANGLE_MODES)
+        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Angle+Field2"))
+        row = app.RTE_OUTER_ROWS["Angle+Field2"]
+        self.assertEqual((row["label"], row["index_column"], row.get("listed")),
+                         ("Outer field G:", "outer_field_index", True))
+        self.assertEqual(app.rte_outer_list_plan(row["defaults"][0]), (100.0, 200.0, 300.0))
+        note = app.RTE_SCAN_NOTES["Angle+Field2"]
+        self.assertLessEqual(len(note), 40, "the note's 40-character box")
+        self.assertEqual(note, "Angle+Field2: Stage °; outer: field G")
+
+    def test_the_values_text(self):
+        self.assertEqual(app.rte_outer_values_text((500.0, 100.0, -300.0)), "+500, +100, -300 G")
+        self.assertEqual(app.rte_outer_values_text(tuple(range(14)), 3), "+0, +1, +2, ... G")
+
+    def test_a_curve_per_step_even_for_a_repeated_field(self):
+        step = app.rte_outer_step_of
+        row = lambda field, index: {"scan_mode": "Angle+Field2", "kepco_programmed_current_a": 1.234,
+                                    "outer_target_field_g": field, "outer_field_index": index}
+        self.assertEqual(step(row(200.0, 1)), (200.0, "#1 +200 G"))
+        self.assertEqual(step(row(200.0, 3)), (200.0, "#3 +200 G"), "the same field again: its own curve")
+        self.assertEqual(step(row("", 2)), (2.0, "step 2"))
+        # Angle+Field's names as before.
+        self.assertEqual(step({"scan_mode": "Angle+Field", "kepco_programmed_current_a": 2.0,
+                               "outer_field_index": 1}), (2.0, "+2 A"))
+
+
 class OuterRowPageTests(unittest.TestCase):
     """The outer row on the real page built from stand-ins (user, 2026-10-18):
     removed in Field, Current and Angle, shown in Angle+Field and
@@ -3120,6 +3178,56 @@ class OuterRowPageTests(unittest.TestCase):
         panel.ppms_field_scan_running = False
         panel._update_ppms_control_ui()
         self.assertEqual({e.options["state"] for e in entries}, {"normal"})
+        panel.safe_close_ppms()
+
+    def test_angle_field2_shows_its_list_row_alone(self):
+        """Angle+Field2 (user, 2026-11-17): its label, then one box of
+        fields spanning Start / End / Step's columns; the range row stays
+        removed, and every other mode removes the list row."""
+        panel = AnglePageTests.build_page(self)
+        outer = [widget for widget, _options in panel.rte_outer_widgets]
+        listed = [widget for widget, _options in panel.rte_outer_list_widgets]
+        self.assertEqual(len(listed), 2, "its label and its box")
+        self.assertTrue(all(w.grid_removed for w in listed), "removed at start-up (Angle)")
+        self.mode(panel, "Angle+Field2")
+        self.assertFalse(any(w.grid_removed for w in listed), "shown")
+        self.assertTrue(all(w.grid_removed for w in outer), "the range row removed")
+        label, entry = listed
+        self.assertIs(label.options["textvariable"], panel.rte_outer_label)
+        self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
+        self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "100, 200, 300")
+        self.assertEqual((entry.grid_options["row"], entry.grid_options["column"], entry.grid_options["columnspan"]),
+                         (3, 1, 6))
+        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")
+        self.assertEqual(panel.rte_scan_units.get(), "Stage °")
+        self.assertIs(panel.rte_round_trip.get(), False)
+        self.assertEqual([v.get() for v in panel.ppms_simple_range], ["0", "-360", "5"], "Angle's sweep")
+        # Typed, then the mode chosen again (or another mode and back): the typed order is kept (review,
+        # 2026-11-17); the range rows still start from their defaults.
+        panel.rte_outer_ranges["Angle+Field2"][0].set("500, 100, 300")
+        self.mode(panel, "Angle+Field2")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "500, 100, 300")
+        self.mode(panel, "Angle")
+        self.mode(panel, "Angle+Field2")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(), "500, 100, 300")
+        panel.rte_outer_ranges["Angle+Field2"][0].set("100, 200, 300")
+        # Angle+Field: the range row, the list row removed.
+        self.mode(panel, "Angle+Field")
+        self.assertTrue(all(w.grid_removed for w in listed))
+        self.assertFalse(any(w.grid_removed for w in outer))
+        for mode in ("Field", "Current", "Angle", "Angle+Current"):
+            with self.subTest(mode=mode):
+                self.mode(panel, "Angle+Field2")
+                self.mode(panel, mode)
+                self.assertTrue(all(w.grid_removed for w in listed), "the list row removed")
+        # Locked while a scan runs, as the other boxes.
+        panel.ppms_field_scan_running = True
+        panel._update_ppms_control_ui()
+        self.assertEqual(entry.options["state"], "disabled")
+        panel.ppms_field_scan_running = False
+        panel._update_ppms_control_ui()
+        self.assertEqual(entry.options["state"], "normal")
         panel.safe_close_ppms()
 
     def test_a_curve_per_outer_step_and_the_other_modes_as_before(self):

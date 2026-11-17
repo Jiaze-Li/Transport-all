@@ -3595,17 +3595,38 @@ RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # mode, the current is outside loop"): the main row is the inner angle sweep,
 # and an outer row, shown only in those modes, gives the KEPCO currents or
 # the 6221 currents of the outer loop.
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Current')
+# Angle+Field2 (user, 2026-11-17: "add a Angle+Field2 mode, which scan the
+# field order manually input"; "I can write the field scan order as I like";
+# "I mean that I type the field directly and it auto reach the current"):
+# Angle+Field with the outer FIELDS typed as a list in G, in any order
+# (repeats allowed), instead of a Start / End / Step of currents.  Each
+# field is reached as Set field reaches it (run_magnet_field_set against the
+# LS475, within Set field's tolerance box), and the current is then left
+# there for that field's whole angle sweep.
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current')
 # The modes that turn the stage (the stage check at Start, the stage columns).
-RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Current')
+RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current')
+# The modes whose outer loop steps the magnet supply.
+RTE_FIELD_OUTER_MODES = ('Angle+Field', 'Angle+Field2')
 # Each outer row: its label, its start-up range (Angle+Field 0 to 8 A in 2 A
 # steps, the user's figures; Angle+Current the Current scan's), and the
 # CSV's last column, the outer step's number.
 RTE_OUTER_ROWS = {
     'Angle+Field': dict(label='Outer KEPCO A:', defaults=('3', '9', '1'), index_column='outer_field_index'),
+    # One box, not three: the fields in G in the order typed; ``listed``
+    # marks it.  A small start-up list (the user gave none).
+    'Angle+Field2': dict(label='Outer field G:', defaults=('100, 200, 300',),
+                         index_column='outer_field_index', listed=True),
     'Angle+Current': dict(label='Outer 6221 mA RMS:', defaults=('0.01', '1', '0.01'),
                           index_column='outer_current_index'),
 }
+# Angle+Field2's list: at most this many fields (the 100000-point limit
+# counts them too), and the box's width in characters.
+RTE_OUTER_LIST_MAX = 1000
+# The largest field that may be typed (user, 2026-11-17: "max input field is
+# 7300Oe"), in G as the LS475 reads it (1 G = 1 Oe in air).
+RTE_OUTER_FIELD_MAX_G = 7300.0
+RTE_OUTER_LIST_ENTRY_CHARS = 24
 # _rte_settle_field reads the LS475 every 0.2 s; the shortest settle is
 # STFMR_FIELD_SETTLE_REQUIRED_SAMPLES of them (the time estimates count it).
 RTE_FIELD_SETTLE_POLL_S = 0.2
@@ -56737,10 +56758,53 @@ def rte_outer_plan(mode, start, end, step, max_current_a=STFMR_KEPCO_MAX_CURRENT
         raise ValueError(f'{label}: {error}') from error
 
 
+def rte_outer_list_plan(text):
+    """Angle+Field2's outer loop (user, 2026-11-17): the target fields in G
+    typed in its box, separated by commas, semicolons or spaces, in the
+    order typed; a field may come more than once; each within
+    +/-RTE_OUTER_FIELD_MAX_G (the user's 7300 Oe).  Whether the magnet can
+    reach each is the field setting's to find (MagnetFieldPID stops at the
+    supply's maximum current: the KEPCO's 10 A, the LS643's 40 A)."""
+    label = RTE_OUTER_ROWS['Angle+Field2']['label'].rstrip(':')
+    parts = [part for part in re.split(r'[,;\s]+', str(text).strip()) if part]
+    if not parts:
+        raise ValueError(f'{label}: type the fields in G in the order to scan, e.g. 500, 100, 300')
+    if len(parts) > RTE_OUTER_LIST_MAX:
+        raise ValueError(f'{label}: at most {RTE_OUTER_LIST_MAX} fields ({len(parts)} typed)')
+    values = []
+    for part in parts:
+        try:
+            value = float(part)
+        except ValueError:
+            raise ValueError(f'{label}: "{part}" is not a number') from None
+        if not math.isfinite(value):
+            raise ValueError(f'{label}: "{part}" is not a finite number')
+        if abs(value) > RTE_OUTER_FIELD_MAX_G:
+            raise ValueError(f'{label}: fields must stay within +/-{RTE_OUTER_FIELD_MAX_G:g} G '
+                             f'({RTE_OUTER_FIELD_MAX_G:g} Oe); {value:g} G is outside')
+        values.append(value + 0.0)      # -0 typed is 0
+    return tuple(values)
+
+
+def rte_outer_values_text(values, limit=12):
+    """Angle+Field2's fields for the Yes/No and the log: "+500, +100,
+    +300 G", the first ``limit`` and "..." after a longer list."""
+    shown = ', '.join(f'{value:+g}' for value in values[:limit])
+    return f"{shown}{', ...' if len(values) > limit else ''} G"
+
+
 def rte_outer_step_of(row):
     """An Angle+Field or Angle+Current row's outer step for the plot (user,
     2026-10-18): (value, name), the name its KEPCO current ("+2 A") or its
-    6221 current ("0.5 mA"); None for the rows of every other mode."""
+    6221 current ("0.5 mA"); None for the rows of every other mode.
+    Angle+Field2's are its target field with the step's number first
+    ("#2 +300 G"), so a field typed twice gives two curves (user,
+    2026-11-17)."""
+    if row.get('scan_mode') == 'Angle+Field2' and 'outer_field_index' in row:
+        value, index = row.get('outer_target_field_g'), row.get('outer_field_index')
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return float(value), f'#{index} {value:+g} G'
+        return (float(index) if isinstance(index, (int, float)) else 0.0), f'step {index}'
     if 'outer_field_index' in row:
         value, unit, form = row.get('kepco_programmed_current_a'), 'A', '+g'
     elif 'outer_current_index' in row:
@@ -56836,6 +56900,7 @@ RTE_SCAN_NOTES = {
     'Angle': 'Angle: Stage °; field: KEPCO current A',
     # The outer loop's unit on the outer row (user, 2026-10-18).
     'Angle+Field': 'Angle+Field: Stage °; outer: KEPCO A',
+    'Angle+Field2': 'Angle+Field2: Stage °; outer: field G',
     'Angle+Current': 'Angle+Current: Stage °; outer: 6221 mA',
 }
 
@@ -57397,6 +57462,23 @@ class RTEPanel(PPMSPanel):
         for widget, options in self.rte_outer_widgets:
             widget.grid(**options)
             widget.grid_remove()
+        # Angle+Field2's outer row (user, 2026-11-17): its label, then one
+        # box of fields in G in the order to scan, under Start / End / Step's
+        # columns (or beside the main row, as the range row).  Its own widgets,
+        # shown only in that mode, so the range row is laid out as before.
+        list_label = ttk.Label(scan_rows, textvariable=self.rte_outer_label)
+        self.rte_outer_list_entry = ttk.Entry(scan_rows, textvariable=self.rte_outer_ranges['Angle+Field2'][0],
+                                              width=RTE_OUTER_LIST_ENTRY_CHARS)
+        self.rte_edit_widgets.append((self.rte_outer_list_entry, 'normal'))
+        self.rte_outer_list_widgets = [
+            (list_label, dict(row=3, column=0, sticky='e', padx=0)),
+            (self.rte_outer_list_entry, dict(row=3, column=1, columnspan=6, padx=(4, 2), sticky='ew'))]
+        self.rte_outer_list_beside_options = [
+            dict(row=0, column=7, sticky='e', padx=(6, 0)),
+            dict(row=0, column=8, columnspan=6, padx=(3, 2), sticky='ew')]
+        for widget, options in self.rte_outer_list_widgets:
+            widget.grid(**options)
+            widget.grid_remove()
         # In the 1101 px window the program opens with, the outer row sits
         # beside the main row instead, in columns 7 to 13 of row 0, so it
         # costs the plots no height (CI, 2026-10-30: under the main rows it
@@ -57476,7 +57558,8 @@ class RTEPanel(PPMSPanel):
                 # outer row sits never changes this, nor the decisions taken
                 # by it (2026-10-30).  outer_row=False: the main rows alone,
                 # their width while the outer row is beside them.
-                under = {str(widget): options for widget, options in self.rte_outer_widgets}
+                under = {str(widget): options for widget, options
+                         in (*self.rte_outer_widgets, *self.__dict__.get('rte_outer_list_widgets', ()))}
                 widths, spans = [0] * 7, []
                 for widget in scan_rows.grid_slaves():
                     if not outer_row and str(widget) in under:
@@ -57604,13 +57687,16 @@ class RTEPanel(PPMSPanel):
                 # counts the row under the main rows wherever it is, so the
                 # row can never change the pair's decision.
                 try:
-                    shown = any(widget.winfo_manager() == 'grid' for widget, _options in self.rte_outer_widgets)
-                    if not shown:
-                        return      # not an Angle+Field or Angle+Current scan
+                    # The range row (Angle+Field, Angle+Current) or
+                    # Angle+Field2's list row, whichever is shown.
+                    shown = self._rte_shown_outer_set()
+                    if shown is None:
+                        return      # not a scan with an outer loop
+                    widgets, beside_options = shown
                     stacked = getattr(controls, '_pair_side_by_side', None) is False
                     room = scan.winfo_width() - self._pair_inset(scan)
                     beside_width = sum(widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options
-                                       in zip(self.rte_outer_widgets, self.rte_outer_beside_options))
+                                       in zip(widgets, beside_options))
                     # Beside, the main rows keep only their own widgets in
                     # columns 0 to 6 (the outer label no longer widens column
                     # 0) and the outer row takes columns 7 to 13: exactly the
@@ -57646,7 +57732,7 @@ class RTEPanel(PPMSPanel):
                         return
                     place, beside = 'under', False
                 self.rte_outer_place = place
-                for (widget, under), options in zip(self.rte_outer_widgets, self.rte_outer_beside_options):
+                for (widget, under), options in zip(widgets, beside_options):
                     widget.grid_configure(**(options if beside else under))
             outer_guard = {}
             self.rte_arrange_outer_row = arrange_outer_row
@@ -57692,6 +57778,18 @@ class RTEPanel(PPMSPanel):
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
 
+    def _rte_shown_outer_set(self):
+        """The outer row on screen: (widgets, beside options) of the range row
+        (Angle+Field, Angle+Current) or of Angle+Field2's list row (user,
+        2026-11-17); None when neither is shown."""
+        for widgets, beside in ((self.__dict__.get('rte_outer_widgets') or [],
+                                 self.__dict__.get('rte_outer_beside_options') or []),
+                                (self.__dict__.get('rte_outer_list_widgets') or [],
+                                 self.__dict__.get('rte_outer_list_beside_options') or [])):
+            if widgets and any(widget.winfo_manager() == 'grid' for widget, _options in widgets):
+                return widgets, beside
+        return None
+
     def _rte_show_outer_row(self, mode):
         """The outer row (user, 2026-10-18): shown, with its mode's label,
         variables and start-up range, for Angle+Field and Angle+Current;
@@ -57701,22 +57799,32 @@ class RTEPanel(PPMSPanel):
         widgets = self.__dict__.get('rte_outer_widgets')
         if widgets is None:
             return      # the offline tests' page stand-ins have no scan box
+        list_widgets = self.__dict__.get('rte_outer_list_widgets') or []
         row = RTE_OUTER_ROWS.get(mode)
+        # Neither row first; then the mode's own (Angle+Field2's list row,
+        # user, 2026-11-17, or the range row).
+        for widget, _options in (*widgets, *list_widgets):
+            widget.grid_remove()
         if row is None:
-            for widget, _options in widgets:
-                widget.grid_remove()
             return
         variables = self.rte_outer_ranges[mode]
-        for variable, value in zip(variables, row['defaults']):
-            variable.set(value)
+        # Angle+Field2's typed list is kept when its mode is chosen again
+        # (review, 2026-11-17: a long hand-typed order was lost); the range
+        # rows start from their defaults, as before.
+        if not row.get('listed'):
+            for variable, value in zip(variables, row['defaults']):
+                variable.set(value)
         self.rte_outer_label.set(row['label'].replace('KEPCO', self._rte_supply_label()))
-        for entry, variable in zip(self.rte_outer_entries, variables):
-            entry.configure(textvariable=variable)
+        if row.get('listed'):
+            widgets, beside_set = list_widgets, self.__dict__.get('rte_outer_list_beside_options')
+        else:
+            for entry, variable in zip(self.rte_outer_entries, variables):
+                entry.configure(textvariable=variable)
+            beside_set = self.__dict__.get('rte_outer_beside_options')
         # Under the main row, or beside it in the 1101 px window (2026-10-30;
         # arrange_outer_row decides again once the row is shown).
         beside = self.__dict__.get('rte_outer_place') == 'beside'
-        for (widget, options), beside_options in zip(widgets, self.__dict__.get('rte_outer_beside_options')
-                                                      or [None] * len(widgets)):
+        for (widget, options), beside_options in zip(widgets, beside_set or [None] * len(widgets)):
             widget.grid(**(beside_options if beside and beside_options else options))
         arrange = self.__dict__.get('rte_arrange_outer_row')
         if arrange is not None:
@@ -58816,12 +58924,22 @@ class RTEPanel(PPMSPanel):
                                      'stage again')
                 if not supply.connected:
                     raise ValueError(f'Connect {supply.label} for an angle scan: it '
-                                     + ('sets the outer field' if mode == 'Angle+Field' else 'holds the field'))
+                                     + ('sets the outer field' if mode in RTE_FIELD_OUTER_MODES
+                                        else 'holds the field'))
             # The outer loop (user, 2026-10-18), after the inner range's and
             # the instruments' checks: Angle+Field's KEPCO currents within
             # +/-10 A, Angle+Current's 6221 currents checked below.
-            outer = rte_outer_plan(mode, *(v.get() for v in self.rte_outer_ranges[mode]), supply.max_current_a(),
-                                   supply.label) if mode in RTE_OUTER_ROWS else None
+            # Angle+Field2 (user, 2026-11-17): the fields in G in the order
+            # typed, each with Set field's tolerance box, checked as Set
+            # field checks them; the worker reaches each as Set field does.
+            if mode == 'Angle+Field2':
+                outer = rte_outer_list_plan(self.rte_outer_ranges[mode][0].get())
+                for value in outer:
+                    _target, tolerance = self._field_setting_inputs(value, self.rte_field_tolerance.get(), supply)
+                self.rte_scan_field_tolerance_g = tolerance
+            else:
+                outer = rte_outer_plan(mode, *(v.get() for v in self.rte_outer_ranges[mode]),
+                                       supply.max_current_a(), supply.label) if mode in RTE_OUTER_ROWS else None
             # A Field scan takes its KEPCO currents from the scan range and
             # needs only the voltage limit; a Current scan never drives the
             # KEPCO.  The unused boxes no longer refuse a scan (audit,
@@ -58834,7 +58952,7 @@ class RTEPanel(PPMSPanel):
             if mode in ('Angle', 'Angle+Current'):
                 field_current, limit = self._rte_drive_parameters()
             else:
-                limit = self._rte_voltage_limit() if mode in ('Field', 'Angle+Field') else None
+                limit = self._rte_voltage_limit() if mode in ('Field', *RTE_FIELD_OUTER_MODES) else None
             # The Lake Shore ramps: its rate from the Rate A/s box, and it must
             # be armed (the worker reads XPGM? and ERST? again before each
             # setpoint) (user, 2026-10-21).
@@ -58844,6 +58962,23 @@ class RTEPanel(PPMSPanel):
                 supply = self._rte_supply()
                 if supply.lakeshore_controller.arm_problem:
                     raise ValueError(f'The {supply.label} is not armed: {supply.lakeshore_controller.arm_problem}')
+            if mode == 'Angle+Field2':
+                # The field setting takes the supply from where it is (review,
+                # 2026-11-17): a KEPCO output already on would keep the voltage
+                # limit it was switched on with (and set_output again would
+                # first send CURR 0 to a magnet carrying current), so the scan
+                # switches it on itself, with this limit; a Lake Shore must be
+                # at its setpoint, as its last reading says (no I/O here; the
+                # worker reads it again), before the 6221 is switched on.
+                if not supply.lakeshore and self.rte_controllers['kepco'].output_owned:
+                    raise ValueError('The KEPCO output is on (from Apply, Set field or a stopped scan): press '
+                                     'KEPCO Zero / OFF first, so the scan switches it on with the voltage limit '
+                                     'in its box')
+                if supply.lakeshore:
+                    last = supply.lakeshore_controller.reading or {}
+                    if last and not last.get('at_setpoint', False):
+                        raise ValueError(f'The {supply.label} is not at its setpoint (still ramping, or a ramp was '
+                                         'stopped): wait for it, or Apply its current or ramp it to 0 A, then start')
             settings = self._ppms_direct_transport_settings()
             # Every 6221 current a scan sets: a Current scan's, and
             # Angle+Current's outer currents (user, 2026-10-18).
@@ -58887,23 +59022,26 @@ class RTEPanel(PPMSPanel):
             angles = [target for _loop, _point, target in plan] * (len(outer) * len(passes))
             turning = sum(abs(b - a) for a, b in zip(angles, angles[1:]))
             steps_s = (len(outer) * STFMR_FIELD_SETTLE_REQUIRED_SAMPLES * RTE_FIELD_SETTLE_POLL_S
-                       if mode == 'Angle+Field' else (len(outer) - 1) * duration)
+                       if mode in RTE_FIELD_OUTER_MODES else (len(outer) - 1) * duration)
             least_s += turning / NEWMARK_SPEED_DEG_S + len(passes) * steps_s
         # The Lake Shore ramps where the KEPCO jumps (user, 2026-10-21): from
         # where it is to the first current, through every setpoint of every
         # pass, and back to 0 A at the end, at the rate.
         ramp_s = 0.0
-        if ramp_rate is not None:
+        if ramp_rate is not None and mode != 'Angle+Field2':
             here = supply.lakeshore_controller.current_a
             here = here if math.isfinite(here) else 0.0
             sequence = ([value for _loop, _point, value in plan] if mode == 'Field'
-                        else list(outer) if mode == 'Angle+Field' else [field_current])
+                        else list(outer) if mode in RTE_FIELD_OUTER_MODES else [field_current])
             ramp_s = lakeshore_scan_ramp_seconds([here, *sequence * len(passes), 0.0]
-                                                 if mode in ('Field', 'Angle+Field') else [here, field_current, 0.0],
+                                                 if mode in ('Field', *RTE_FIELD_OUTER_MODES)
+                                                 else [here, field_current, 0.0],
                                                  ramp_rate)
             least_s += ramp_s
         least_text = self._format_scan_duration(least_s)
-        ramp_text = (f' The {supply.label} ramps at {ramp_rate:g} A/s: {self._format_scan_duration(ramp_s)} of '
+        ramp_text = (f' The {supply.label} ramps at {ramp_rate:g} A/s while each field is found; that is not counted.'
+                     if ramp_rate is not None and mode == 'Angle+Field2' else
+                     f' The {supply.label} ramps at {ramp_rate:g} A/s: {self._format_scan_duration(ramp_s)} of '
                      'ramping are counted, from its present current to 0 A at the end.' if ramp_rate is not None
                      else '')
         if angle:
@@ -59042,7 +59180,7 @@ class RTEPanel(PPMSPanel):
                 # Shorter than the Angle line (user, 2026-10-18): the
                 # Yes/No and the log have the ranges.
                 self.rte_stage_where = 'stage not moved'
-                steps = 'fields' if mode == 'Angle+Field' else 'currents'
+                steps = 'fields' if mode in RTE_FIELD_OUTER_MODES else 'currents'
                 self.ppms_field_scan_status_var.set(
                     f'SHHV {mode}: {len(outer)} {steps} x {len(plan)} angles; {self.ppms_field_scan_total} points')
             self._update_ppms_control_ui()
@@ -59051,8 +59189,11 @@ class RTEPanel(PPMSPanel):
                             f'{recorder.log_path.name}); {per_pass} points x {len(passes)} harmonic pass(es)'
                             + (f'; stage {first:g}° to {last:g}°, {supply.label} {field_current:+g} A held'
                                if mode == 'Angle' else '')
-                            + (f'; outer {RTE_OUTER_ROWS[mode]["label"].rstrip(":")} {outer[0]:g} to {outer[-1]:g} '
-                               f'({len(outer)} steps), inner stage {first:g}° to {last:g}°'
+                            + ((f'; outer fields as typed: {rte_outer_values_text(outer, 50)} '
+                                f'(± {self.rte_scan_field_tolerance_g:g} G, the current found by the field setting) '
+                                if mode == 'Angle+Field2' else
+                                f'; outer {RTE_OUTER_ROWS[mode]["label"].rstrip(":")} {outer[0]:g} to {outer[-1]:g} ')
+                               + f'({len(outer)} steps), inner stage {first:g}° to {last:g}°'
                                + (f', {supply.label} {field_current:+g} A held' if mode == 'Angle+Current' else '')
                                if outer else '')
                             + f'; each reading waits {settle_text}; at least {least_text}'
@@ -59189,7 +59330,22 @@ class RTEPanel(PPMSPanel):
         steps = len(outer) * len(passes)
         # The chosen magnet supply's name and how it is set (user, 2026-10-21).
         name, terms = self._rte_supply_label(), self._rte_magnet_terms(limit)
-        if mode == 'Angle+Field':
+        if mode == 'Angle+Field2':
+            # The typed fields (user, 2026-11-17: "I type the field directly
+            # and it auto reach the current").
+            tolerance = self.__dict__.get('rte_scan_field_tolerance_g', MAGNET_FIELD_SET_DEFAULT_TOLERANCE_G)
+            start = ('the KEPCO\'s output is switched on at 0 A first if it is off' if name == 'KEPCO'
+                     else f'each change is a ramp at the rate, and the {name} must be at its setpoint at Start')
+            outer_text = (f'Field, the OUTER loop: {len(outer)} fields in the order typed: '
+                          f'{rte_outer_values_text(outer)}, each within ±{tolerance:g} G on the LS475 (Set field\'s '
+                          f'Tol. box). At each field the {name} current is found as Set field finds it ({terms}; '
+                          f'{start}): from where the current is, small probe steps first, then steps of at most '
+                          f'{MAGNET_FIELD_SET_MAX_STEP_A:g} A at first, never beyond ±{self._rte_supply().max_current_a():g} A. '
+                          'The current then stays there, not corrected, while the whole angle sweep runs. A field '
+                          'that does not follow the current, or one the supply cannot reach, ends the scan (the '
+                          'gaussmeter or the limit is named).')
+            unit = 'field'
+        elif mode in RTE_FIELD_OUTER_MODES:
             setting = ('the first switches the output on, the others change its current only' if name == 'KEPCO'
                        else 'it ramps there and the step waits until RDGI? is at it')
             outer_text = (f'Field, the OUTER loop: {len(outer)} {name} steps from {outer[0]:+g} A to {outer[-1]:+g} A '
@@ -59287,7 +59443,15 @@ class RTEPanel(PPMSPanel):
                       farthest_target=max(targets, key=lambda value: abs(value - targets[0]))),
             # Angle+Field and Angle+Current (user, 2026-10-18): the outer
             # loop's row and its steps; ``plan`` is the inner angle sweep.
+            # Angle+Field2 (user, 2026-11-17): the typed fields, no range.
             **({'outer': dict(
+                typed=box(state['rte_outer_ranges'][mode][0]) if 'rte_outer_ranges' in state else None,
+                unit='G (LS475 target)', tolerance_g=state.get('rte_scan_field_tolerance_g'),
+                steps=len(outer), values=list(outer),
+                order='outer first, in the order typed; the angle sweep inner',
+                current='found for each field as Set field finds it, then left there for its angle sweep')}
+               if outer and mode == 'Angle+Field2' else
+               {'outer': dict(
                 start=box(state['rte_outer_ranges'][mode][0]) if 'rte_outer_ranges' in state else None,
                 end=box(state['rte_outer_ranges'][mode][1]) if 'rte_outer_ranges' in state else None,
                 step=box(state['rte_outer_ranges'][mode][2]) if 'rte_outer_ranges' in state else None,
@@ -59312,6 +59476,7 @@ class RTEPanel(PPMSPanel):
             kepco=(dict(current_a=field_current, voltage_limit_v=limit, held=True)
                    if mode in ('Angle', 'Angle+Current')
                    else dict(current_a='the plan', voltage_limit_v=limit) if mode == 'Field'
+                   else dict(current_a='found for each outer field', voltage_limit_v=limit) if mode == 'Angle+Field2'
                    else dict(current_a='the outer loop', voltage_limit_v=limit) if mode == 'Angle+Field'
                    else dict(used=False)),
             resources=resources,
@@ -59494,6 +59659,30 @@ class RTEPanel(PPMSPanel):
             text = f'KEPCO programmed: {value:+g} A' + (' (held)' if held else '')
         self.post_ui(lambda: None if self.rte_closed or self.closing else self.rte_drive_live.set(text))
 
+    def _rte_scan_reach_field(self, supply, target_g, limit, step_index, steps):
+        """Angle+Field2's step (user, 2026-11-17): the chosen supply's current
+        found so that the LS475 reads ``target_g`` within the scan's
+        tolerance, on this worker, as Set field finds it
+        (run_magnet_field_set, no hold), from where the supply is.  The
+        scan's Stop ends it as a scan stop; a MagnetFieldError (a field that
+        does not follow, a limit) fails the scan, the current left for the
+        scan's end to zero.  Returns the reading that was within the
+        tolerance."""
+        gauss = self.rte_controllers['gauss']
+        tolerance = self.rte_scan_field_tolerance_g
+
+        def progress(reading):
+            text = (f"Field {step_index}/{steps} {target_g:+g} G, step {reading['step']}: "
+                    f"{magnet_field_reading_text(reading)}")
+            self.post_ui(lambda: None if self.rte_closed or self.closing else self.rte_drive_live.set(text))
+            self.post_ui(lambda: None if self.rte_closed or self.closing else self.rte_field_live.set(
+                f"LS475 field: {float(reading['field_g']):+.7g} G"))
+        try:
+            return run_magnet_field_set(supply, gauss, target_g, tolerance, limit, self.ppms_field_scan_stop_event,
+                                        closing=lambda: self.closing or self.rte_closed, progress=progress)
+        except MagnetFieldStopped as stopped:
+            raise PPMSScanCancelled(f'SHHV stopped while the field was set to {target_g:+g} G') from stopped
+
     def _rte_update_current(self, settings):
         """Change only the running sine amplitude, without abort/reset/re-arm."""
         self._rte_wait(0)
@@ -59570,6 +59759,28 @@ class RTEPanel(PPMSPanel):
                     # a failed live-CSV row (user, 2026-10-18).
                     self._rte_log_check()
                 elif angle:
+                    if mode == 'Angle+Field2' and new_step:
+                        # Each typed field (user, 2026-11-17: "I type the field
+                        # directly and it auto reach the current"), reached as
+                        # Set field reaches it, from where the supply is; the
+                        # current then stays for the whole angle sweep.
+                        try:
+                            self._rte_wait(0)
+                            reached = self._rte_scan_reach_field(supply, step_value, limit, step_index, len(outer))
+                            self._rte_log('field_programmed', index=progress, step_index=step_index,
+                                          steps=len(outer), target_field_g=step_value,
+                                          tolerance_g=self.rte_scan_field_tolerance_g,
+                                          current_a=float(reached['current_a']), field_g=float(reached['field_g']),
+                                          corrections=reached.get('step'), g_per_a=reached.get('g_per_a'),
+                                          voltage_limit_v=limit,
+                                          **self._rte_magnet_log(supply, supply.lakeshore_controller.reading
+                                                                 if supply.lakeshore else None))
+                        except PPMSScanCancelled:
+                            raise
+                        except Exception:
+                            field_failure = True
+                            raise
+                        self._rte_log_check()
                     if mode == 'Angle+Field' and new_step:
                         # Each outer field (user, 2026-10-18), as a Field scan
                         # steps its current: the output switched on with the
@@ -59600,7 +59811,7 @@ class RTEPanel(PPMSPanel):
                     # the voltage limit, settled on the LS475 and then held
                     # while the stage turns (user, 2026-10-13); Angle+Current
                     # too (user, 2026-10-18).
-                    if mode != 'Angle+Field' and index == 1 and not settings.get('continue_source'):
+                    if mode not in RTE_FIELD_OUTER_MODES and index == 1 and not settings.get('continue_source'):
                         try:
                             self._rte_wait(0)
                             reading = supply.start(field_current, limit)
@@ -59709,6 +59920,11 @@ class RTEPanel(PPMSPanel):
                     # The outer step's number, the last column (user,
                     # 2026-10-18); its value is in kepco_programmed_current_a
                     # or 6221_current_rms_ma.
+                    if mode == 'Angle+Field2':
+                        # The typed field the step reached (user, 2026-11-17),
+                        # before its number; the current found is in
+                        # kepco_programmed_current_a.
+                        row['outer_target_field_g'] = step_value
                     row[RTE_OUTER_ROWS[mode]['index_column']] = step_index
                 # The magnet supply and the Lake Shore's measured current
                 # (RDGI?, read now), after every older column (user,

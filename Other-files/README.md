@@ -1,5 +1,37 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV Angle+Field2: the outer fields typed in any order, each reached by the field setting (user, 2026-11-17)
+
+- **Request:** "add a Angle+Field2 mode, which scan the field order manually input"; "when select angle+field2,
+  I can write the field scan order as I like"; "I mean that I type the field directly and it auto reach the
+  current"; "max input field is 7300Oe"; "the max magnet current is 40A in the SHHV".
+- **The mode** (`RTE_SCAN_MODES`, after Angle+Field): the outer row is one box, "Outer field G:"
+  (`rte_outer_list_widgets`), of target fields in G (= Oe in air), separated by commas, semicolons or spaces,
+  scanned in the order typed; a field may come more than once. Start-up list 100, 200, 300 (the user gave
+  none). `rte_outer_list_plan` parses it: finite, within +/-`RTE_OUTER_FIELD_MAX_G` = 7300 G, at most
+  `RTE_OUTER_LIST_MAX` = 1000 fields.
+- **Each step** (`_rte_scan_reach_field`): `run_magnet_field_set` without hold, as the rack's Set field: from
+  where the chosen supply is, the LS475 brought within the Set field Tol. box (2 G at start-up) of the target;
+  the KEPCO switched on at 0 A with the voltage limit if off; the LS643 ramped at Rate A/s and required at its
+  setpoint. The current is then left unchanged for that field's whole angle sweep. Current limits are the
+  supply's (`max_current_a`: KEPCO 10 A, LS643 40 A or its `LIMIT?`). A field that does not follow, or that
+  needs more than the limit, fails the scan (`MagnetFieldError`); Stop ends it as a scan stop. Every end zeroes
+  the 6221 and the supply as before.
+- **Refused at Start** (independent review, 2026-11-17): a KEPCO output already on (from Apply, Set field or a
+  stopped scan; it would keep its old voltage limit while the records name the new one, and `set_output` again
+  would first send `CURR 0` to a magnet carrying current): press KEPCO Zero / OFF first. An LS643 whose last
+  reading is not at its setpoint. Both before the 6221 is switched on. The typed list is kept when the mode is
+  chosen again.
+- **Records:** CSV column `outer_target_field_g` before `outer_field_index`; `kepco_programmed_current_a` is
+  the current found. Log `field_programmed` has `target_field_g`, `tolerance_g`, `current_a`, `field_g`,
+  `corrections`, `g_per_a`; `run_prepared.outer` has the typed text, tolerance and values. Plot curves are
+  "#<step> <field> G". The time estimate does not count the field finding or the LS643's ramps.
+- **Layout:** the list row sits under the main row at 2000 px and beside it in the 1101 px window, as the range
+  row (`_rte_shown_outer_set` tells `arrange_outer_row` which row is shown); CI test
+  `test_angle_field2_list_row_fits_and_costs_no_height`.
+- **Analysis:** `3-Transport-RT/process/scripts/shv_field_series.py` takes Angle+Field2 runs (it groups the
+  points by the current of each step).
+
 ## SHHV start-up values from the user's screenshot (user, 2026-11-16)
 
 - **Request:** "using the parameters in the figure as default pls." (a screenshot of the SHHV settings and scan

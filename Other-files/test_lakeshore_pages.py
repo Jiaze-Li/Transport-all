@@ -95,6 +95,59 @@ class ShvLakeShoreTests(ete.EndToEnd):
             variable.set(value)
         h.panel.rte_round_trip.set(False)
 
+    def field2_scan(self, h, typed, fake):
+        """Angle+Field2 (user, 2026-11-17) with an LS475 that reads 100 G per
+        A of the LS643's output, and the field setting's waits made tiny."""
+        for name, value in (("MAGNET_FIELD_SET_SETTLE_S", 0.0), ("MAGNET_FIELD_SET_READ_INTERVAL_S", 1e-4),
+                            ("MAGNET_FIELD_SET_GROUP_GAP_S", 1e-4)):
+            patcher = mock.patch.object(app, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        def read_field():
+            h.log.append(("gauss", "read", threading.get_ident()))
+            return {"field": 100.0 * fake.current, "unit": "G", "unit_code": 1}
+        h.gauss.read_field = read_field
+        with mock.patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            h.panel.ppms_simple_mode.set("Angle+Field2")
+            h.panel._rte_mode_changed()
+        for variable, value in zip(h.panel.ppms_simple_range, ("0", "10", "10")):
+            variable.set(value)
+        h.panel.rte_outer_ranges["Angle+Field2"][0].set(typed)
+
+    def test_angle_field2_finds_each_field_with_the_lakeshore(self):
+        h = self.make(round_trip=False)
+        controller, fake = self.lakeshore(h, rate="10")
+        self.field2_scan(h, "150, 50", fake)
+        self.start(h)
+        panel = h.panel
+        h.showerror.assert_not_called()
+        question = h.askyesno.call_args.args[1]
+        self.assertIn("2 fields in the order typed: +150, +50 G", question)
+        self.assertIn("never beyond ±40 A", question, "the LS643's 40 A (user, 2026-11-17)")
+        self.assertIn("The LS643 ramps at 10 A/s while each field is found; that is not counted.", question)
+        self.assertEqual([entry for entry in h.log if entry[0] == "kepco"], [], "the KEPCO never sent anything")
+        rows = self.rows(h)
+        self.assertEqual([(r["outer_target_field_g"], r["outer_field_index"]) for r in rows],
+                         [("150.0", "1"), ("150.0", "1"), ("50.0", "2"), ("50.0", "2")])
+        for r in rows:
+            self.assertEqual(r["magnet_supply"], "LS643")
+            self.assertAlmostEqual(float(r["measured_field_g"]), float(r["outer_target_field_g"]), delta=2.0)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; LS643 and 6221 zeroed; stage at +10.000°")
+        self.assertLessEqual(abs(fake.current), 0.01, "ramped to 0 A at the end")
+        self.assertTrue(fake.gaps_kept())
+        self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
+
+    def test_angle_field2_refuses_a_lakeshore_not_at_its_setpoint(self):
+        h = self.make(round_trip=False)
+        controller, fake = self.lakeshore(h, rate="10")
+        self.field2_scan(h, "150", fake)
+        controller.reading = dict(controller.reading or {"current_a": 0.4}, at_setpoint=False)
+        self.start(h)
+        h.askyesno.assert_not_called()
+        self.assertIn("The LS643 is not at its setpoint", h.showerror.call_args.args[1])
+        self.assertEqual([e for e in h.log if e[0] in ("6221", "stage")], [], "nothing switched on or turned")
+
     def test_an_angle_scan_holds_the_lakeshore_current_then_ramps_it_to_zero(self):
         h = self.make()
         controller, fake = self.lakeshore(h)

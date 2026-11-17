@@ -429,6 +429,49 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         finally:
             choose("Angle+Field", LAB_WIDE, self.height)
 
+    def test_angle_field2_list_row_fits_and_costs_no_height(self):
+        """Angle+Field2's list row (user, 2026-11-17: the outer fields
+        typed in any order): beside the main row in the 1101 px window, so
+        the scan box is as tall as an Angle scan's, under it at 2000 px; its
+        box shows in full inside the scan box in both."""
+        panel = self.a.rte_panel
+        rows = panel.rte_start_button.master
+        scan = rows.master
+        label, entry = [widget for widget, _options in panel.rte_outer_list_widgets]
+        outer = [widget for widget, _options in panel.rte_outer_widgets]
+
+        def choose(mode, width, height):
+            panel.ppms_simple_mode.set(mode)
+            panel._rte_mode_changed()
+            self.root.geometry(f"{width}x{height}+0+0")
+            for _ in range(3):
+                self.root.update()
+
+        try:
+            heights = {}
+            for width, height in ((1101, CI_SHOT_HEIGHT), (LAB_WIDE, self.height)):
+                for mode in ("Angle", "Angle+Field2"):
+                    choose(mode, width, height)
+                    heights[(mode, width)] = scan.winfo_height()
+                print(f"SHHV Angle+Field2 at {width} px: list row {panel.rte_outer_place}, "
+                      f"{getattr(panel, 'rte_outer_numbers', None)}, box {entry.winfo_width()} px "
+                      f"(asks {entry.winfo_reqwidth()} px), scan box {heights[('Angle+Field2', width)]} px tall")
+                with self.subTest(width=width):
+                    self.assertTrue(label.winfo_ismapped() and entry.winfo_ismapped())
+                    self.assertFalse(any(w.winfo_ismapped() for w in outer), "the range row hidden")
+                    self.assertEqual(panel.rte_outer_place, "beside" if width == 1101 else "under")
+                    self.assertGreaterEqual(entry.winfo_width(), entry.winfo_reqwidth(), "the box in full")
+                    right = scan.winfo_rootx() + scan.winfo_width()
+                    for widget in (label, entry):
+                        self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(), right, "inside the box")
+                    font = tkinter.font.nametofont("TkDefaultFont")
+                    self.assertLessEqual(font.measure(panel.rte_outer_label.get()), label.winfo_width(),
+                                         "the label shows in full")
+            self.assertEqual(heights[("Angle+Field2", 1101)], heights[("Angle", 1101)],
+                             "no height in the 1101 px window")
+        finally:
+            choose("Angle", LAB_WIDE, self.height)
+
     def test_the_motor_row_lines_up_with_the_rack_rows(self):
         """User, 2026-10-17: the stage's connection is the rack's fifth row,
         "Motor", laid out as the four above it, in the 1101 px and 2000 px
