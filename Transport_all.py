@@ -3712,7 +3712,10 @@ STFMR_KEPCO_MAX_CURRENT_A = 10.0
 STFMR_KEPCO_MAX_VOLTAGE_V = 20.0
 # The magnet-supply choice of the ST-FMR and FMR pages' KEPCO row, its label
 # (user, 2026-10-21): the 4886, or the page's Lake Shore.
-STFMR_LOCKIN_MAGNET_CHOICES = ("KEPCO4886", "LS643")
+# ST-FMR also offers the Lake Shore 648 (user, 2026-11-18: "add LS648
+# connection selection in STFMR module"); the page's one Lake Shore row then
+# connects whichever model is chosen.
+STFMR_LOCKIN_MAGNET_CHOICES = ("KEPCO4886", "LS643", "LS648")
 STFMR_FMR_MAGNET_CHOICES = ("KEPCO4886", "LS648")
 # The Lake Shore 643 and 648 electromagnet power supplies (user, 2026-10-21:
 # "Add LS643 connection & control for SHHV and STFMR. Add LS648 connection &
@@ -3737,7 +3740,9 @@ LAKESHORE_MAGNET_MODELS = {
     "648": {"label": "Lake Shore 648", "short": "LS648", "model": "MODEL648", "max_current_a": 100.0,
             "resource": "GPIB0::10::INSTR", "tolerance_a": 0.05, "tolerance_rel": 0.002},
 }
-# The choice on each page: SHHV and ST-FMR have the 643, FMR the 648.
+# The choice on each page: SHHV has the 643, FMR the 648, ST-FMR either
+# (the 648 since 2026-11-18, user: "add LS648 connection selection in STFMR
+# module").
 MAGNET_SUPPLY_KEPCO = "KEPCO 4886"
 # The ramp rate: the user gave none, so a Rate A/s box with 1 A/s at start-up,
 # refused above 10 A/s and below the 0.0001 A/s the manual allows (2026-10-21,
@@ -20612,6 +20617,10 @@ class CombinedControlApp:
         }
         # The Lake Shore 643's row shares the KEPCO's place (user, 2026-10-21).
         self.stfmr_lockin_resource_vars["lakeshore"] = tk.StringVar(value=LAKESHORE_MAGNET_MODELS["643"]["resource"])
+        # Each Lake Shore model's address, kept while the other is chosen
+        # (LS643 or LS648, user, 2026-11-18); the row shows the chosen one's.
+        self.stfmr_lockin_lakeshore_resources = {model: info["resource"]
+                                                 for model, info in LAKESHORE_MAGNET_MODELS.items()}
         self.stfmr_lockin_connection_vars["lakeshore"] = tk.StringVar(value="Not connected")
         # The chosen magnet supply and the Lake Shore's rate, as plain values
         # for the worker; set on the Tk thread (user, 2026-10-21).
@@ -23790,10 +23799,18 @@ class CombinedControlApp:
         runs or starts, while a Lake Shore job is pending, and while the
         supply being left has its output on (or not confirmed at zero)."""
         variable = self.stfmr_lockin_magnet_choice_var
-        choice = "LS643" if variable.get() == STFMR_LOCKIN_MAGNET_CHOICES[1] else MAGNET_SUPPLY_KEPCO
+        shown = variable.get()
+        choice = shown if shown in STFMR_LOCKIN_MAGNET_CHOICES[1:] else MAGNET_SUPPLY_KEPCO
         previous = self.__dict__.get("stfmr_lockin_magnet_choice", MAGNET_SUPPLY_KEPCO)
         if choice == previous:
             return
+        # LS643 <-> LS648 (user, 2026-11-18): the row's controller is
+        # replaced by the other model's, so the one left must be
+        # disconnected and not left unconfirmed at zero (its output_on would
+        # be lost with it, and the stage checks read it).
+        lakeshore = self.stfmr_lockin_controllers["lakeshore"]
+        model = LAKESHORE_MAGNET_MODELS["648" if choice == "LS648" else "643"]
+        swap = choice != MAGNET_SUPPLY_KEPCO and lakeshore.short_label != model["short"]
         problem = None
         if (self.closing or self.stfmr_lockin_closed or self._stfmr_lockin_rows_locked()
                 or self._stfmr_lockin_magnet_jobs_pending()):
@@ -23801,14 +23818,46 @@ class CombinedControlApp:
         elif self._stfmr_lockin_supply().output_on:
             problem = (f"The {self._stfmr_lockin_supply_label()} output is on (or not confirmed at zero): zero it "
                        "first (Zero / OFF), then change the magnet supply")
+        elif swap and lakeshore.output_on:
+            problem = (f"The {lakeshore.short_label} was left with its output not confirmed at zero: choose "
+                       f"{lakeshore.short_label}, connect and zero it (Zero / OFF), then choose {model['short']}")
+        elif swap and (lakeshore.connected
+                       or self.stfmr_lockin_connection_vars["lakeshore"].get() in ("Connecting…", "Disconnecting…")):
+            problem = (f"The {lakeshore.short_label} is still connected: choose {lakeshore.short_label}, "
+                       f"Disconnect it, then choose {model['short']}")
         if problem is not None:
-            variable.set(STFMR_LOCKIN_MAGNET_CHOICES[0 if previous == MAGNET_SUPPLY_KEPCO else 1])
+            variable.set(STFMR_LOCKIN_MAGNET_CHOICES[0] if previous == MAGNET_SUPPLY_KEPCO else previous)
             messagebox.showerror("STFMR magnet supply", problem, parent=self.root)
             return
+        if swap:
+            self._stfmr_lockin_swap_lakeshore("648" if choice == "LS648" else "643")
         self.stfmr_lockin_magnet_choice = choice
         self.thread_log(f"STFMR magnet supply: {choice}")
         self._stfmr_lockin_show_magnet_choice()
         self._update_stfmr_lockin_ui()
+
+    def _stfmr_lockin_swap_lakeshore(self, model: str) -> None:
+        """The row's Lake Shore becomes the other model (LS643 or LS648,
+        user, 2026-11-18), disconnected: a new controller (so the model's
+        own limits, 40 A or 100 A, and *IDN? check), and the row shows that
+        model's address, kept from when it was last chosen.  Only called
+        with the one left disconnected and confirmed at zero."""
+        old = self.stfmr_lockin_controllers["lakeshore"]
+        addresses = self.__dict__.setdefault(
+            "stfmr_lockin_lakeshore_resources",
+            {key: info["resource"] for key, info in LAKESHORE_MAGNET_MODELS.items()})
+        variable = self.stfmr_lockin_resource_vars["lakeshore"]
+        addresses[old.model] = variable.get().strip()
+        self.stfmr_lockin_controllers["lakeshore"] = LakeShoreMagnetSupplyController(
+            self.thread_log, model, owner_scope="STFMR")
+        variable.set(addresses.get(model) or LAKESHORE_MAGNET_MODELS[model]["resource"])
+        if self._stfmr_lockin_row("lakeshore")[1] is not None:
+            self._set_stfmr_lockin_device_ui("lakeshore", False)
+
+    def _stfmr_lockin_ls_name(self) -> str:
+        """The page's Lake Shore in texts: "LS643" or "LS648"."""
+        controllers = self.__dict__.get("stfmr_lockin_controllers") or {}
+        return getattr(controllers.get("lakeshore"), "short_label", "LS643")
 
     def _stfmr_lockin_show_magnet_choice(self) -> None:
         """The connection row and the field-output panel for the chosen supply."""
@@ -23821,7 +23870,8 @@ class CombinedControlApp:
                     widget.grid_remove()
         frame = self.__dict__.get("stfmr_lockin_field_output_frame")
         if frame is not None:
-            frame.configure(text="Lake Shore 643 field output" if lakeshore else "KEPCO 4886 BOP 20-10 field output")
+            frame.configure(text=f"{self.stfmr_lockin_controllers['lakeshore'].label} field output" if lakeshore
+                            else "KEPCO 4886 BOP 20-10 field output")
         combo = self.__dict__.get("stfmr_lockin_manual_mode_combo")
         if lakeshore:
             # Current only; the rate in the voltage limit's place.
@@ -23864,6 +23914,7 @@ class CombinedControlApp:
         the page's worker (user, 2026-10-21: a ramp takes |dI| / rate, never
         on the Tk thread); Apply output, Start, a hand move and the supply
         choice wait while one is pending.  ``done(result)`` on the Tk thread."""
+        name = self._stfmr_lockin_ls_name()
         self.stfmr_lockin_magnet_job_pending = self.__dict__.get("stfmr_lockin_magnet_job_pending", 0) + 1
         self.stfmr_lockin_status_var.set(status)
         self._update_stfmr_lockin_ui()
@@ -23877,7 +23928,7 @@ class CombinedControlApp:
             self.stfmr_lockin_magnet_job_pending -= 1
             self._update_stfmr_lockin_ui()
             if not self.closing:
-                messagebox.showerror("STFMR LS643", str(error), parent=self.root)
+                messagebox.showerror(f"STFMR {name}", str(error), parent=self.root)
             return
 
         def finished() -> None:
@@ -23887,11 +23938,11 @@ class CombinedControlApp:
             try:
                 result = future.result()
             except LakeShoreRampStopped as stopped:
-                self.stfmr_lockin_status_var.set(f"LS643 ramp stopped: {short_status_error(stopped, 40)}")
+                self.stfmr_lockin_status_var.set(f"{name} ramp stopped: {short_status_error(stopped, 40)}")
             except BaseException as error:
-                self.stfmr_lockin_status_var.set(f"LS643 failed: {short_status_error(error, 40)}")
+                self.stfmr_lockin_status_var.set(f"{name} failed: {short_status_error(error, 40)}")
                 message = str(error)
-                self._stfmr_lockin_after_drain(lambda: messagebox.showerror("STFMR LS643", message,
+                self._stfmr_lockin_after_drain(lambda: messagebox.showerror(f"STFMR {name}", message,
                                                                             parent=self.root))
             else:
                 done(result)
@@ -24226,13 +24277,15 @@ class CombinedControlApp:
     def _apply_stfmr_lockin_lakeshore_output(self) -> None:
         """Apply output with the LS643 chosen (user, 2026-10-21): the target
         checked against the program's 40 A and its LIMIT?, the Rate A/s box,
-        then the ramp on the worker; Zero / OFF stops it (STOP) and zeroes."""
+        then the ramp on the worker; Zero / OFF stops it (STOP) and zeroes.
+        The same for the LS648 (its 100 A), when chosen (user, 2026-11-18)."""
         controller = self.stfmr_lockin_controllers["lakeshore"]
+        name = controller.short_label
         if not controller.connected or self._stfmr_lockin_magnet_jobs_pending():
             return
         if not self.stfmr_lockin_manual_safety_var.get():
             messagebox.showwarning(
-                "STFMR LS643",
+                f"STFMR {name}",
                 "Please tick the magnet, cooling, wiring, limits and personnel safety confirmation first.",
                 parent=self.root,
             )
@@ -24241,7 +24294,7 @@ class CombinedControlApp:
             target = controller.check_current(float(self.stfmr_lockin_manual_target_var.get()))
             rate = self._stfmr_lockin_rate()
         except (TypeError, ValueError, tk.TclError) as error:
-            messagebox.showerror("STFMR LS643", str(error), parent=self.root)
+            messagebox.showerror(f"STFMR {name}", str(error), parent=self.root)
             return
         # An old Zero / OFF must not stop this ramp (no sweep runs or starts:
         # Apply output waits for those).
@@ -24249,11 +24302,11 @@ class CombinedControlApp:
         supply = self._stfmr_lockin_supply()
         # Nor an old Zero / OFF's request (review, 2026-10-21).
         controller.clear_stop_request()
-        self.thread_log(f"STFMR LS643: ramping to {target:+g} A at {rate:g} A/s")
+        self.thread_log(f"STFMR {name}: ramping to {target:+g} A at {rate:g} A/s")
         self._stfmr_lockin_magnet_job(
             lambda: supply.start(target, None),
-            lambda _reading: self.stfmr_lockin_status_var.set(f"LS643 at {target:+g} A; check the LS475"),
-            f"Ramping the LS643 to {target:+g} A at {rate:g} A/s…")
+            lambda _reading: self.stfmr_lockin_status_var.set(f"{name} at {target:+g} A; check the LS475"),
+            f"Ramping the {name} to {target:+g} A at {rate:g} A/s…")
 
     def set_stfmr_lockin_field(self) -> None:
         """Set field (user, 2026-11-14), as the FMR page's: the chosen
@@ -24413,8 +24466,9 @@ class CombinedControlApp:
             controller = self.stfmr_lockin_controllers["lakeshore"]
             if controller.connected and not self.stfmr_lockin_running and not self._stfmr_lockin_magnet_jobs_pending():
                 self._stfmr_lockin_magnet_job(controller.read_state,
-                                              lambda _reading: self.stfmr_lockin_status_var.set("LS643 read back"),
-                                              "Reading the LS643…")
+                                              lambda _reading: self.stfmr_lockin_status_var.set(
+                                                  f"{controller.short_label} read back"),
+                                              f"Reading the {controller.short_label}…")
             return
         if not self.stfmr_lockin_controllers["kepco"].connected:
             return
@@ -24504,12 +24558,13 @@ class CombinedControlApp:
         if not controller.connected:
             return
         if self.stfmr_lockin_running:
-            self.stop_stfmr_lockin_scan(button="LS643 Zero / OFF")
+            self.stop_stfmr_lockin_scan(button=f"{controller.short_label} Zero / OFF")
             return
         supply = self._stfmr_lockin_supply()
+        name = controller.short_label
         self._stfmr_lockin_magnet_job(supply.zero,
-                                      lambda _reading: self.stfmr_lockin_status_var.set("LS643 at 0 A (zeroed)"),
-                                      "Ramping the LS643 to 0 A…")
+                                      lambda _reading: self.stfmr_lockin_status_var.set(f"{name} at 0 A (zeroed)"),
+                                      f"Ramping the {name} to 0 A…")
 
     def _stfmr_lockin_page_closing(self) -> bool:
         """True once the page closes.  With the motor connected, the close no
@@ -24659,7 +24714,8 @@ class CombinedControlApp:
                          f"{controller.program_max_a:g} A: larger currents are refused.")
         if notes and not self.closing:
             message = "Connected. " + " ".join(notes)
-            self._stfmr_lockin_after_drain(lambda: messagebox.showwarning("STFMR LS643", message, parent=self.root))
+            title = f"STFMR {controller.short_label}"
+            self._stfmr_lockin_after_drain(lambda: messagebox.showwarning(title, message, parent=self.root))
 
     # ---- the Newmark stage's Motor row (user, 2026-10-17) -------------------------
     def _stfmr_lockin_motor_locked(self) -> bool:
@@ -24825,14 +24881,15 @@ class CombinedControlApp:
             # at zero (SETI? 0 and |RDGI?| under the tolerance), and no
             # Apply, Read or Zero of it pending.
             lakeshore = self.stfmr_lockin_controllers["lakeshore"]
+            name = lakeshore.short_label
             if pending and self._stfmr_lockin_magnet_jobs_pending():
-                raise RuntimeError("An LS643 setpoint, read or zero is in progress: wait for it, zero the LS643 "
+                raise RuntimeError(f"An {name} setpoint, read or zero is in progress: wait for it, zero the {name} "
                                    "(Zero / OFF), then move the stage")
             if not lakeshore.connected:
-                raise RuntimeError("Connect the LS643 on this page and zero it (Zero / OFF) first: the stage must "
+                raise RuntimeError(f"Connect the {name} on this page and zero it (Zero / OFF) first: the stage must "
                                    "not turn with the magnet on")
             if lakeshore.output_on:
-                raise RuntimeError("The LS643 output is not at zero (or not confirmed at zero): zero it first "
+                raise RuntimeError(f"The {name} output is not at zero (or not confirmed at zero): zero it first "
                                    "(Zero / OFF), then move the stage")
             self._stfmr_lockin_require_other_4886_off()
             return
@@ -24876,7 +24933,7 @@ class CombinedControlApp:
         __dict__, as _stfmr_lockin_other_4886_on."""
         own = self.stfmr_lockin_controllers.get("lakeshore") if self._stfmr_lockin_lakeshore_chosen() else None
         rte = self.__dict__.get("rte_panel")
-        candidates = (("this page's LS643", None if own is not None
+        candidates = ((f"this page's {self._stfmr_lockin_ls_name()}", None if own is not None
                        else self.stfmr_lockin_controllers.get("lakeshore")),
                       ("SHHV page's LS643", ((getattr(rte, "__dict__", {}).get("rte_controllers") or {}).get("lakeshore")
                                             if rte is not None else None)))
@@ -25921,7 +25978,7 @@ class CombinedControlApp:
             # The LS643 (user, 2026-10-21): armed, its rate, and its 40 A
             # (lowered by its LIMIT?) for the currents below.
             if supply.lakeshore_controller.arm_problem:
-                raise ValueError(f"The LS643 is not armed: {supply.lakeshore_controller.arm_problem}")
+                raise ValueError(f"The {supply.name} is not armed: {supply.lakeshore_controller.arm_problem}")
             self._stfmr_lockin_rate()
         forward = self._build_stfmr_one_way_points(
             self.stfmr_lockin_start_var.get(),
@@ -25960,7 +26017,7 @@ class CombinedControlApp:
         Start's second half (after the stage check) and after its folder and
         name dialogs, before any file or output (review, 2026-10-18: an
         instrument disconnected during the stage check was not seen)."""
-        names = {"kepco": "KEPCO 4886", "lakeshore": "LS643", "gauss": "LS475", "smb": "SMB100A", "830": "SR830",
+        names = {"kepco": "KEPCO 4886", "lakeshore": self._stfmr_lockin_ls_name(), "gauss": "LS475", "smb": "SMB100A", "830": "SR830",
                  "mfli": "MFLI"}
         states = self.__dict__.get("stfmr_lockin_connection_vars", {})
         for key in (self._stfmr_lockin_magnet_key(), "gauss", "smb", *self._stfmr_lockin_meter_keys(meter)):
@@ -26191,7 +26248,7 @@ class CombinedControlApp:
                 f"{acquire_s:g} s"
                 + (f" + {move_s:.0f} s of stage moves at {NEWMARK_SPEED_DEG_S:g}°/s"
                    if angle_plan["used"] else "")
-                + (f" + {ramp_s:.0f} s of LS643 ramps at {supply.rate_a_s:g} A/s" if supply.lakeshore else "")
+                + (f" + {ramp_s:.0f} s of {supply.name} ramps at {supply.rate_a_s:g} A/s" if supply.lakeshore else "")
                 + f"{estimate_scale}).\n"
                 # Every scan page zeroes its sources at every end (user,
                 # 2026-10-18); the run folder and its name come after this.
@@ -26874,12 +26931,14 @@ class CombinedControlApp:
                         # The LS643 ramped to 0 A and confirmed there before
                         # the stage turns (user, 2026-10-21).
                         if not supply.connected:
-                            raise RuntimeError("The LS643 is not connected; the sweep stopped before the stage moved")
+                            raise RuntimeError(f"The {supply.name} is not connected; the sweep stopped before the "
+                                               "stage moved")
                         self._stfmr_lockin_require_other_4886_off()
                         was_on = supply.output_on
                         supply.zero()
-                        self._stfmr_lockin_note("STFMR sweep: LS643 ramped to 0 A before the first stage move"
-                                                if was_on else "STFMR sweep: LS643 at 0 A before the first stage move")
+                        self._stfmr_lockin_note(f"STFMR sweep: {supply.name} ramped to 0 A before the first stage move"
+                                                if was_on else
+                                                f"STFMR sweep: {supply.name} at 0 A before the first stage move")
                         moved["state"] = self._stfmr_lockin_move_stage(angle_target)
                         if moved["state"] is None:
                             return
@@ -53129,7 +53188,7 @@ class CombinedControlApp:
                     except BaseException:
                         pass
 
-            threading.Thread(target=close_lakeshore, name="stfmr-ls643-close", daemon=False).start()
+            threading.Thread(target=close_lakeshore, name="stfmr-lakeshore-close", daemon=False).start()
         # The Newmark stage (user, 2026-10-17): disconnected on the page's
         # worker, the thread that holds its USB handles (a move running now
         # sees the stop event set above and sends STOP itself first;

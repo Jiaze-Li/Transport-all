@@ -616,6 +616,97 @@ class StfmrStageInterlockTests(unittest.TestCase):
             a._stfmr_lockin_require_4886_off()
 
 
+class StfmrLs648ChoiceTests(unittest.TestCase):
+    """User, 2026-11-18: "add LS648 connection selection in STFMR module".
+    The ST-FMR page's supply box offers KEPCO4886, LS643 and LS648; the one
+    Lake Shore row connects the chosen model, whose controller (limits,
+    *IDN? check) and address follow the choice."""
+
+    def page(self):
+        a = object.__new__(app.CombinedControlApp)
+        a.closing = False
+        a.stfmr_lockin_closed = False
+        a.root = None
+        a.thread_log = lambda _message: None
+        a.stfmr_lockin_controllers = {
+            "kepco": mock.Mock(connected=False, output_owned=False),
+            "lakeshore": app.LakeShoreMagnetSupplyController(lambda _m: None, "643", owner_scope="STFMR")}
+        a.stfmr_lockin_magnet_choice = "LS643"
+        a.stfmr_lockin_magnet_choice_var = Variable("LS643")
+        a.stfmr_lockin_resource_vars = {"lakeshore": Variable("GPIB0::12::INSTR")}
+        a.stfmr_lockin_connection_vars = {"lakeshore": Variable("Not connected")}
+        a.stfmr_lockin_lakeshore_resources = {m: i["resource"] for m, i in app.LAKESHORE_MAGNET_MODELS.items()}
+        for name in ("_stfmr_lockin_show_magnet_choice", "_update_stfmr_lockin_ui"):
+            setattr(a, name, lambda: None)
+        a._stfmr_lockin_rows_locked = lambda: False
+        error = mock.patch.object(app.messagebox, "showerror")
+        self.error = error.start()
+        self.addCleanup(error.stop)
+        return a
+
+    def choose(self, a, shown):
+        a.stfmr_lockin_magnet_choice_var.set(shown)
+        a._stfmr_lockin_magnet_choice_changed()
+
+    def test_the_choices(self):
+        self.assertEqual(app.STFMR_LOCKIN_MAGNET_CHOICES, ("KEPCO4886", "LS643", "LS648"))
+        self.assertEqual(app.STFMR_FMR_MAGNET_CHOICES, ("KEPCO4886", "LS648"), "the FMR page unchanged")
+
+    def test_choosing_the_ls648_swaps_the_row_to_it_and_back(self):
+        a = self.page()
+        old = a.stfmr_lockin_controllers["lakeshore"]
+        a.stfmr_lockin_resource_vars["lakeshore"].set("GPIB0::7::INSTR")      # a typed 643 address
+        self.choose(a, "LS648")
+        self.error.assert_not_called()
+        ls = a.stfmr_lockin_controllers["lakeshore"]
+        self.assertIsNot(ls, old)
+        self.assertEqual((ls.model, ls.short_label, ls.program_max_a, ls.owner_scope),
+                         ("648", "LS648", 100.0, "STFMR"))
+        self.assertFalse(ls.connected)
+        self.assertEqual(a.stfmr_lockin_magnet_choice, "LS648")
+        self.assertTrue(a._stfmr_lockin_lakeshore_chosen())
+        self.assertEqual(a._stfmr_lockin_supply_label(), "LS648")
+        self.assertEqual(a._stfmr_lockin_supply().name, "LS648")
+        self.assertEqual(a.stfmr_lockin_resource_vars["lakeshore"].get(), "GPIB0::10::INSTR")
+        # To the KEPCO and back to the LS648: the same controller, no swap.
+        self.choose(a, "KEPCO4886")
+        self.assertEqual(a.stfmr_lockin_magnet_choice, app.MAGNET_SUPPLY_KEPCO)
+        self.choose(a, "LS648")
+        self.assertIs(a.stfmr_lockin_controllers["lakeshore"], ls)
+        # Back to the LS643: its typed address again.
+        self.choose(a, "LS643")
+        self.assertEqual(a.stfmr_lockin_controllers["lakeshore"].short_label, "LS643")
+        self.assertEqual(a.stfmr_lockin_resource_vars["lakeshore"].get(), "GPIB0::7::INSTR")
+        self.error.assert_not_called()
+
+    def test_a_connected_or_unconfirmed_lakeshore_is_not_swapped(self):
+        a = self.page()
+        old = a.stfmr_lockin_controllers["lakeshore"]
+        old.instrument = mock.Mock()                                           # connected
+        self.choose(a, "LS648")
+        self.assertIn("The LS643 is still connected: choose LS643, Disconnect it, then choose LS648",
+                      self.error.call_args.args[1])
+        self.assertIs(a.stfmr_lockin_controllers["lakeshore"], old)
+        self.assertEqual((a.stfmr_lockin_magnet_choice, a.stfmr_lockin_magnet_choice_var.get()), ("LS643", "LS643"))
+        # From the KEPCO with the LS643 disconnected but not confirmed at zero.
+        old.instrument = None
+        self.choose(a, "KEPCO4886")
+        old.output_on = True
+        self.choose(a, "LS648")
+        self.assertIn("The LS643 was left with its output not confirmed at zero", self.error.call_args.args[1])
+        self.assertIs(a.stfmr_lockin_controllers["lakeshore"], old)
+        self.assertEqual(a.stfmr_lockin_magnet_choice_var.get(), "KEPCO4886", "the choice put back")
+        # The LS643 itself may still be chosen (to connect and zero it).
+        self.choose(a, "LS643")
+        self.assertEqual(a.stfmr_lockin_magnet_choice, "LS643")
+
+    def test_the_stage_check_names_the_chosen_model(self):
+        a = self.page()
+        self.choose(a, "LS648")
+        with self.assertRaisesRegex(RuntimeError, "Connect the LS648 on this page"):
+            a._stfmr_lockin_require_4886_off()
+
+
 # ---- FMR: the LS648 -----------------------------------------------------------------------------
 class FmrBusyTests(fmr_run.FmrRun):
     """The review's B1 (2026-10-21): _set_stfmr_scan_busy had lost its def,
