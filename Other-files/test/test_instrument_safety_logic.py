@@ -1152,31 +1152,77 @@ class InstrumentSafetyTests(unittest.TestCase):
         self.assertEqual(harness.stfmr_lockin_status_var.get(),
                          "Completed; 4886 and RF zeroed; 1 point saved; 1 frequency")
 
-    def test_stfmr_pna_displays_and_triggers_all_selected_traces_once(self):
-        class FakePNA:
-            def __init__(self):
-                self.commands = []
-                self.data_index = 0
+    class FakePNA:
+        """A PNA's channel 1 for STFMRPNAFMRController: the measurement
+        catalog, window 1's traces, the CW frequency (limited to max_hz) and
+        an error queue (``refuse`` holds commands it answers with an error)."""
 
-            def write(self, command):
-                self.commands.append(command)
+        def __init__(self, catalog=(), traces=(), max_hz=26.5e9, errors=(), refuse=()):
+            self.commands = []
+            self.data_index = 0
+            self.catalog = dict(catalog)
+            self.traces = dict(traces)          # trace number -> measurement name
+            self.max_hz = max_hz
+            self.frequency = 1e9
+            self.errors = list(errors)
+            self.refuse = tuple(refuse)
 
-            def query(self, command):
-                self.commands.append(command)
-                if command == "CALC1:PAR:CAT?":
-                    return ""
-                if command in {"SOUR1:POW1?", "SOUR1:POW2?"}:
-                    return "-10"
-                if command == "*OPC?":
-                    return "1"
-                if command == "CALC1:DATA? FDATA":
-                    self.data_index += 1
-                    return str(-10.0 - self.data_index)
-                raise AssertionError(f"unexpected query: {command}")
+        def write(self, command):
+            self.commands.append(command)
+            if any(command.startswith(prefix) for prefix in self.refuse):
+                self.errors.append(f'-113,"Undefined header; {command}"')
+                return
+            if command.startswith("CALC1:PAR:DEF:EXT "):
+                name, parameter = (part.strip("'") for part in command.split(" ", 1)[1].split(","))
+                self.catalog[name] = parameter
+            elif command == "*CLS":
+                self.errors.clear()
+            elif command.startswith("CALC1:PAR:DEL "):
+                name = command.split(" ", 1)[1].strip("'")
+                if name not in self.catalog:
+                    self.errors.append('-200,"Execution error; measurement not found"')
+                    return
+                del self.catalog[name]
+                self.traces = {n: m for n, m in self.traces.items() if m != name}
+            elif command.startswith("DISP:WIND1:TRAC") and ":FEED " in command:
+                number = int(command[len("DISP:WIND1:TRAC"):command.index(":FEED")])
+                if number in self.traces:
+                    self.errors.append('-221,"Settings conflict; trace number in use"')
+                else:
+                    self.traces[number] = command.split(" ", 1)[1].strip("'")
+            elif command.startswith("SENS1:FREQ:CW "):
+                self.frequency = min(float(command.split(" ", 1)[1]), self.max_hz)
 
-        controller = app.STFMRPNAFMRController(lambda _message: None)
-        fake = FakePNA()
+        def query(self, command):
+            self.commands.append(command)
+            if command == "CALC1:PAR:CAT?":
+                if not self.catalog:
+                    return '"NO CATALOG"'
+                return '"' + ",".join(f"{n},{p}" for n, p in self.catalog.items()) + '"'
+            if command == "DISP:WIND1:CAT?":
+                return '"' + (",".join(str(n) for n in sorted(self.traces)) or "EMPTY") + '"'
+            if command == "SYST:ERR?":
+                return self.errors.pop(0) if self.errors else '+0,"No error"'
+            if command == "SENS1:FREQ:CW?":
+                return f"{self.frequency:+.11E}"
+            if command in {"SOUR1:POW1?", "SOUR1:POW2?"}:
+                return "-10"
+            if command == "*OPC?":
+                return "1"
+            if command == "CALC1:DATA? FDATA":
+                self.data_index += 1
+                return str(-10.0 - self.data_index)
+            raise AssertionError(f"unexpected query: {command}")
+
+    def pna(self, **fake_options):
+        log = []
+        controller = app.STFMRPNAFMRController(log.append)
+        fake = self.FakePNA(**fake_options)
         controller.instrument = fake
+        return controller, fake, log
+
+    def test_stfmr_pna_displays_and_triggers_all_selected_traces_once(self):
+        controller, fake, log = self.pna()
         selected = ("S11", "S12", "S21", "S22")
         actual_powers = controller.configure_cw(5.0e9, selected, -10.0)
         values = controller.trigger_and_read(selected)
@@ -1188,9 +1234,120 @@ class InstrumentSafetyTests(unittest.TestCase):
             self.assertIn(
                 f"DISP:WIND1:TRAC{index}:FEED '{name}'", fake.commands
             )
-        self.assertIn("TRIG:SEQ:SCOP CHAN", fake.commands)
         self.assertIn("SOUR1:POW1 -10", fake.commands)
         self.assertIn("SOUR1:POW2 -10", fake.commands)
+        self.assertEqual(log, [])
+
+    def test_stfmr_pna_setup_sends_only_commands_the_pna_takes(self):
+        """User, 2026-11-18 ("fix 1-5"): TRIG:SEQ:SCOP CHAN (the PNA takes
+        ALL, CURRent or ACTive) and INIT1:CONT OFF (undone by the next
+        TRIG:SEQ:SOUR IMM) are gone; internal trigger, one sweep per read."""
+        controller, fake, _log = self.pna()
+        controller.configure_cw(5.0e9, ("S21", "S12"), -10.0)
+        self.assertFalse([c for c in fake.commands if c.startswith(("TRIG:SEQ:SCOP", "INIT"))])
+        self.assertIn("TRIG:SEQ:SOUR IMM", fake.commands)
+        self.assertIn("SENS1:SWE:TRIG:MODE CHAN", fake.commands)
+
+    def test_stfmr_pna_cw_frequency_is_read_back(self):
+        controller, fake, _log = self.pna(max_hz=26.5e9)
+        controller.configure_cw(26.5e9, ("S21",), -10.0)
+        self.assertIn("SENS1:FREQ:CW?", fake.commands)
+        controller, fake, _log = self.pna(max_hz=26.5e9)
+        with self.assertRaisesRegex(RuntimeError, "target 30 GHz, readback 26.5 GHz"):
+            controller.configure_cw(30e9, ("S21",), -10.0)
+        self.assertNotIn("OUTP ON", fake.commands, "RF stays off")
+
+    def test_stfmr_pna_refused_setup_command_stops_before_rf_on(self):
+        controller, fake, _log = self.pna(refuse=("SENS1:SWE:POIN",))
+        with self.assertRaisesRegex(RuntimeError, "refused part of the FMR set-up: -113"):
+            controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertNotIn("OUTP ON", fake.commands)
+
+    def test_stfmr_pna_errors_from_before_are_logged_not_raised(self):
+        controller, fake, log = self.pna(errors=('-410,"Query INTERRUPTED"',))
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertIn("OUTP ON", fake.commands)
+        self.assertEqual(len(log), 1)
+        self.assertIn("errors queued before the FMR set-up, cleared: -410", log[0])
+
+    def test_stfmr_pna_traces_use_free_numbers_and_unticked_ones_are_deleted(self):
+        """User, 2026-11-18 ("fix 1-5"): the window's own trace 1 stays; a
+        new measurement goes on a free number; one left by an earlier
+        selection is deleted (not swept on), and only after the new one is
+        made, so channel 1 is never empty (review)."""
+        controller, fake, log = self.pna(
+            catalog={"CH1_S11_1": "S11", "TRANSPORT_FMR_S12": "S12", "TRANSPORT_FMR_S22": "S22"},
+            traces={1: "CH1_S11_1", 2: "TRANSPORT_FMR_S12", 3: "TRANSPORT_FMR_S22"})
+        controller.configure_cw(5e9, ("S21", "S12"), -10.0)
+        self.assertEqual(fake.catalog, {"CH1_S11_1": "S11", "TRANSPORT_FMR_S21": "S21",
+                                        "TRANSPORT_FMR_S12": "S12"})
+        self.assertEqual(fake.traces, {1: "CH1_S11_1", 2: "TRANSPORT_FMR_S12", 3: "TRANSPORT_FMR_S21"})
+        self.assertEqual(controller.trace_numbers, {"S21": 3})
+        self.assertNotIn("CALC1:PAR:DEL 'TRANSPORT_FMR_S12'", fake.commands, "kept, not made again")
+        self.assertLess(fake.commands.index("CALC1:PAR:DEF:EXT 'TRANSPORT_FMR_S21','S21'"),
+                        fake.commands.index("CALC1:PAR:DEL 'TRANSPORT_FMR_S22'"))
+        self.assertEqual(log, [])
+        values = controller.trigger_and_read(("S21", "S12"))
+        self.assertEqual(set(values), {"S21", "S12"})
+
+    def test_stfmr_pna_a_new_connection_keeps_matching_measurements(self):
+        controller, fake, log = self.pna(catalog={"TRANSPORT_FMR_S21": "S21"},
+                                         traces={1: "TRANSPORT_FMR_S21"})
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertFalse([c for c in fake.commands if c.startswith(("CALC1:PAR:DEF", "CALC1:PAR:DEL", "DISP:"))])
+        self.assertEqual(controller.trigger_and_read(("S21",)), {"S21": -11.0})
+        self.assertEqual(log, [])
+
+    def test_stfmr_pna_refused_measurement_is_an_error(self):
+        controller, fake, log = self.pna(refuse=("CALC1:PAR:DEF:EXT",))
+        with self.assertRaisesRegex(RuntimeError, "refused the FMR measurements: -113"):
+            controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertNotIn("OUTP ON", fake.commands)
+        self.assertEqual(log, [])
+        with self.assertRaisesRegex(RuntimeError, "not yet configured"):
+            controller.trigger_and_read(("S21",))
+        fake.refuse = ()                        # a retry makes it
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertEqual(fake.catalog, {"TRANSPORT_FMR_S21": "S21"})
+
+    def test_stfmr_pna_many_old_errors_are_cleared(self):
+        controller, fake, log = self.pna(errors=['-221,"Settings conflict"'] * 80)
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertIn("*CLS", fake.commands)
+        self.assertIn("OUTP ON", fake.commands)
+        self.assertEqual(len(log), 1)
+        self.assertIn("more than 50 errors queued", log[0])
+
+    def test_stfmr_pna_reading_error_fails_the_reading(self):
+        """Review, 2026-11-18: a refused select would leave the last trace
+        selected and its value saved under another S-parameter."""
+        controller, fake, _log = self.pna()
+        controller.configure_cw(5e9, ("S21", "S12"), -10.0)
+        fake.refuse = ("CALC1:PAR:SEL 'TRANSPORT_FMR_S12'",)
+        with self.assertRaisesRegex(RuntimeError, "error during the reading: -113"):
+            controller.trigger_and_read(("S21", "S12"))
+
+    def test_stfmr_pna_same_selection_is_not_set_up_again(self):
+        controller, fake, log = self.pna()
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        fake.commands.clear()
+        controller.configure_cw(6e9, ("S21",), -10.0)
+        self.assertFalse([c for c in fake.commands if c.startswith(("CALC1:PAR:DEF", "CALC1:PAR:DEL", "DISP:"))])
+        # A new selection, or a catalog changed on the PNA, sets up again.
+        controller.configure_cw(6e9, ("S12",), -10.0)
+        self.assertEqual(fake.catalog, {"TRANSPORT_FMR_S12": "S12"})
+        del fake.catalog["TRANSPORT_FMR_S12"]
+        controller.configure_cw(6e9, ("S12",), -10.0)
+        self.assertEqual(fake.catalog, {"TRANSPORT_FMR_S12": "S12"})
+        self.assertEqual(log, [])
+
+    def test_stfmr_pna_display_errors_are_logged_and_measuring_goes_on(self):
+        controller, fake, log = self.pna(refuse=("DISP:WIND1:TRAC",))
+        controller.configure_cw(5e9, ("S21",), -10.0)
+        self.assertIn("OUTP ON", fake.commands)
+        self.assertEqual(len(log), 1)
+        self.assertIn("may not all show in window 1", log[0])
+        self.assertEqual(controller.trigger_and_read(("S21",)), {"S21": -11.0})
 
     def test_stfmr_pna_power_limit_and_source_port_mapping(self):
         controller = app.STFMRPNAFMRController(lambda _message: None)

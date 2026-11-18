@@ -6,6 +6,33 @@
   700, 800, 900, 1000 (200 to 1100 G since 2026-11-17). The box keeps its width
   (`RTE_OUTER_LIST_WIDTH_TEXT`). Every other start-up value is unchanged (Acquire s still starts at 5).
 
+## FMR (PNA) S-parameter set-up checked against Keysight's command reference (user, 2026-11-18)
+
+- **Request:** after a read-only review of how the FMR page measures S21/S12 ("check the S21/S12 data measure in
+  FMR module is right": the saved dB values were right), "fix 1-5". In `STFMRPNAFMRController` and
+  `stfmr_fmr_mean_reading`:
+  1. `TRIG:SEQ:SCOP CHAN` is no longer sent (the PNA takes ALL, CURRent or ACTive, so it was refused unseen), nor
+     `INIT1:CONT OFF` (it set the trigger source to Manual and the next `TRIG:SEQ:SOUR IMM` set it back). Each
+     reading is still `SENS1:SWE:MODE SING` + `*OPC?`: one sweep of channel 1, waited for.
+  2. The CW frequency is read back (`SENS1:FREQ:CW?`, within `STFMR_PNA_FREQUENCY_TOLERANCE_HZ` = 10 Hz) as the
+     port power is: a frequency outside the PNA's range (N5242A: 26.5 GHz) is limited by the PNA, and the CSV
+     would have named the typed one. The error queue (`SYST:ERR?`) is emptied before the set-up (errors already
+     there are logged and cleared with `*CLS`, not raised) and read before RF on: a refused set-up command stops
+     the scan with the PNA's error text, RF not switched on. It is read again after every reading: a refused
+     `CALC1:PAR:SEL` would leave the last trace selected and its value saved under another S-parameter.
+  3. A new trace goes on a window-1 trace number not already used (`DISP:WIND1:CAT?`); re-feeding a used number
+     was refused, so a curve could be missing on the PNA's screen (the data were measured all the same). A display
+     error is logged, not raised; a refused definition or deletion stops the scan.
+  4. The program's measurements (`TRANSPORT_FMR_<S>`, `STFMR_PNA_MEASUREMENT_PREFIX`) are exactly the ticked ones:
+     a missing one is made (`CALC1:PAR:DEF:EXT`), then an unticked one is deleted (`CALC1:PAR:DEL`), so it no
+     longer takes its source port's pass in every sweep; new ones are made before any is deleted, so channel 1
+     is never left empty (an emptied channel may lose its IF bandwidth, averaging or calibration). Matching
+     ones are kept, and when nothing changed nothing is sent (the frequency sweep sets up at every frequency).
+  5. Acquire s averages the linear magnitude |S| = 10^(dB/20) and saves it in dB (the mean of the dB values
+     before); one reading is saved as read.
+- Not run on the PNA yet. If a scan now stops with "the PNA refused part of the FMR set-up: ...", the quoted error
+  names the command.
+
 ## FMR scan Acquire s and Settle s, LS648 at GPIB0::10; SHHV starts on the user's Angle+Field2 figure (user, 2026-11-17)
 
 - **FMR connections:** "FMR default setting as the figure." The LS648 starts at GPIB0::10 (was GPIB0::15,
@@ -19,7 +46,7 @@
   (`stfmr_fmr_acquire_var`) at the end of its first row, over Settle s; that row had a free place, so the box is no
   wider. After Settle s and the 475 settle, the 475 and the PNA are read back to back until Acquire s has passed
   since the first reading began (at least one), and the row saves the mean field and the mean of each
-  S-parameter in dB as read (`stfmr_fmr_mean_reading`; a 475 unit change part way fails the point). Start-up
+  S-parameter in dB as read (the mean of |S| since 2026-11-18, see above; `stfmr_fmr_mean_reading`; a 475 unit change part way fails the point). Start-up
   value 2 s (user: "set FMR acquire s default to 2 s"; 0 s, one reading as before, when the box came in). Checked at Start: 0 to `STFMR_FMR_MAX_ACQUIRE_S` = 3600 s. A Stop
   ends the readings and the point is not saved. The Yes/No names Settle s and Acquire s; the time estimate counts
   Acquire s; `run_prepared` has `acquire_s`; CSV columns `acquire_s`, `pna_reading_count` last. The

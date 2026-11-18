@@ -9,6 +9,7 @@ the card's current, a fake PNA, futures completed at once and a root.after()
 queue on a fake clock.  Every dialog is answered here; no Tk window opens."""
 import csv
 import json
+import math
 import tempfile
 import threading
 import time
@@ -364,7 +365,8 @@ class AcquireTests(FmrRun):
         self.assertEqual(a.stfmr_controllers["vna"].reads, 4)
         (row,) = a.stfmr_fmr_rows
         self.assertEqual((row["acquire_s"], row["pna_reading_count"]), (1.0, 4))
-        self.assertAlmostEqual(row["S21"], -3.0 - (1 + 2 + 3 + 4) / 4)
+        # The mean of |S| in dB (user, 2026-11-18), not the mean of the dB values.
+        self.assertAlmostEqual(row["S21"], 20 * math.log10(sum(10 ** ((-3.0 - k) / 20) for k in (1, 2, 3, 4)) / 4))
         self.assertAlmostEqual(row["measured_field_g"], 150.0)
         header = self.rows(self.folder)[0]
         self.assertEqual(header[-2:], ["acquire_s", "pna_reading_count"], "last, older columns in place")
@@ -404,6 +406,18 @@ class AcquireTests(FmrRun):
             with self.subTest(text=text), self.assertRaises(ValueError) as caught:
                 a._stfmr_fmr_acquire_input()
             self.assertIn(words, str(caught.exception))
+
+    def test_the_mean_is_of_the_linear_magnitude(self):
+        """User, 2026-11-18 ("fix 1-5"): the S values are averaged as |S| =
+        10^(dB/20) and saved in dB; one reading is saved as read."""
+        g = {"field": 1.0, "unit": "G", "unit_code": 1}
+        _field, values, _g, count = app.stfmr_fmr_mean_reading([(g, {"S21": -10.0, "S12": -6.0}),
+                                                                 (g, {"S21": -20.0, "S12": -6.0})])
+        self.assertEqual(count, 2)
+        self.assertAlmostEqual(values["S21"], 20 * math.log10((10 ** -0.5 + 10 ** -1.0) / 2))
+        self.assertAlmostEqual(values["S21"], -13.63, places=2)       # not -15, the dB mean
+        self.assertAlmostEqual(values["S12"], -6.0)
+        self.assertEqual(app.stfmr_fmr_mean_reading([(g, {"S21": -12.345})])[1], {"S21": -12.345})
 
     def test_the_mean_refuses_a_unit_change(self):
         readings = [({"field": 1.0, "unit": "G", "unit_code": 1}, {"S21": -3.0}),

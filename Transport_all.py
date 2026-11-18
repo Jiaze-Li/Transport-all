@@ -3808,6 +3808,15 @@ STFMR_S_PARAMETERS = ("S11", "S12", "S21", "S22")
 STFMR_PNA_DISPLAY_WINDOW = 1
 STFMR_PNA_DEFAULT_POWER_DBM = -10.0
 STFMR_PNA_MAX_POWER_DBM = 0.0
+# The FMR page's PNA measurements are named this prefix + the S-parameter;
+# measurements with it are the program's own (deleted and made again when the
+# selection changes; user, 2026-11-18: "fix 1-5").
+STFMR_PNA_MEASUREMENT_PREFIX = "TRANSPORT_FMR_"
+# The CW frequency read back must be within this of the one written (the
+# PNA's resolution is 1 Hz).
+STFMR_PNA_FREQUENCY_TOLERANCE_HZ = 10.0
+# SYST:ERR? is read at most this many times to empty the queue.
+STFMR_PNA_MAX_ERROR_READS = 50
 # Do not record a PNA point while the 475 is still responding to a new 4886
 # setpoint.  A fixed short delay admitted transition points after frequency
 # changes and created artificial long horizontal segments in the plot.
@@ -3912,8 +3921,9 @@ STFMR_LOCKIN_DEFAULT_SETTLE_S = 1.0
 # The FMR (PNA) field scan's "Acquire s" (user, 2026-11-17: "add acquire time
 # in FMR scan module"): once the 475 has settled at a point, the 475 and the
 # PNA are read again and again, back to back, for Acquire s, and the row
-# saves the mean field and the mean of each S-parameter (dB, as read) with
-# the number of readings.  0 s is one reading, the scan as it was before
+# saves the mean field and the mean of each S-parameter (the mean of |S|,
+# in dB; a mean of the dB values until 2026-11-18) with the number of
+# readings.  0 s is one reading, the scan as it was before
 # Acquire s.  Start-up value 2 s (user, 2026-11-17: "set FMR acquire s
 # default to 2 s"; 0 s when the box came in that day).  The same one-hour
 # bound as Settle / Acquire on the ST-FMR page.
@@ -3937,7 +3947,15 @@ def stfmr_fmr_mean_reading(readings):
     field = dict(first, field=sum(float(field["field"]) for field, _values in readings) / count)
     field_g = sum(STFMRGauss475Controller.value_in_gauss(item) for item, _values in readings) / count
     names = list(readings[0][1])
-    values = {name: sum(float(item[name]) for _field, item in readings) / count for name in names}
+    if count == 1:
+        values = {name: float(readings[0][1][name]) for name in names}
+    else:
+        # The mean of the linear magnitudes |S| = 10^(dB/20), saved in dB
+        # again (user, 2026-11-18: "fix 1-5"; the mean of the dB values
+        # before, a log mean).
+        values = {name: 20.0 * math.log10(sum(10.0 ** (float(item[name]) / 20.0)
+                                                for _field, item in readings) / count)
+                  for name in names}
     return field, values, field_g, count
 STFMR_LOCKIN_DEFAULT_ACQUIRE_S = 2.0
 STFMR_LOCKIN_MAX_SETTLE_S = 3600.0
@@ -6849,6 +6867,8 @@ class STFMRPNAFMRController:
         self.identity = ""
         self.measurements: dict[str, str] = {}
         self.trace_numbers: dict[str, int] = {}
+        # The selection ensure_measurements last set up on this connection.
+        self.built_selection: tuple[str, ...] | None = None
         self.lock = threading.RLock()
 
     @property
@@ -6948,28 +6968,96 @@ class STFMRPNAFMRController:
             for index in range(0, len(parts) - 1, 2)
         ]
 
+    def _read_errors(self) -> list[str]:
+        """Empty the PNA's error queue (SYST:ERR? until code 0) and return
+        the errors read, oldest first (user, 2026-11-18: "fix 1-5"; the set-up
+        had never looked at it, so a rejected command passed unseen)."""
+        errors = []
+        for _ in range(STFMR_PNA_MAX_ERROR_READS):
+            reply = self._query("SYST:ERR?")
+            try:
+                code = int(float(reply.split(",", 1)[0]))
+            except ValueError:
+                raise RuntimeError(f"the PNA's SYST:ERR? reply cannot be parsed: {reply!r}") from None
+            if code == 0:
+                return errors
+            errors.append(reply)
+        errors.append(f"(more than {STFMR_PNA_MAX_ERROR_READS} errors queued)")
+        return errors
+
+    def _window_traces(self) -> set[int]:
+        """The trace numbers already in the FMR display window."""
+        response = self._query(f"DISP:WIND{STFMR_PNA_DISPLAY_WINDOW}:CAT?").replace('"', "").strip()
+        if response.upper() in {"", "EMPTY", "NO CATALOG"}:
+            return set()
+        try:
+            return {int(float(part)) for part in response.split(",") if part.strip()}
+        except ValueError:
+            raise RuntimeError(f"the PNA's window catalog cannot be parsed: {response!r}") from None
+
     def ensure_measurements(self, selected) -> None:
+        """The program's measurements (TRANSPORT_FMR_<S>) in channel 1 are
+        exactly the selected ones (user, 2026-11-18: "fix 1-5").  A missing
+        one is made and shown on a trace number not already used in the
+        window (re-feeding a used number was refused, so a curve could be
+        missing on the PNA's screen); then any of the program's measurements
+        not selected is deleted (it would still take its source port's pass
+        in every sweep).  The new ones are made before any is deleted, so
+        channel 1 is never left empty (an emptied channel may lose its
+        settings).  A refused definition or deletion is an error; the display
+        is not needed to measure, so a display error is logged.  Unchanged
+        (this connection made them and the catalog still matches), nothing
+        is sent: the frequency sweep calls this at every frequency."""
         selected = self.normalize_selected(selected)
-        catalog = dict(self._catalog())
-        self._write(f"DISP:WIND{STFMR_PNA_DISPLAY_WINDOW}:STAT ON")
-        self.measurements.clear()
-        self.trace_numbers.clear()
-        for trace_number, parameter in enumerate(selected, start=1):
-            name = f"TRANSPORT_FMR_{parameter}"
-            existing = catalog.get(name)
-            if existing is None:
-                self._write(f"CALC1:PAR:DEF:EXT '{name}','{parameter}'")
-            elif existing != parameter:
-                raise RuntimeError(
-                    f"PNA already has a measurement named {name!r}, but its parameter is {existing}"
-                )
-            self.measurements[parameter] = name
-            self.trace_numbers[parameter] = trace_number
-            self._write(
-                f"DISP:WIND{STFMR_PNA_DISPLAY_WINDOW}:TRAC{trace_number}:FEED '{name}'"
-            )
-            self._write(f"CALC1:PAR:SEL '{name}'")
-            self._write("CALC1:FORM MLOG")
+        wanted = {f"{STFMR_PNA_MEASUREMENT_PREFIX}{parameter}": parameter for parameter in selected}
+        with self.lock:
+            ours = {name: parameter for name, parameter in self._catalog()
+                    if name.startswith(STFMR_PNA_MEASUREMENT_PREFIX)}
+            if self.built_selection == selected and ours == wanted:
+                return
+            self.built_selection = None
+            self.measurements.clear()
+            self.trace_numbers.clear()
+            # A name of ours holding another parameter (changed by hand) is
+            # deleted before the name is made again.
+            for name, parameter in wanted.items():
+                if name in ours and ours[name] != parameter:
+                    self._write(f"CALC1:PAR:DEL '{name}'")
+                    del ours[name]
+            new = [name for name in wanted if name not in ours]
+            for name in new:
+                self._write(f"CALC1:PAR:DEF:EXT '{name}','{wanted[name]}'")
+            for name in ours:
+                if name not in wanted:
+                    self._write(f"CALC1:PAR:DEL '{name}'")
+            errors = self._read_errors()
+            if errors:
+                raise RuntimeError(f"the PNA refused the FMR measurements: {'; '.join(errors)}")
+            catalog = dict(self._catalog())
+            missing = [name for name, parameter in wanted.items() if catalog.get(name) != parameter]
+            if missing:
+                raise RuntimeError(f"the PNA does not list the FMR measurement(s) {', '.join(missing)}")
+            if new:
+                self._write(f"DISP:WIND{STFMR_PNA_DISPLAY_WINDOW}:STAT ON")
+                problems = self._read_errors()
+                if not problems:
+                    used = self._window_traces()
+                    trace_number = 0
+                    for name in new:
+                        trace_number += 1
+                        while trace_number in used:
+                            trace_number += 1
+                        self._write(f"DISP:WIND{STFMR_PNA_DISPLAY_WINDOW}:TRAC{trace_number}:FEED '{name}'")
+                        self.trace_numbers[wanted[name]] = trace_number
+                    problems = self._read_errors()
+                if problems:
+                    self.logger(f"PNA: the FMR traces may not all show in window {STFMR_PNA_DISPLAY_WINDOW} "
+                                f"({'; '.join(problems)}); they are measured all the same")
+            for name, parameter in wanted.items():
+                self._write(f"CALC1:PAR:SEL '{name}'")
+                self._write("CALC1:FORM MLOG")
+                self.measurements[parameter] = name
+            self.built_selection = selected
 
     @staticmethod
     def source_ports_for(selected) -> tuple[int, ...]:
@@ -6997,14 +7085,35 @@ class STFMRPNAFMRController:
         selected = self.normalize_selected(selected)
         source_ports = self.source_ports_for(selected)
         with self.lock:
+            # Errors queued before this set-up are not its own: logged and
+            # cleared, so the check below sees only this set-up's.
+            stale = self._read_errors()
+            if stale:
+                # *CLS as well: the queue may hold more than were read.
+                self._write("*CLS")
+                self.logger(f"PNA: errors queued before the FMR set-up, cleared: {'; '.join(stale)}")
             self.ensure_measurements(selected)
-            self._write("INIT1:CONT OFF")
+            # Internal trigger; each reading's SENS1:SWE:MODE SING; *OPC? is
+            # then one sweep of channel 1, waited for (Keysight's "Triggering
+            # the PNA using SCPI").  "INIT1:CONT OFF" (set the source to
+            # Manual, which the next line set back) and "TRIG:SEQ:SCOP CHAN"
+            # (not a value the PNA takes: ALL, CURRent or ACTive) are no
+            # longer sent (user, 2026-11-18: "fix 1-5").
             self._write("TRIG:SEQ:SOUR IMM")
-            self._write("TRIG:SEQ:SCOP CHAN")
             self._write("SENS1:SWE:TRIG:MODE CHAN")
             self._write(f"SENS1:FREQ:CW {frequency:.12g}")
             self._write("SENS1:SWE:TYPE CW")
             self._write("SENS1:SWE:POIN 1")
+            # The CW frequency read back, as the power below: the PNA limits
+            # a frequency outside its range (the N5242A's top is 26.5 GHz)
+            # instead of refusing it, and the CSV would then name the typed
+            # one (user, 2026-11-18).
+            actual_frequency = self._first_float(self._query("SENS1:FREQ:CW?"))
+            if abs(actual_frequency - frequency) > STFMR_PNA_FREQUENCY_TOLERANCE_HZ:
+                raise RuntimeError(
+                    f"PNA CW frequency write did not take effect: target {frequency / 1e9:.9g} GHz, "
+                    f"readback {actual_frequency / 1e9:.9g} GHz (outside this PNA's range?)"
+                )
             actual_powers = {}
             for port in source_ports:
                 self._write(f"SOUR1:POW{port} {power:.12g}")
@@ -7015,6 +7124,11 @@ class STFMRPNAFMRController:
                         f"target {power:g} dBm, readback {actual:g} dBm"
                     )
                 actual_powers[port] = actual
+            # Any command of this set-up the PNA refused stops it here,
+            # before RF on (user, 2026-11-18: "fix 1-5").
+            errors = self._read_errors()
+            if errors:
+                raise RuntimeError(f"the PNA refused part of the FMR set-up: {'; '.join(errors)}")
             self._write("OUTP ON")
             self._query("*OPC?")
             return actual_powers
@@ -7039,7 +7153,7 @@ class STFMRPNAFMRController:
                 raise RuntimeError(
                     f"PNA measurement not yet configured: {', '.join(missing)}"
                 )
-            # One channel sweep updates every displayed selected trace.  A
+            # One channel sweep updates every selected measurement, shown or not.  A
             # cross-source selection (for example S11+S12) still contains two
             # internal source-port steps, but every value belongs to this same
             # magnetic-field point and no hidden trace can remain stale.
@@ -7053,6 +7167,12 @@ class STFMRPNAFMRController:
                 values[parameter] = self._first_float(
                     self._query("CALC1:DATA? FDATA")
                 )
+            # A refused select would leave the last trace selected, and its
+            # value would be saved under this name: any error fails the
+            # reading (review, 2026-11-18).
+            errors = self._read_errors()
+            if errors:
+                raise RuntimeError(f"the PNA reported an error during the reading: {'; '.join(errors)}")
             return values
 
     def rf_off(self) -> None:
@@ -7102,6 +7222,7 @@ class STFMRPNAFMRController:
             self.identity = ""
             self.measurements.clear()
             self.trace_numbers.clear()
+            self.built_selection = None
             self.logger("STFMR PNA disconnected")
 
 
