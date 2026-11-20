@@ -1,5 +1,11 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV Angle+Field2 starts at 200 to 1000 G (user, 2026-11-20)
+
+- "default field to this" (the user's SHHV figure): the Outer field G box starts with 200, 300, 400, 500, 600,
+  700, 800, 900, 1000 (200 to 1100 G since 2026-11-17). The box keeps its width
+  (`RTE_OUTER_LIST_WIDTH_TEXT`). Every other start-up value is unchanged (Acquire s still starts at 5).
+
 ## FMR scan Acquire s and Settle s, LS648 at GPIB0::10; SHHV starts on the user's Angle+Field2 figure (user, 2026-11-17)
 
 - **FMR connections:** "FMR default setting as the figure." The LS648 starts at GPIB0::10 (was GPIB0::15,

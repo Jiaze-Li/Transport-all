@@ -3097,11 +3097,11 @@ class OuterListTests(unittest.TestCase):
         row = app.RTE_OUTER_ROWS["Angle+Field2"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))
-        # The user's start-up series (their figure, 2026-11-17; 7000, 200,
-        # 5000, ... before), within the 7300 Oe.  The box is still measured
-        # against the earlier, longer series.
+        # The user's start-up series (their figure, 2026-11-20; to 1100 G
+        # from 2026-11-17, 7000, 200, 5000, ... before), within the 7300 Oe.
+        # The box is still measured against the earlier, longer series.
         self.assertEqual(app.rte_outer_list_plan(row["defaults"][0]),
-                         (200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 1100.0))
+                         (200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0))
         self.assertEqual(app.rte_outer_list_plan(app.RTE_OUTER_LIST_WIDTH_TEXT),
                          (7000.0, 200.0, 5000.0, 500.0, 2000.0, 300.0, 6000.0, 1000.0, 3500.0, 200.0, 7000.0))
         note = app.RTE_SCAN_NOTES["Angle+Field2"]
@@ -3212,11 +3212,11 @@ class OuterRowPageTests(unittest.TestCase):
         listed = [widget for widget, _options in panel.rte_outer_list_widgets]
         self.assertEqual(len(listed), 2, "its label and its box")
         # Shown at start-up (Angle+Field2, the user's figure, 2026-11-17),
-        # with the figure's 200 to 1100 G.
+        # with the figure's 200 to 1000 G (2026-11-20; 1100 G before).
         self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
         self.assertFalse(any(w.grid_removed for w in listed), "shown at start-up")
         self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
-                         "200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100")
+                         "200, 300, 400, 500, 600, 700, 800, 900, 1000")
         self.mode(panel, "Angle")
         self.assertTrue(all(w.grid_removed for w in listed), "removed on Angle")
         self.mode(panel, "Angle+Field2")
@@ -3227,7 +3227,7 @@ class OuterRowPageTests(unittest.TestCase):
         self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
         self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
         self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
-                         "200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100")
+                         "200, 300, 400, 500, 600, 700, 800, 900, 1000")
         self.assertEqual((entry.grid_options["row"], entry.grid_options["column"], entry.grid_options["columnspan"]),
                          (3, 1, 6))
         self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")

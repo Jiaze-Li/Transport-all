@@ -3615,11 +3615,12 @@ RTE_FIELD_OUTER_MODES = ('Angle+Field', 'Angle+Field2')
 RTE_OUTER_ROWS = {
     'Angle+Field': dict(label='Outer KEPCO A:', defaults=('3', '9', '1'), index_column='outer_field_index'),
     # One box, not three: the fields in G in the order typed; ``listed``
-    # marks it.  The start-up series is the user's figure (2026-11-17,
-    # later: "change default setting as fig like."): 200 to 1100 G in 100 G
-    # steps; before that 7000, 200, 5000, ... (RTE_OUTER_LIST_WIDTH_TEXT).
+    # marks it.  The start-up series is the user's figure (2026-11-20:
+    # "default field to this"): 200 to 1000 G in 100 G steps; 200 to 1100 G
+    # from 2026-11-17 ("change default setting as fig like."), before that
+    # 7000, 200, 5000, ... (RTE_OUTER_LIST_WIDTH_TEXT).
     'Angle+Field2': dict(label='Outer field G:',
-                         defaults=('200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100',),
+                         defaults=('200, 300, 400, 500, 600, 700, 800, 900, 1000',),
                          index_column='outer_field_index', listed=True),
     'Angle+Current': dict(label='Outer 6221 mA RMS:', defaults=('0.01', '1', '0.01'),
                           index_column='outer_current_index'),
@@ -57194,7 +57195,7 @@ class RTEPanel(PPMSPanel):
         # The start-up scan (user's figures, 2026-10-18, 2026-11-16 and
         # 2026-11-17): Angle+Field2, the stage 0 to -360 deg in 5 deg steps,
         # Settle s 0.5, Acquire s 5, Loops 1, round trip off (user,
-        # 2026-10-18), outer fields 200 to 1100 G.
+        # 2026-10-18), outer fields 200 to 1000 G (2026-11-20).
         # The mode change sets the range, round trip, units label, scan note,
         # outer row (removed) and plot axis, as choosing Angle does.
         self.ppms_acquisition_time_var.set(f'{RTE_ACQUISITION_S:g}')
