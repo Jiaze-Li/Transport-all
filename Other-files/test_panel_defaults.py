@@ -657,9 +657,11 @@ class PanelDefaultTests(unittest.TestCase):
         self.assertEqual(str(shv.rte_set_field_button.cget("state")), str(shv.rte_apply_button.cget("state")))
         # The buttons sit in their pages' field panels: FMR's and ST-FMR's
         # field-output boxes (ST-FMR's beside the safety tick, so the panel
-        # is no taller), SHHV's rack beside the LS475's reading.
+        # is no taller; its line is the panel's own since the wide layout,
+        # user, 2026-11-20, which puts it on a line under the buttons),
+        # SHHV's rack beside the LS475's reading.
         self.assertIs(a.stfmr_set_field_button.master.master, a.stfmr_field_output_frame)
-        self.assertIs(a.stfmr_lockin_set_field_button.master.master.master, a.stfmr_lockin_field_output_frame)
+        self.assertIs(a.stfmr_lockin_set_field_button.master.master, a.stfmr_lockin_field_output_frame)
 
     def test_every_lock_in_time_constant_box_starts_at_1_s(self):
         """User, 2026-10-14: "all default lock-in time constant change to

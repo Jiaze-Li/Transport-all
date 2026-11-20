@@ -146,36 +146,132 @@ class FieldOutputTests(unittest.TestCase):
         return {w.cget("text"): w for w in descendants(tab) if isinstance(w, tk.ttk.LabelFrame)}
 
     def test_connections_are_left_of_the_output_panel(self):
-        for tab_name, tab, title in (("STFMR", self.a.stfmr_lockin_tab, "STFMR instrument connections"),
-                                     ("FMR", self.a.stfmr_tab, "FMR instrument connections")):
-            with self.subTest(page=tab_name):
-                self.arranged(LAB_WIDE, tab_name, self.a.stfmr_lockin_resource_widgets
-                              if tab_name == "STFMR" else self.a.stfmr_device_resource_widgets)
-                frames = self.page_frames(tab)
-                panel = frames["KEPCO 4886 BOP 20-10 field output"]
-                connections = frames[title]
-                self.assertIs(panel.master, connections.master, "they share one top row")
-                self.assertEqual(int(panel.master.grid_info()["row"]), 0)
-                self.assertEqual((int(connections.grid_info()["column"]), int(panel.grid_info()["column"])), (0, 1))
-                self.assertLess(connections.winfo_rootx(), panel.winfo_rootx())
-                self.assertEqual(int(panel.master.columnconfigure(1)["weight"]), 1,
-                                 "the panel takes the spare width; the list stays compact")
-        self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
+        self.arranged(LAB_WIDE, "FMR", self.a.stfmr_device_resource_widgets)
+        frames = self.page_frames(self.a.stfmr_tab)
+        panel = frames["KEPCO 4886 BOP 20-10 field output"]
+        connections = frames["FMR instrument connections"]
+        self.assertIs(panel.master, connections.master, "they share one top row")
+        self.assertEqual(int(panel.master.grid_info()["row"]), 0)
+        self.assertEqual((int(connections.grid_info()["column"]), int(panel.grid_info()["column"])), (0, 1))
+        self.assertLess(connections.winfo_rootx(), panel.winfo_rootx())
+        self.assertEqual(int(panel.master.columnconfigure(1)["weight"]), 1,
+                         "the panel takes the spare width; the list stays compact")
+        # ST-FMR in the 1101 px window: the panel in the top row, stacked
+        # under the connections, as before.
+        try:
+            self.arranged(self.LAB_DEFAULT, "STFMR", self.a.stfmr_lockin_resource_widgets)
+            frames = self.page_frames(self.a.stfmr_lockin_tab)
+            panel = frames["KEPCO 4886 BOP 20-10 field output"]
+            connections = frames["STFMR instrument connections"]
+            self.assertFalse(self.a.stfmr_lockin_wide_layout)
+            self.assertIs(self.root.nametowidget(panel.grid_info()["in"]), connections.master)
+            self.assertGreaterEqual(panel.winfo_rooty(), connections.winfo_rooty() + connections.winfo_height())
+        finally:
+            self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
         frames = self.page_frames(self.a.stfmr_lockin_tab)
-        self.assertEqual(int(frames["STFMR field-sweep parameters"].grid_info()["row"]), 1)
-        outer = frames["KEPCO 4886 BOP 20-10 field output"].master.master
-        self.assertEqual(int(outer.rowconfigure(4)["weight"]), 1, "plots keep the spare height")
-        self.assertEqual(max(int(w.grid_info()["row"]) for w in outer.winfo_children()), 4)
+        sweep = frames["STFMR field-sweep parameters"]
+        page = frames["STFMR instrument connections"].master.master
+        self.assertEqual(int(sweep.master.grid_info()["row"]), 1)
+        self.assertEqual(int(page.rowconfigure(4)["weight"]), 1, "plots keep the spare height")
+        self.assertEqual(max(int(w.grid_info()["row"]) for w in page.winfo_children() if w.winfo_manager()), 4)
+
+    def test_the_wide_layout_puts_the_output_panel_beside_the_sweep_table(self):
+        """User, 2026-11-20: "add a column in the instruments connection and
+        reduce the height of the field sweep section to create more vertical
+        space for the plots below"; the field-output panel beside the sweep
+        table (the user's choice).  At the lab's 2000 px window: the six
+        connection rows in two columns of three, the live readouts right of
+        them; the table in five rows with the panel at its right; Start ...
+        Set motor 0° on one line under both; nothing past the page's edge or
+        squeezed; and the plots taller than in the narrow layout at the same
+        window height."""
+        a = self.a
+        frames = self.page_frames(a.stfmr_lockin_tab)
+        panel = frames["KEPCO 4886 BOP 20-10 field output"]
+        sweep = frames["STFMR field-sweep parameters"]
+        connections = frames["STFMR instrument connections"]
+        canvases = (a.stfmr_lockin_x_canvas, a.stfmr_lockin_y_canvas, a.stfmr_lockin_theta_canvas,
+                    a.stfmr_lockin_canvas)
+        try:
+            # The narrow layout at 2000 px wide is not shown, so the plots'
+            # gain is judged against the 1101 px window at the same height.
+            self.arranged(self.LAB_DEFAULT, "STFMR", a.stfmr_lockin_resource_widgets)
+            narrow = min(c.winfo_height() for c in canvases)
+            self.arranged(LAB_WIDE, "STFMR", a.stfmr_lockin_resource_widgets)
+            self.assertTrue(a.stfmr_lockin_wide_layout)
+            wide = min(c.winfo_height() for c in canvases)
+            print(f"STFMR plots: {narrow} px at {self.LAB_DEFAULT} px, {wide} px in the wide layout at "
+                  f"{LAB_WIDE} px; connections {connections.winfo_width()}x{connections.winfo_height()}, "
+                  f"table box {sweep.winfo_width()}x{sweep.winfo_height()}, panel "
+                  f"{panel.winfo_width()}x{panel.winfo_height()} px")
+            self.assertGreater(wide, narrow, "the wide layout gives the plots more height")
+            # Connections: two columns of three rows.
+            rows = [frame for frame in connections.winfo_children() if frame.winfo_manager() == "grid"]
+            self.assertEqual(sorted((int(f.grid_info()["row"]), int(f.grid_info()["column"])) for f in rows),
+                             [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)])
+            # The readouts right of the connections, in the same row.
+            field = self.label_showing(a.stfmr_lockin_field_var)
+            self.assertGreater(field.winfo_rootx(), connections.winfo_rootx() + connections.winfo_width())
+            self.assertLess(field.winfo_rooty(), connections.winfo_rooty() + connections.winfo_height())
+            # The panel right of the sweep table, in the same row.
+            self.assertIs(self.root.nametowidget(panel.grid_info()["in"]), sweep.master)
+            self.assertGreaterEqual(panel.winfo_rootx(), sweep.winfo_rootx() + sweep.winfo_width())
+            self.assertEqual(panel.winfo_rooty(), sweep.winfo_rooty())
+            table = a.stfmr_lockin_meter_combo.master
+            self.assertEqual(max(int(w.grid_info()["row"]) for w in table.grid_slaves()), 4, "five rows")
+            self.assertGreaterEqual(table.winfo_width(), table.winfo_reqwidth(), "the table is squeezed")
+            # One line: Start, Stop / zero, Save CSV, Read LS475, the stage.
+            line = (a.stfmr_lockin_start_button, a.stfmr_lockin_stop_button, a.stfmr_lockin_save_button,
+                    a.stfmr_lockin_read_gauss_button, a.stfmr_lockin_stage_move_button,
+                    a.stfmr_lockin_motor_zero_button)
+            middles = {round(w.winfo_rooty() + w.winfo_height() / 2) for w in line}
+            self.assertLessEqual(max(middles) - min(middles), 3, "one line")
+            xs = [w.winfo_rootx() for w in line]
+            self.assertEqual(xs, sorted(xs))
+            bottom = max(w.winfo_rooty() + w.winfo_height() for w in (sweep, panel))
+            self.assertGreaterEqual(min(w.winfo_rooty() for w in line), bottom, "under the table and panel")
+            # The panel's own parts, whole and inside it.
+            for widget in (a.stfmr_lockin_apply_output_button, a.stfmr_lockin_read_output_button,
+                           a.stfmr_lockin_zero_output_button, a.stfmr_lockin_set_field_button):
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertGreaterEqual(widget.winfo_width(), widget.winfo_reqwidth(), "squeezed")
+                self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                     panel.winfo_rootx() + panel.winfo_width() - 2)
+            tab = a.stfmr_lockin_tab
+            right = tab.winfo_rootx() + tab.winfo_width()
+            over = [w for w in descendants(tab)
+                    if w.winfo_ismapped() and w.winfo_rootx() + w.winfo_width() > right + 1]
+            self.assertEqual(over, [], "widgets past the right edge")
+            # Whatever the resize history, the same layout at each width.
+            for history in ((self.LAB_DEFAULT, LAB_WIDE), (LAB_WIDE, self.LAB_DEFAULT, LAB_WIDE),
+                            (self.NARROWEST, LAB_WIDE)):
+                for width in history:
+                    self.arranged(width, "STFMR", a.stfmr_lockin_resource_widgets)
+                with self.subTest(history=history):
+                    self.assertTrue(a.stfmr_lockin_wide_layout)
+                    self.assertEqual(min(c.winfo_height() for c in canvases), wide)
+        finally:
+            self.arranged(LAB_WIDE, "STFMR", a.stfmr_lockin_resource_widgets)
 
     def test_connections_are_one_compact_column(self):
-        rows = {key: int(entry.master.grid_info()["row"])
-                for key, entry in self.a.stfmr_lockin_resource_widgets.items()}
-        self.assertEqual(rows, {"kepco": 0, "gauss": 1, "smb": 2, "830": 3, "mfli": 4})
-        self.assertEqual({int(e.master.grid_info()["column"])
-                          for e in self.a.stfmr_lockin_resource_widgets.values()}, {0})
-        # The Motor row, the sixth (user, 2026-10-17).
+        """One column of six rows in the 1101 px window; two columns of three
+        in the wide layout (user, 2026-11-20)."""
         motor = self.a.stfmr_lockin_motor_widgets[0].master
-        self.assertEqual((int(motor.grid_info()["row"]), int(motor.grid_info()["column"])), (5, 0))
+        try:
+            for width, expected in (
+                    (self.LAB_DEFAULT, {"kepco": (0, 0), "gauss": (1, 0), "smb": (2, 0), "830": (3, 0),
+                                        "mfli": (4, 0), "motor": (5, 0)}),
+                    (LAB_WIDE, {"kepco": (0, 0), "gauss": (1, 0), "smb": (2, 0), "830": (0, 1),
+                                "mfli": (1, 1), "motor": (2, 1)})):
+                with self.subTest(width=width):
+                    self.arranged(width, "STFMR", self.a.stfmr_lockin_resource_widgets)
+                    frames = {key: entry.master for key, entry in self.a.stfmr_lockin_resource_widgets.items()}
+                    # The Motor row, the sixth (user, 2026-10-17).
+                    frames["motor"] = motor
+                    self.assertEqual({key: (int(f.grid_info()["row"]), int(f.grid_info()["column"]))
+                                      for key, f in frames.items()}, expected)
+        finally:
+            self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
         self.assertIs(motor.master, self.a.stfmr_lockin_resource_widgets["kepco"].master.master)
 
     def test_the_motor_row_lines_up_with_the_other_rows(self):
@@ -189,15 +285,21 @@ class FieldOutputTests(unittest.TestCase):
             for width in (self.LAB_DEFAULT, LAB_WIDE):
                 with self.subTest(width=width):
                     self.arranged(width, "STFMR", self.a.stfmr_lockin_resource_widgets)
-                    for mine, theirs in ((entry, kepco), (connect, self.a.stfmr_lockin_connect_buttons["kepco"]),
-                                         (disconnect, self.a.stfmr_lockin_disconnect_buttons["kepco"])):
+                    # The rows of its own column: the KEPCO's in one column,
+                    # the SR830's in the wide layout's second (2026-11-20).
+                    key = "830" if self.a.stfmr_lockin_wide_layout else "kepco"
+                    for mine, theirs in ((entry, self.a.stfmr_lockin_resource_widgets[key]),
+                                         (connect, self.a.stfmr_lockin_connect_buttons[key]),
+                                         (disconnect, self.a.stfmr_lockin_disconnect_buttons[key])):
                         self.assertEqual((mine.winfo_rootx(), mine.winfo_width()),
                                          (theirs.winfo_rootx(), theirs.winfo_width()))
-                    # The labels as the LS475 row's: the KEPCO row's label is
-                    # the magnet-supply choice since 2026-10-21 (user), a
-                    # Combobox whose column every row shares.
+                    # The labels as the LS475 row's (the SR830's in the wide
+                    # layout): the KEPCO row's label is the magnet-supply
+                    # choice since 2026-10-21 (user), a Combobox whose column
+                    # every row shares.
                     labels = {}
-                    gauss = self.a.stfmr_lockin_resource_widgets["gauss"]
+                    gauss = self.a.stfmr_lockin_resource_widgets["830" if self.a.stfmr_lockin_wide_layout
+                                                                 else "gauss"]
                     for frame, key in ((entry.master, "motor"), (gauss.master, "gauss")):
                         labels[key] = [w for w in frame.winfo_children() if w.winfo_class() == "TLabel"]
                     self.assertEqual([str(w.cget("text")) for w in labels["motor"]][0], "Motor:")
@@ -239,8 +341,11 @@ class FieldOutputTests(unittest.TestCase):
                                                 (ls_disconnect, disconnect,
                                                  a.stfmr_lockin_disconnect_buttons["gauss"])):
                         self.assertTrue(mine.winfo_ismapped())
-                        self.assertEqual((mine.winfo_rootx(), mine.winfo_width()),
-                                         (theirs.winfo_rootx(), theirs.winfo_width()))
+                        # The Motor row is in the wide layout's second column
+                        # (2026-11-20); the LS475's is under the LS643's in both.
+                        if not a.stfmr_lockin_wide_layout:
+                            self.assertEqual((mine.winfo_rootx(), mine.winfo_width()),
+                                             (theirs.winfo_rootx(), theirs.winfo_width()))
                         self.assertEqual((mine.winfo_rootx(), mine.winfo_width()),
                                          (other.winfo_rootx(), other.winfo_width()))
                     self.assertFalse(any(w.winfo_ismapped() for w in a.stfmr_lockin_supply_widgets["kepco"]))
@@ -274,7 +379,9 @@ class FieldOutputTests(unittest.TestCase):
         line = read.master.master
         font = tkinter.font.nametofont("TkDefaultFont")
         table = a.stfmr_lockin_meter_combo.master
-        expected = {self.LAB_DEFAULT: (False, True), LAB_WIDE: (True, False)}
+        # At 2000 px the wide layout (user, 2026-11-20): the narrow pair not
+        # in use, the stage controls on the action line beside Read LS475.
+        expected = {self.LAB_DEFAULT: (False, True), LAB_WIDE: (None, True)}
         try:
             for history in ((self.LAB_DEFAULT,), (LAB_WIDE,), (LAB_WIDE, self.LAB_DEFAULT),
                             (self.LAB_DEFAULT, LAB_WIDE), (self.NARROWEST, LAB_WIDE, self.LAB_DEFAULT)):
@@ -355,7 +462,13 @@ class FieldOutputTests(unittest.TestCase):
                     self.assertFalse(self.arranged(self.LAB_DEFAULT, tab_name, widgets), "narrow: stacked")
                     connections = widgets["kepco"].master.master
                     self.assertEqual(int(connections.grid_info()["row"]), 0, "stacked: connections first")
-                    self.assertTrue(self.arranged(LAB_WIDE, tab_name, widgets), "wide: side by side")
+                    side = self.arranged(LAB_WIDE, tab_name, widgets)
+                    if tab_name == "STFMR":
+                        # The wide layout (2026-11-20): the panel is beside
+                        # the sweep table, so the top row's pair is not used.
+                        self.assertTrue(self.a.stfmr_lockin_wide_layout, "wide layout")
+                    else:
+                        self.assertTrue(side, "wide: side by side")
         finally:
             self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
 
@@ -416,13 +529,18 @@ class FieldOutputTests(unittest.TestCase):
                 if label.winfo_class() == "TLabel":
                     self.assertEqual(label.grid_info()["sticky"], "e", "labels sit against their field")
 
-    def test_sweep_controls_sit_right_of_the_parameters(self):
-        self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
+    def test_sweep_controls_sit_in_the_parameters_box_in_the_narrow_layout(self):
+        """The actions are shown in the field-sweep box (grid's in_) in the
+        narrow layout; side by side with the table where it has the width
+        and the wide layout does not yet take over, else under it."""
         table = self.a.stfmr_lockin_meter_combo.master
         column = self.a.stfmr_lockin_start_button.master.master
-        self.assertIs(column.master, table.master, "both inside the field-sweep parameters box")
-        self.assertTrue(getattr(table.master, "_pair_side_by_side", False))
-        self.assertGreater(column.winfo_rootx(), table.winfo_rootx() + table.winfo_width() - 1)
+        try:
+            self.arranged(self.LAB_DEFAULT, "STFMR", self.a.stfmr_lockin_resource_widgets)
+            self.assertIs(self.root.nametowidget(column.grid_info()["in"]), table.master,
+                          "inside the field-sweep parameters box")
+        finally:
+            self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
         for button in (self.a.stfmr_lockin_start_button, self.a.stfmr_lockin_stop_button,
                        self.a.stfmr_lockin_save_button):
             self.assertIs(button.master.master, column)
@@ -546,8 +664,12 @@ class FieldOutputTests(unittest.TestCase):
         )
         try:
             for page, tab, widgets, variables in pages:
+                # ST-FMR's panel has this one row of controls in the 1101 px
+                # window; in the wide layout (2026-11-20) its buttons and the
+                # output state are on a line under Mode, I and V.
+                width = self.LAB_DEFAULT if page == "STFMR" else LAB_WIDE
                 with self.subTest(page=page):
-                    self.arranged(LAB_WIDE, page, widgets)
+                    self.arranged(width, page, widgets)
                     panel = self.page_frames(tab)["KEPCO 4886 BOP 20-10 field output"]
                     for index, variable in enumerate(variables):
                         readout = self.label_showing(variable)
@@ -560,6 +682,19 @@ class FieldOutputTests(unittest.TestCase):
                             abs(readout.winfo_rootx() + readout.winfo_width()
                                 - second.winfo_rootx() - second.winfo_width()), 1,
                             f"{variable.get()} ends under {second}")
+            # The wide layout: Mode, I and V under their controls as above;
+            # the output state right of Zero / OFF, on the buttons' line.
+            self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
+            panel = self.page_frames(self.a.stfmr_lockin_tab)["KEPCO 4886 BOP 20-10 field output"]
+            *settings, state = (self.label_showing(v) for v in pages[1][3])
+            for index, readout in enumerate(settings):
+                first = panel.grid_slaves(row=1, column=2 * index)[0]
+                self.assertLessEqual(abs(readout.winfo_rootx() - first.winfo_rootx()), 1)
+                self.assertGreater(readout.winfo_rooty(), first.winfo_rooty())
+            zero = self.a.stfmr_lockin_zero_output_button
+            self.assertGreater(state.winfo_rootx(), zero.winfo_rootx() + zero.winfo_width())
+            self.assertLessEqual(abs(state.winfo_rooty() + state.winfo_height() / 2
+                                     - zero.winfo_rooty() - zero.winfo_height() / 2), 3)
         finally:
             self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
 
@@ -591,15 +726,18 @@ class FieldOutputTests(unittest.TestCase):
         try:
             for width in range(self.NARROWEST, LAB_WIDE + 1, 40):
                 self.arranged(width, "STFMR", self.a.stfmr_lockin_resource_widgets)
-                side = getattr(table.master, "_pair_side_by_side", None)
+                # The wide layout (2026-11-20) places the table itself.
+                side = "wide" if self.a.stfmr_lockin_wide_layout else getattr(
+                    table.master, "_pair_side_by_side", None)
                 self.assertIsNotNone(side, f"no layout decision at {width} px")
                 decided.add(side)
                 if side:
                     self.assertGreaterEqual(table.winfo_width(), table.winfo_reqwidth(),
-                                            f"side by side at {width} px but the table is squeezed")
+                                            f"{side} at {width} px but the table is squeezed")
         finally:
             self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
-        self.assertEqual(decided, {True, False}, "both layouts should occur across this range")
+        print(f"STFMR layouts from {self.NARROWEST} to {LAB_WIDE} px: {sorted(map(str, decided))}")
+        self.assertTrue({False, "wide"} <= decided, "the narrow and the wide layout should both occur")
 
     def test_narrow_window_keeps_dropdowns_whole_and_fields_readable(self):
         font = tkinter.font.nametofont("TkTextFont")
@@ -629,18 +767,22 @@ class FieldOutputTests(unittest.TestCase):
         font = tkinter.font.nametofont("TkTextFont")
         choice = self.a.stfmr_lockin_sr830_time_constant_combo
         table = self.a.stfmr_lockin_meter_combo.master
-        above = [table.grid_slaves(row=row, column=5)[0] for row in (0, 1, 2, 3, 4)]
         try:
             for width in (self.LAB_DEFAULT, LAB_WIDE):
                 with self.subTest(width=width):
                     self.arranged(width, "STFMR", self.a.stfmr_lockin_resource_widgets)
+                    # Row 5 of seven in the narrow layout, row 3 of five in
+                    # the wide one (user, 2026-11-20), the same column.
+                    row = 3 if self.a.stfmr_lockin_wide_layout else 5
+                    above = [table.grid_slaves(row=r, column=5)[0] for r in range(row)]
                     self.assertTrue(choice.winfo_ismapped())
-                    self.assertEqual((int(choice.grid_info()["row"]), int(choice.grid_info()["column"])), (5, 5))
-                    (label,) = table.grid_slaves(row=5, column=4)
+                    self.assertEqual((int(choice.grid_info()["row"]), int(choice.grid_info()["column"])), (row, 5))
+                    (label,) = table.grid_slaves(row=row, column=4)
                     self.assertEqual(str(label.cget("text")), "SR830 TC:")
                     self.assertIs(above[1], self.a.stfmr_lockin_power_step_entry)
-                    self.assertIs(above[3], self.a.stfmr_lockin_settle_entry)
-                    self.assertIs(above[4], self.a.stfmr_lockin_angle_step_entry)
+                    if row == 5:
+                        self.assertIs(above[3], self.a.stfmr_lockin_settle_entry)
+                        self.assertIs(above[4], self.a.stfmr_lockin_angle_step_entry)
                     for field in above:
                         self.assertEqual((choice.winfo_x(), choice.winfo_width()),
                                          (field.winfo_x(), field.winfo_width()))
@@ -688,6 +830,9 @@ class FieldOutputTests(unittest.TestCase):
                           self.a.stfmr_lockin_frequency_step_var.get()), ("3", "9", "1"))
         self.assertEqual((self.a.stfmr_lockin_angle_start_var.get(), self.a.stfmr_lockin_angle_stop_var.get(),
                           self.a.stfmr_lockin_angle_step_var.get()), ("0", "0", "10"))   # user, 2026-10-17
+        # The narrow layout's seven rows (the 1101 px window); the wide
+        # layout's five (user, 2026-11-20) are checked below.
+        self.arranged(self.LAB_DEFAULT, "STFMR", self.a.stfmr_lockin_resource_widgets)
         for column, entry in ((1, self.a.stfmr_lockin_angle_start_entry), (3, self.a.stfmr_lockin_angle_stop_entry),
                               (5, self.a.stfmr_lockin_angle_step_entry)):
             self.assertIs(table.grid_slaves(row=4, column=column)[0], entry)
@@ -721,10 +866,25 @@ class FieldOutputTests(unittest.TestCase):
                       f" px, the page's {right} px; column 4's labels "
                       + ", ".join(f"{t!r} {label_font.measure(t)} px" for t in
                                   ("f step GHz:", "P step dB:", "Step A:", "Settle s:", "Step °:", "SR830 TC:", "Angle step °:", "Ang. step °:")))
-                for row, labels in rows.items():
+                if self.a.stfmr_lockin_wide_layout:
+                    layout = {}
+                    for text, (row, pair) in app.CombinedControlApp.STFMR_LOCKIN_WIDE_TABLE.items():
+                        layout.setdefault(row, {})[pair] = text
+                    self.assertEqual(sorted(layout), [0, 1, 2, 3, 4])
+                    self.assertTrue(all(sorted(pairs) == [0, 1, 2, 3, 4] for pairs in layout.values()))
+                else:
+                    layout = {row: dict(enumerate(labels)) for row, labels in rows.items()}
+                    for row, (column, text) in ticks.items():
+                        layout[row][column // 2] = text
+                for row, pairs in layout.items():
                     with self.subTest(width=width, row=row):
                         cells = []
-                        for pair, text in enumerate(labels):
+                        for pair, text in sorted(pairs.items()):
+                            if text.endswith("autorange"):
+                                (tick,) = table.grid_slaves(row=row, column=2 * pair)
+                                self.assertEqual(str(tick.cget("text")), text)
+                                cells.append(tick)
+                                continue
                             (label,) = table.grid_slaves(row=row, column=2 * pair)
                             (field,) = table.grid_slaves(row=row, column=2 * pair + 1)
                             self.assertEqual(str(label.cget("text")), text)
@@ -732,11 +892,6 @@ class FieldOutputTests(unittest.TestCase):
                             if field.winfo_class() in ("TEntry", "TSpinbox"):
                                 self.assertGreaterEqual(field.winfo_width(), field_font.measure("0" * 6))
                             cells += [label, field]
-                        if row in ticks:
-                            column, text = ticks[row]
-                            (tick,) = table.grid_slaves(row=row, column=column)
-                            self.assertEqual(str(tick.cget("text")), text)
-                            cells.append(tick)
                         for widget in cells:
                             self.assertTrue(widget.winfo_ismapped())
                             self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(), right + 1,
@@ -1019,12 +1174,27 @@ class FieldOutputTests(unittest.TestCase):
         self.assertEqual(text, ["Field at 0 A: +255.0 to +270.0 G"])
 
     def test_tab_visits_connections_before_the_output_panel(self):
-        for widgets in (self.a.stfmr_lockin_resource_widgets, self.a.stfmr_device_resource_widgets):
-            connections = widgets["kepco"].master.master
-            top = connections.master
-            order = top.winfo_children()
-            panel = next(w for w in order if w is not connections)
-            self.assertLess(order.index(connections), order.index(panel))
+        connections = self.a.stfmr_device_resource_widgets["kepco"].master.master
+        top = connections.master
+        order = top.winfo_children()
+        panel = next(w for w in order if w is not connections)
+        self.assertLess(order.index(connections), order.index(panel))
+        # ST-FMR's panel is the page's child since the wide layout
+        # (2026-11-20): it follows the connections' row in the stacking
+        # order Tab follows, and in the narrow layout precedes the sweep box.
+        panel = self.a.stfmr_lockin_field_output_frame
+        top = self.a.stfmr_lockin_resource_widgets["kepco"].master.master.master
+        sweep = self.a.stfmr_lockin_meter_combo.master.master.master
+        try:
+            for width in (self.LAB_DEFAULT, LAB_WIDE):
+                with self.subTest(width=width):
+                    self.arranged(width, "STFMR", self.a.stfmr_lockin_resource_widgets)
+                    order = list(self.root.tk.splitlist(self.root.tk.call("winfo", "children", str(panel.master))))
+                    self.assertLess(order.index(str(top)), order.index(str(panel)))
+                    if not self.a.stfmr_lockin_wide_layout:
+                        self.assertLess(order.index(str(panel)), order.index(str(sweep)))
+        finally:
+            self.arranged(LAB_WIDE, "STFMR", self.a.stfmr_lockin_resource_widgets)
 
     def test_zero_field_label_never_lands_on_other_text_in_a_narrow_plot(self):
         """Narrow plot, three disagreeing frequencies: no free spot on the canvas."""
@@ -1095,12 +1265,15 @@ class FieldOutputTests(unittest.TestCase):
             chooser.winfo_reqwidth() - int(chooser.cget("width")) * font.measure("0"))
         for label in chooser.cget("values"):
             self.assertLessEqual(font.measure(label), room, f"{label} is cut")
-        # Same column as every address field and Connect button above it.
+        # Same column as every address field and Connect button above it: in
+        # the wide layout (2026-11-20) the rows of its own column, the
+        # SR830's, and as wide as all of them.
         widgets = self.a.stfmr_lockin_resource_widgets
-        self.assertEqual({(w.winfo_rootx(), w.winfo_width()) for w in widgets.values()},
-                         {(widgets["kepco"].winfo_rootx(), widgets["kepco"].winfo_width())})
-        self.assertEqual({b.winfo_rootx() for b in self.a.stfmr_lockin_connect_buttons.values()},
-                         {self.a.stfmr_lockin_connect_buttons["kepco"].winfo_rootx()})
+        self.assertEqual({w.winfo_width() for w in widgets.values()}, {widgets["kepco"].winfo_width()})
+        own = ("830", "mfli") if self.a.stfmr_lockin_wide_layout else tuple(widgets)
+        self.assertEqual({widgets[k].winfo_rootx() for k in own}, {widgets[own[0]].winfo_rootx()})
+        self.assertEqual({self.a.stfmr_lockin_connect_buttons[k].winfo_rootx() for k in own},
+                         {self.a.stfmr_lockin_connect_buttons[own[0]].winfo_rootx()})
 
     def test_each_zurich_choice_tries_the_data_server_that_can_reach_it(self):
         """The bug: choosing DEV4414 still probed only DEV4435's servers."""

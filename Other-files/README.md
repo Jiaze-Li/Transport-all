@@ -1,5 +1,20 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## ST-FMR wide layout: two columns of connections, a five-row sweep table, more plot height (user, 2026-11-20)
+
+- **Request:** "add a column in the instruments connection and reduce the height of the field sweep section to
+  create more vertical space for the plots below"; the field-output panel beside the sweep table (the user's choice
+  of two offered). `_stfmr_lockin_page_layout`:
+  - **Wide** (the page has the width for every line; judged from widths that never change with the layout): the six
+    connection rows in two columns of three with B, V, Ref and MFLI Overload at their right; the field-sweep table in
+    five rows (`STFMR_LOCKIN_WIDE_TABLE`; lock-in boxes in the first two columns, Mod. and the stage angles in the last
+    two) with a narrower field-output panel beside it (its settings, Set / I / V, then Apply, Read back, Zero / OFF
+    and the output state, then Set field); Start ... Set motor 0° on one line under both.
+  - **Narrow** (the 1101 px start-up window, where the plots have no height to spare): as before.
+  - CI, 2000 px window: the plots 351 px tall on Windows (104 px before), 383 px on Linux. The panel, the readouts
+    and the actions are the page's (or the middle row's) children shown with grid's `in_`, so one set of widgets
+    serves both layouts; `_arrange_pair_by_width` takes `enabled` and returns its arrange function.
+
 ## SHHV Angle+Field2 starts at 200 to 1000 G (user, 2026-11-20)
 
 - "default field to this" (the user's SHHV figure): the Outer field G box starts with 200, 300, 400, 500, 600,

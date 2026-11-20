@@ -21023,8 +21023,8 @@ class CombinedControlApp:
 
     def _arrange_pair_by_width(
         self, container, left, right, *, gap: int = 4, stack_gap: int | None = None,
-        right_width=None, left_width=None,
-    ) -> None:
+        right_width=None, left_width=None, enabled=None,
+    ):
         """Place two sections side by side when both fit, otherwise stack them.
 
         On a wide screen the program opens the control window at about 43 % of
@@ -21039,8 +21039,14 @@ class CombinedControlApp:
         ``left_width`` does the same for the left section: RT-E's settings
         pass their width without the stage block, which may sit beside the
         lock-ins only once this pair has decided (user, 2026-10-17).
+        ``enabled``, when given, is called first: while it returns False the
+        pair is left alone (a page layout that places both sections itself,
+        ST-FMR's wide one, user, 2026-11-20).  Returns the arrange function,
+        so such a page can run it again when it hands the pair back.
         """
         def arrange(_event=None) -> None:
+            if enabled is not None and not enabled():
+                return
             try:
                 inset = self._pair_inset(container)
                 available = container.winfo_width() - inset
@@ -21097,6 +21103,7 @@ class CombinedControlApp:
 
         container.bind("<Configure>", arrange, add="+")
         arrange()
+        return arrange
 
     @staticmethod
     def _pair_inset(container) -> int:
@@ -23130,17 +23137,29 @@ class CombinedControlApp:
         top = ttk.Frame(outer)
         top.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         top.columnconfigure(1, weight=1)
+        # Row 1: the field-sweep box, and in the wide layout (user,
+        # 2026-11-20: "add a column in the instruments connection and reduce
+        # the height of the field sweep section to create more vertical space
+        # for the plots below") the field-output panel beside it and the
+        # action line under both (arrange_page below).
+        middle = ttk.Frame(outer)
+        middle.grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        middle.columnconfigure(0, weight=1)
+        self.stfmr_lockin_wide_layout = False
 
         # Manual field output, as on the FMR page: set the 4886 by hand to
         # check polarity and the field on the LS475 without running a sweep.
+        # A child of the page, not of the top row: the wide layout shows it
+        # beside the field-sweep box (grid's in_), the narrow one in the top
+        # row; created after both rows, so it is drawn above either.
         field_output = ttk.LabelFrame(
-            top, text="KEPCO 4886 BOP 20-10 field output", padding=6
+            outer, text="KEPCO 4886 BOP 20-10 field output", padding=6
         )
         # Its title names the chosen magnet supply (user, 2026-10-21).
         self.stfmr_lockin_field_output_frame = field_output
         # Right of the connections and as tall as them; spare width stays here
         # so the connection list keeps its natural width at the left.
-        field_output.grid(row=0, column=1, sticky="nsew")
+        field_output.grid(in_=top, row=0, column=1, sticky="nsew")
         field_output.columnconfigure(12, weight=1)
         # The panel is as tall as the six-row connection list; share that
         # height between its three rows rather than leaving a gap below them.
@@ -23154,18 +23173,21 @@ class CombinedControlApp:
         tick_row = ttk.Frame(field_output)
         tick_row.grid(row=0, column=0, columnspan=13, sticky="ew", pady=(0, 4))
         tick_row.columnconfigure(1, weight=1)
-        ttk.Checkbutton(
+        safety_tick = ttk.Checkbutton(
             tick_row,
             text=(
                 "Electromagnet polarity, cooling, wiring, front-panel limits, microwave power and\n"
                 "personnel safety confirmed, and no other program controls this KEPCO"
             ),
             variable=self.stfmr_lockin_manual_safety_var,
-        ).grid(row=0, column=0, sticky="w")
+        )
+        safety_tick.grid(row=0, column=0, sticky="w")
         # The chosen supply's current is stepped until the LS475 reads the
         # target (set_stfmr_lockin_field); the labels are short, as SHHV's.
-        field_row = ttk.Frame(tick_row)
-        field_row.grid(row=0, column=1, sticky="e", padx=(12, 0))
+        # The panel's child, shown in the tick's row (in_), or on a line of
+        # its own in the wide layout's narrower panel.
+        field_row = ttk.Frame(field_output)
+        field_row.grid(in_=tick_row, row=0, column=1, sticky="e", padx=(12, 0))
         ttk.Label(field_row, text="Field G").grid(row=0, column=0)
         ttk.Entry(field_row, textvariable=self.stfmr_lockin_field_target_var, width=7).grid(
             row=0, column=1, padx=3)
@@ -23175,7 +23197,8 @@ class CombinedControlApp:
         self.stfmr_lockin_set_field_button = ttk.Button(
             field_row, text="Set field", width=8, command=self.set_stfmr_lockin_field, state="disabled")
         self.stfmr_lockin_set_field_button.grid(row=0, column=4, padx=(3, 0))
-        ttk.Label(field_output, text="Output mode:").grid(row=1, column=0, sticky="e")
+        mode_label = ttk.Label(field_output, text="Output mode:")
+        mode_label.grid(row=1, column=0, sticky="e")
         manual_mode = ttk.Combobox(
             field_output,
             textvariable=self.stfmr_lockin_manual_mode_var,
@@ -23189,23 +23212,29 @@ class CombinedControlApp:
         manual_mode.bind(
             "<<ComboboxSelected>>", self._on_stfmr_lockin_manual_mode_changed, add="+"
         )
-        ttk.Label(
+        target_label = ttk.Label(
             field_output, textvariable=self.stfmr_lockin_manual_target_label_var
-        ).grid(row=1, column=2, sticky="e")
+        )
+        target_label.grid(row=1, column=2, sticky="e")
         # Seven characters, as on the FMR page: at ten the red Zero / OFF
         # button was cut off in the 1101 px window (user, 2026-10-15).
-        ttk.Entry(
+        target_entry = ttk.Entry(
             field_output, textvariable=self.stfmr_lockin_manual_target_var, width=7
-        ).grid(row=1, column=3, padx=(0, 8))
-        ttk.Label(
+        )
+        target_entry.grid(row=1, column=3, padx=(0, 8))
+        limit_label = ttk.Label(
             field_output, textvariable=self.stfmr_lockin_manual_limit_label_var
-        ).grid(row=1, column=4, sticky="e")
+        )
+        limit_label.grid(row=1, column=4, sticky="e")
         # The Lake Shore's Rate A/s in this place while it is chosen (user,
         # 2026-10-21): the 4886's voltage limit does not apply to it.
         self.stfmr_lockin_manual_limit_entry = ttk.Entry(
             field_output, textvariable=self.stfmr_lockin_manual_limit_var, width=7
         )
         self.stfmr_lockin_manual_limit_entry.grid(row=1, column=5, padx=(0, 8))
+        # The wide layout's line for the three buttons and the output state,
+        # under the settings (made before them, so they are drawn above it).
+        button_line = ttk.Frame(field_output)
         self.stfmr_lockin_apply_output_button = ttk.Button(
             field_output,
             text="Apply output",
@@ -23232,15 +23261,19 @@ class CombinedControlApp:
         )
         self.stfmr_lockin_zero_output_button.grid(row=1, column=8, padx=(8, 2))
         # As on the FMR page: each readout fills the control group above it.
+        readouts = []
         for column, variable, padx in (
             (0, self.stfmr_lockin_kepco_mode_var, (0, 8)),
             (2, self.stfmr_lockin_kepco_current_var, (0, 8)),
             (4, self.stfmr_lockin_kepco_voltage_var, (0, 8)),
             (6, self.stfmr_lockin_kepco_output_var, (2, 2)),
         ):
-            ttk.Label(field_output, textvariable=variable, anchor="w").grid(
+            readout = ttk.Label(field_output, textvariable=variable, anchor="w")
+            readout.grid(
                 row=2, column=column, columnspan=2, sticky="ew", padx=padx, pady=(4, 0)
             )
+            readouts.append(readout)
+        state_readout = readouts[3]
 
         instruments = ttk.LabelFrame(top, text="STFMR instrument connections", padding=6)
         instruments.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
@@ -23379,18 +23412,27 @@ class CombinedControlApp:
         except (AttributeError, TypeError, ValueError, tk.TclError):
             pass
 
-        self._arrange_pair_by_width(top, instruments, field_output)
-        # Tab visits the connections first, as they now sit on the left.
-        instruments.lower(field_output)
+        def wide_layout() -> bool:
+            return bool(self.__dict__.get("stfmr_lockin_wide_layout", False))
 
-        controls = ttk.LabelFrame(outer, text="STFMR field-sweep parameters", padding=7)
-        controls.grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        # The narrow layout's pairs; the wide layout places these sections
+        # itself, so they are left alone meanwhile (arrange_page).
+        arrange_top = self._arrange_pair_by_width(top, instruments, field_output,
+                                                  enabled=lambda: not wide_layout())
+        # Tab visits the connections first, then the panel, then the sweep
+        # box, as they are shown (the panel is the page's child).
+        self._stfmr_lockin_raise(field_output, top)
+
+        controls = ttk.LabelFrame(middle, text="STFMR field-sweep parameters", padding=7)
+        controls.grid(row=0, column=0, sticky="nsew")
         # The parameters (left) and the sweep buttons with the live readback
         # (right) share this box: side by side when both fit, else stacked.
+        # The actions are the middle row's child, shown in this box (in_), or
+        # under it and the panel in the wide layout.
         params = ttk.Frame(controls)
         params.grid(row=0, column=0, sticky="nw")
-        sweep_actions = ttk.Frame(controls)
-        sweep_actions.grid(row=0, column=1, sticky="nw")
+        sweep_actions = ttk.Frame(middle)
+        sweep_actions.grid(in_=controls, row=0, column=1, sticky="nw")
         # Spare width goes to the empty tail column, so the table keeps its
         # natural size.  Only when the box is narrower than the table, as in
         # the 826 px split-screen window, does grid shrink the weighted
@@ -23405,9 +23447,13 @@ class CombinedControlApp:
         # Every box and tick of the table, with its idle state: Start's stage
         # check locks them all (review, 2026-10-17; _update_stfmr_lockin_ui).
         self.stfmr_lockin_parameter_inputs = []
+        # Each cell by its text: (label or tick, field or None, row, pair) as
+        # the narrow layout has it; the wide layout regrids them (WIDE_TABLE).
+        table_cells = {}
 
         def parameter(row, pair, label, variable, *, kind="entry", values=(), width=8):
-            ttk.Label(params, text=label).grid(
+            text = ttk.Label(params, text=label)
+            text.grid(
                 row=row, column=2 * pair, sticky="e",
                 padx=(0 if pair == 0 else 12, 3), pady=1,
             )
@@ -23424,6 +23470,7 @@ class CombinedControlApp:
                 widget = ttk.Entry(params, textvariable=variable, width=width)
             widget.grid(row=row, column=2 * pair + 1, sticky="ew", pady=1)
             self.stfmr_lockin_parameter_inputs.append((widget, "readonly" if kind == "combo" else "normal"))
+            table_cells[label] = (text, widget, row, pair)
             return widget
 
         # In a window too narrow for the table only the plain number fields
@@ -23438,6 +23485,7 @@ class CombinedControlApp:
             box.grid(row=row, column=2 * pair, columnspan=2, sticky="w",
                      padx=(12, 0), pady=1)
             self.stfmr_lockin_parameter_inputs.append((box, "normal"))
+            table_cells[text] = (box, None, row, pair)
             return box
 
         # The table in measurement order, one row per stage (user,
@@ -23670,15 +23718,20 @@ class CombinedControlApp:
         # readings arrive: 47 characters per line for the two-line MFLI +
         # SR830 readout and 55 for an SR830 autorange message.  Only the
         # height grows, in dual mode.
-        status = ttk.Frame(sweep_actions)
-        status.grid(row=2, column=0, sticky="w", pady=(4, 0))
-        ttk.Label(
+        # The page's child, shown under the actions (in_), or right of the
+        # connections in the wide layout.
+        status = ttk.Frame(outer)
+        status.grid(in_=sweep_actions, row=2, column=0, sticky="w", pady=(4, 0))
+        field_readout = ttk.Label(
             status, textvariable=self.stfmr_lockin_field_var, width=16, anchor="nw"
-        ).grid(row=0, column=1, sticky="nw", padx=(0, 8))
-        ttk.Label(
+        )
+        field_readout.grid(row=0, column=1, sticky="nw", padx=(0, 8))
+        voltage_readout = ttk.Label(
             status, textvariable=self.stfmr_lockin_voltage_var,
             width=48, anchor="nw", justify="left",
-        ).grid(row=0, column=2, sticky="new")
+        )
+        voltage_readout.grid(row=0, column=2, sticky="new")
+        lamp_rows = []
 
         def status_lamp(row: int, variable: tk.StringVar, width: int):
             text = ttk.Label(
@@ -23689,6 +23742,7 @@ class CombinedControlApp:
             # with the first line even when the text runs to two lines.
             canvas, item = create_lamp(status, height=text.winfo_reqheight(), kind="status")
             canvas.grid(row=row, column=0, sticky="nw", padx=(0, 4), pady=(4, 0))
+            lamp_rows.append((canvas, text))
             return canvas, item
 
         self.stfmr_lockin_reference_indicator = status_lamp(
@@ -23704,8 +23758,9 @@ class CombinedControlApp:
         def actions_stacked_width() -> int:
             return max(part.winfo_reqwidth() for part in (button_row, readback_row, stage_controls, status))
 
-        self._arrange_pair_by_width(controls, params, sweep_actions, gap=24, stack_gap=6,
-                                    right_width=actions_stacked_width)
+        arrange_controls = self._arrange_pair_by_width(controls, params, sweep_actions, gap=24, stack_gap=6,
+                                                       right_width=actions_stacked_width,
+                                                       enabled=lambda: not wide_layout())
 
         def arrange_stage_line(_event=None) -> None:
             # Beside the LS475 controls only while the actions are under the
@@ -23717,6 +23772,8 @@ class CombinedControlApp:
             # hung CIDWM on 2026-10-12).  Not one of _arrange_pair_by_width's
             # pairs: CI's layout checks require STFMR's pairs side by side at
             # 2000 px, where this line is meant to go under (user, 2026-10-17).
+            if wide_layout():
+                return      # the wide layout's action line has them beside
             try:
                 outer = getattr(controls, "_pair_side_by_side", None)
                 if outer is None:
@@ -23738,6 +23795,22 @@ class CombinedControlApp:
 
         controls.bind("<Configure>", arrange_stage_line, add="+")
         arrange_stage_line()
+        self._stfmr_lockin_page_layout(
+            outer=outer, top=top, middle=middle, instruments=instruments,
+            row_frames=[frame for frame, _cell in first_cells], field_output=field_output,
+            panel=dict(tick=tick_row, tick_box=safety_tick, field_row=field_row,
+                       button_line=button_line, mode=(mode_label, manual_mode),
+                       target=(target_label, target_entry),
+                       limit=(limit_label, self.stfmr_lockin_manual_limit_entry),
+                       buttons=(self.stfmr_lockin_apply_output_button, self.stfmr_lockin_read_output_button,
+                                self.stfmr_lockin_zero_output_button),
+                       state=state_readout),
+            controls=controls, params=params, table_cells=table_cells, sweep_actions=sweep_actions,
+            button_row=button_row, readback_line=readback_line, readback_row=readback_row,
+            stage_controls=stage_controls, status=status,
+            status_cells=dict(field=field_readout, voltage=voltage_readout, lamps=lamp_rows),
+            arrange_top=arrange_top, arrange_controls=arrange_controls, arrange_stage_line=arrange_stage_line,
+            wide_layout=wide_layout)
 
         # The save path can be long, so it keeps the full width below.
         save_path_row = ttk.Frame(outer)
@@ -23837,6 +23910,241 @@ class CombinedControlApp:
             self._stfmr_lockin_show_magnet_choice()
         self._redraw_stfmr_lockin_live_plots()
         self._redraw_stfmr_lockin_plot()
+
+    # The wide layout's field-sweep table (user, 2026-11-20): five rows of
+    # five pairs instead of seven rows, as (row, pair) by each cell's text.
+    # The lock-in boxes keep the first two columns, which are wide enough for
+    # their dropdowns already; Mod. and the stage angles, whose labels are
+    # the longest of the plain boxes, take the last two.
+    STFMR_LOCKIN_WIDE_TABLE = {
+        "f start GHz:": (0, 0), "f stop GHz:": (0, 1), "f step GHz:": (0, 2),
+        "Mod. start Hz:": (0, 3), "Settle s:": (0, 4),
+        "P start dBm:": (1, 0), "P stop dBm:": (1, 1), "P step dB:": (1, 2),
+        "Mod. end Hz:": (1, 3), "Acquire s:": (1, 4),
+        "Start A:": (2, 0), "Stop A:": (2, 1), "Step A:": (2, 2), "Loop:": (2, 3), "Comp. V:": (2, 4),
+        "Meter:": (3, 0), "SR830 REF IN:": (3, 1), "SR830 TC:": (3, 2), "SR830 autorange": (3, 3),
+        "Angle start °:": (3, 4),
+        "MFLI reference:": (4, 0), "MFLI TC s:": (4, 1), "MFLI autorange": (4, 2),
+        "Angle stop °:": (4, 3), "Step °:": (4, 4),
+    }
+    # The gap between the two columns of connection rows, and between them
+    # and the readouts at their right.
+    STFMR_LOCKIN_WIDE_GAPS = (16, 12)
+
+    @staticmethod
+    def _stfmr_lockin_raise(widget, above) -> None:
+        """Stack ``widget`` just above ``above``, the frame it is shown in
+        (grid's in_ draws it there only if it is above it), which also puts
+        it there in the Tab order.  The offline tests' stand-ins have no
+        stacking order."""
+        lift = getattr(widget, "lift", None)
+        if lift is not None:
+            lift(above)
+
+    def _stfmr_lockin_page_layout(self, *, outer, top, middle, instruments, row_frames, field_output, panel,
+                                  controls, params, table_cells, sweep_actions, button_row, readback_line,
+                                  readback_row, stage_controls, status, status_cells, arrange_top,
+                                  arrange_controls, arrange_stage_line, wide_layout) -> None:
+        """The ST-FMR page's two layouts (user, 2026-11-20: "add a column in
+        the instruments connection and reduce the height of the field sweep
+        section to create more vertical space for the plots below"; the
+        field-output panel beside the sweep table, the user's choice).
+
+        Wide, when the page has the width for every line of it: the six
+        connection rows in two columns of three with the live readouts (B,
+        V, Ref, MFLI Overload) at their right; the field-sweep table in five
+        rows (STFMR_LOCKIN_WIDE_TABLE) with a narrower field-output panel
+        beside it (its settings, then Set / I / V, then Apply, Read back,
+        Zero / OFF and the output state, then Set field); and Start, Stop /
+        zero, Save CSV, Read LS475 and the stage controls on one line under
+        both.  Narrow (the 1101 px window the program opens with, where the
+        plots have no height to spare): the layout as before, its pairs
+        deciding side by side or stacked as before.
+
+        The decision uses only widths that never change with the layout (each
+        connection row, each table cell, the panel's parts at their longest
+        texts, the readouts' fixed widths), so it cannot feed back on
+        itself, and it is the same whatever the resize history."""
+        row_gap, status_gap = self.STFMR_LOCKIN_WIDE_GAPS
+        font = tkfont.nametofont("TkDefaultFont")
+        apply_button, read_button, zero_button = panel["buttons"]
+        legacy_buttons = ((apply_button, dict(row=1, column=6, padx=2)),
+                          (read_button, dict(row=1, column=7, padx=2)),
+                          (zero_button, dict(row=1, column=8, padx=(8, 2))))
+
+        def longest(widget, texts) -> int:
+            # A label or button at its longest text: its own padding (its
+            # request less its text now) plus the widest text.
+            now = str(widget.cget("text")) if "text" in widget.keys() else ""
+            variable = str(widget.cget("textvariable")) if "textvariable" in widget.keys() else ""
+            if variable:
+                now = str(widget.getvar(variable))
+            return widget.winfo_reqwidth() - font.measure(now) + max(font.measure(t) for t in texts)
+
+        def table_width() -> int:
+            columns = {}
+            for text, (cell, field, _row, _pair) in table_cells.items():
+                _wide_row, pair = self.STFMR_LOCKIN_WIDE_TABLE[text]
+                column = columns.setdefault(pair, [0, 0, 0])
+                if field is None:       # a tick across its pair
+                    column[2] = max(column[2], cell.winfo_reqwidth() + 12)
+                    continue
+                column[0] = max(column[0], cell.winfo_reqwidth() + (0 if pair == 0 else 12) + 3)
+                minsize = int(params.columnconfigure(2 * pair + 1)["minsize"])
+                column[1] = max(column[1], field.winfo_reqwidth(), minsize)
+            return sum(max(label + field, tick) for label, field, tick in columns.values())
+
+        def panel_width() -> int:
+            (mode_label, mode_combo), (target_label, target_entry), (limit_label, limit_entry) = (
+                panel["mode"], panel["target"], panel["limit"])
+            settings = (mode_label.winfo_reqwidth() + mode_combo.winfo_reqwidth() + 8
+                        + longest(target_label, ("Target current A:", "Target voltage V:"))
+                        + target_entry.winfo_reqwidth() + 8
+                        + longest(limit_label, ("Voltage limit V:", "Current limit A:", "Rate A/s:"))
+                        + limit_entry.winfo_reqwidth() + 8)
+            # The output state at its longest texts (its width follows its text).
+            buttons = (apply_button.winfo_reqwidth() + 4
+                       + longest(read_button, ("Show sent values", "Read back")) + 4
+                       + zero_button.winfo_reqwidth() + 10
+                       + longest(panel["state"], ("OUTP: NOT CONFIRMED OFF", "NOT CONFIRMED 0 A", "Power limit",
+                                                  "Compliance", "At setpoint", "Read failed")) + 8)
+            return max(panel["tick_box"].winfo_reqwidth(), settings, buttons, panel["field_row"].winfo_reqwidth())
+
+        def status_width() -> int:
+            lamp, text = status_cells["lamps"][0]
+            return lamp.winfo_reqwidth() + 4 + max(status_cells["field"].winfo_reqwidth() + 8,
+                                                   status_cells["voltage"].winfo_reqwidth(),
+                                                   max(t.winfo_reqwidth() for _lamp, t in status_cells["lamps"]))
+
+        def wide_need() -> int:
+            connections = (self._pair_inset(instruments) + 2 * max(f.winfo_reqwidth() for f in row_frames)
+                           + row_gap + status_gap + status_width())
+            sweep = (self._pair_inset(controls) + table_width() + 4
+                     + self._pair_inset(field_output) + panel_width())
+            actions = (button_row.winfo_reqwidth() + 24 + readback_row.winfo_reqwidth() + 12
+                       + stage_controls.winfo_reqwidth())
+            return max(connections, sweep, actions)
+
+        def forget_pair(container) -> None:
+            if hasattr(container, "_pair_side_by_side"):
+                del container._pair_side_by_side
+
+        def to_wide() -> None:
+            self.stfmr_lockin_wide_layout = True
+            # Connections: two columns of three rows, the readouts beside.
+            instruments.grid_configure(row=0, column=0, columnspan=1, padx=0, pady=0)
+            for index, frame in enumerate(row_frames):
+                frame.grid_configure(row=index % 3, column=index // 3, padx=(0, row_gap) if index < 3 else 0)
+            status.grid(in_=top, row=0, column=1, columnspan=1, sticky="nw", padx=(status_gap, 0), pady=0)
+            status_cells["voltage"].grid_configure(row=1, column=1, columnspan=2, pady=(2, 0))
+            for row, (lamp, text) in enumerate(status_cells["lamps"], start=2):
+                lamp.grid_configure(row=row)
+                text.grid_configure(row=row)
+            # The panel beside the table, its parts on narrower lines.
+            field_output.grid(in_=middle, row=0, column=1, columnspan=1, sticky="nsew", padx=(4, 0), pady=0)
+            self._stfmr_lockin_raise(field_output, middle)
+            middle.columnconfigure(0, weight=0)
+            middle.columnconfigure(1, weight=1)
+            panel["button_line"].grid(row=3, column=0, columnspan=13, sticky="w", pady=(4, 0))
+            for column, (button, _legacy) in enumerate(legacy_buttons):
+                button.grid(in_=panel["button_line"], row=0, column=column,
+                            padx=(8, 2) if button is zero_button else (0, 4))
+            panel["state"].grid(in_=panel["button_line"], row=0, column=3, columnspan=1, sticky="w",
+                                padx=(8, 0), pady=0)
+            panel["field_row"].grid(in_=field_output, row=4, column=0, columnspan=13, sticky="w",
+                                    padx=0, pady=(4, 0))
+            for panel_row in range(5):
+                field_output.rowconfigure(panel_row, weight=1)
+            # The table in five rows.
+            for text, (cell, field, _row, _pair) in table_cells.items():
+                row, pair = self.STFMR_LOCKIN_WIDE_TABLE[text]
+                cell.grid_configure(row=row, column=2 * pair)
+                if field is not None:
+                    field.grid_configure(row=row, column=2 * pair + 1)
+                cell.grid_configure(padx=(12, 0) if field is None else (0 if pair == 0 else 12, 3))
+            # Start ... Set motor 0° on one line under the table and panel.
+            sweep_actions.grid(in_=middle, row=1, column=0, columnspan=2, sticky="w", padx=0, pady=(4, 0))
+            readback_line.grid_configure(row=0, column=1, padx=(24, 0), pady=0)
+            readback_row.grid_configure(row=0, column=0, columnspan=1, padx=(0, 12), pady=0)
+            stage_controls.grid_configure(row=0, column=1, columnspan=1, padx=0, pady=0)
+            readback_line._stage_controls_beside = True
+            # The layout checks read the pairs' flags: the narrow pairs are
+            # not in use; the middle row's is side by side.
+            forget_pair(top)
+            forget_pair(controls)
+            middle._pair_side_by_side = True
+
+        def to_narrow() -> None:
+            self.stfmr_lockin_wide_layout = False
+            for index, frame in enumerate(row_frames):
+                frame.grid_configure(row=index, column=0, padx=0)
+            field_output.grid(in_=top, row=0, column=1, columnspan=1, sticky="nsew", padx=0, pady=0)
+            self._stfmr_lockin_raise(field_output, top)
+            middle.columnconfigure(0, weight=1)
+            middle.columnconfigure(1, weight=0)
+            for button, options in legacy_buttons:
+                button.grid(in_=field_output, **options)
+            panel["state"].grid(in_=field_output, row=2, column=6, columnspan=2, sticky="ew",
+                                padx=(2, 2), pady=(4, 0))
+            panel["button_line"].grid_forget()
+            panel["field_row"].grid(in_=panel["tick"], row=0, column=1, columnspan=1, sticky="e",
+                                    padx=(12, 0), pady=0)
+            for panel_row in range(5):
+                field_output.rowconfigure(panel_row, weight=1 if panel_row < 3 else 0)
+            for text, (cell, field, row, pair) in table_cells.items():
+                cell.grid_configure(row=row, column=2 * pair)
+                if field is not None:
+                    field.grid_configure(row=row, column=2 * pair + 1)
+                cell.grid_configure(padx=(12, 0) if field is None else (0 if pair == 0 else 12, 3))
+            sweep_actions.grid(in_=controls, row=0, column=1, columnspan=1, sticky="nw", padx=0, pady=0)
+            readback_line.grid_configure(row=1, column=0, padx=0, pady=(4, 0))
+            status.grid(in_=sweep_actions, row=2, column=0, columnspan=1, sticky="w", padx=0, pady=(4, 0))
+            status_cells["voltage"].grid_configure(row=0, column=2, columnspan=1, pady=0)
+            for row, (lamp, text) in enumerate(status_cells["lamps"], start=1):
+                lamp.grid_configure(row=row)
+                text.grid_configure(row=row)
+            forget_pair(middle)
+            # The narrow pairs decide again from scratch.
+            forget_pair(top)
+            forget_pair(controls)
+            readback_line._stage_controls_beside = None
+            # The narrow pairs judge their containers' widths and their
+            # sections' requests, both still the wide layout's until Tk has
+            # laid this one out (CI, Linux: the top row's pair, judged on them,
+            # put the panel beside the connections past the page's edge, and
+            # no later <Configure> came to correct it).  So the layout is
+            # computed first, and they judge again once it has settled.
+            try:
+                outer.update_idletasks()
+            except tk.TclError:
+                return      # the window is closing
+
+            def narrow_pairs() -> None:
+                if wide_layout():
+                    return
+                for arrange in (arrange_top, arrange_controls, arrange_stage_line):
+                    if arrange is not None:
+                        arrange()
+            narrow_pairs()
+            try:
+                outer.after_idle(narrow_pairs)
+            except tk.TclError:
+                pass
+
+        def arrange_page(_event=None) -> None:
+            try:
+                available = outer.winfo_width() - self._pair_inset(outer)
+                if available <= 1:
+                    return      # not laid out yet; the first <Configure> decides
+                wide = available >= wide_need()
+            except (tk.TclError, ValueError, AttributeError):
+                return      # closing, or the offline tests' stand-in widgets
+            if wide == wide_layout():
+                return
+            (to_wide if wide else to_narrow)()
+
+        outer.bind("<Configure>", arrange_page, add="+")
+        arrange_page()
 
     @staticmethod
     def _stfmr_lockin_compact_canvas(canvas) -> None:
