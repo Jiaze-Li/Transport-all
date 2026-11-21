@@ -55533,20 +55533,23 @@ class PPMSPanel(CombinedControlApp):
         # "TC (s)" on the PPMS page too, as RT-E's row says; the row only
         # gets narrower (user, 2026-10-14).
         ttk.Label(row, text="TC (s)").grid(row=0, column=8 if compact else 4, padx=(4, 2))
-        # Laid out as the SR830 harmonic rows above it.
-        ttk.Label(self.ppms_settings_panel, text="Zurich harmonic").grid(row=3, column=13, sticky="e", padx=(12, 3))
+        # Laid out as the SR830 harmonic rows above it: under the three of
+        # them, or on the Switch page, which shows SR830-1 only, right under
+        # that one (user, 2026-11-21: "close the gap").
+        zurich_row = int(getattr(type(self), "ppms_zurich_harmonic_row", 3))
+        ttk.Label(self.ppms_settings_panel, text="Zurich harmonic").grid(row=zurich_row, column=13, sticky="e", padx=(12, 3))
         # Every meter's autorange status sits in one column, right of Measure.
         self.zurich_range_var = tk.StringVar(value="Autorange ON")
         ttk.Label(self.ppms_settings_panel, textvariable=self.zurich_range_var, width=16).grid(
-            row=3, column=18, sticky="w", padx=(6, 0))
+            row=zurich_row, column=18, sticky="w", padx=(6, 0))
         self.zurich_harmonic_combo = ttk.Combobox(self.ppms_settings_panel, textvariable=self.zurich_harmonic,
             values=(1, 2, 3, "1+2", "1+2+3"), state="readonly", width=7)
-        self.zurich_harmonic_combo.grid(row=3, column=14, sticky="ew")
+        self.zurich_harmonic_combo.grid(row=zurich_row, column=14, sticky="ew")
         self.zurich_harmonic_combo.bind('<<ComboboxSelected>>', lambda event: self._apply_ppms2_zurich_harmonic())
         self.ppms_lockin_selection['zurich'] = tk.BooleanVar(value=True)
         self.zurich_select = ttk.Checkbutton(self.ppms_settings_panel, text="Measure", variable=self.ppms_lockin_selection['zurich'],
             command=self._refresh_ppms2_plot_layout)
-        self.zurich_select.grid(row=3, column=17, padx=3)
+        self.zurich_select.grid(row=zurich_row, column=17, padx=3)
         # Registered for status updates, but not shown a second time beside
         # the harmonic controls, as for the SR830s: the Zurich row in the
         # rack carries the Zurich state.  Here it pushed Measure and the
@@ -57585,6 +57588,9 @@ class RTEPanel(PPMSPanel):
     # "hide the SR830-2, SR830-3 rows in Switch").  A hidden lock-in keeps
     # its controller and boxes, off screen, so the shared code is unchanged.
     rte_shown_sr830_keys = PPMS_SR830_KEYS
+    # True on the Switch page (user, 2026-11-21: "make two columns for the
+    # instruments' connection pls"): see _rte_arrange_connection_columns.
+    rte_two_column_connections = False
 
     def _rte_harmonic_orders(self, key):
         """RT-E name for the shared harmonic-mode parser."""
@@ -57801,9 +57807,17 @@ class RTEPanel(PPMSPanel):
         self.rte_drive_live = tk.StringVar(value='KEPCO: no output command sent')
         # Fixed boxes, so a new reading never shifts the lists.  A longer
         # message, such as a failed read or OFF, wraps inside its box.
+        # On the Switch page (two columns of connections) the two readings
+        # and the field setting are the box's children, shown here in the
+        # rack (grid's in_) or under the second column's rows; on SHHV they
+        # are the rack's own, as before.
+        live_parent = measurement if self.rte_two_column_connections else rack
+        shown_in_rack = {'in_': rack} if self.rte_two_column_connections else {}
+        live_lines = {}
         for row, variable in ((1, self.rte_field_live), (0, self.rte_drive_live)):
-            live = ttk.Label(rack, textvariable=variable, width=32)
-            live.grid(row=row, column=6, padx=(10, 0), sticky='w')
+            live = ttk.Label(live_parent, textvariable=variable, width=32)
+            live.grid(row=row, column=6, padx=(10, 0), sticky='w', **shown_in_rack)
+            live_lines[row] = live
             if laid_out:
                 live.configure(wraplength=32 * tkfont.nametofont('TkDefaultFont', root=live).measure('0'))
         # The field setting (user, 2026-11-14), under the LS475's reading in
@@ -57812,8 +57826,8 @@ class RTEPanel(PPMSPanel):
         # reads the target (_rte_set_field).
         self.rte_field_target = tk.StringVar(value='0')
         self.rte_field_tolerance = tk.StringVar(value=f'{MAGNET_FIELD_SET_DEFAULT_TOLERANCE_G:g}')
-        field_set = ttk.Frame(rack)
-        field_set.grid(row=2, column=6, padx=(10, 0), sticky='w')
+        field_set = ttk.Frame(live_parent)
+        field_set.grid(row=2, column=6, padx=(10, 0), sticky='w', **shown_in_rack)
         ttk.Label(field_set, text='Field G').grid(row=0, column=0)
         field_target = ttk.Entry(field_set, textvariable=self.rte_field_target, width=7)
         field_target.grid(row=0, column=1, padx=3)
@@ -57874,7 +57888,10 @@ class RTEPanel(PPMSPanel):
         ttk.Label(rack, textvariable=self.rte_connections['newmark'], width=13).grid(row=4, column=5, sticky='w')
         # Locked and released like the other rack rows' connection widgets.
         self.rte_connection_widgets['newmark'] = (entry, connect, disconnect)
-        if laid_out:
+        if laid_out and self.rte_two_column_connections:
+            self._rte_arrange_connection_columns(measurement, rack, instruments,
+                                                 [live_lines[0], live_lines[1], field_set])
+        elif laid_out:
             # Side by side in the widened lab window; stacked in the 1101 px
             # window the program opens with, where the two did not fit.
             self._arrange_pair_by_width(measurement, rack, instruments, gap=12, stack_gap=4)
@@ -58448,6 +58465,61 @@ class RTEPanel(PPMSPanel):
         self.ppms_transport_plot_frames = {}
         self.ppms_transport_canvas = None
         self.ppms_plot_axis = 'current'
+
+    def _rte_arrange_connection_columns(self, measurement, rack, instruments, live):
+        """The Switch page's connections in two columns (user, 2026-11-21:
+        "make two columns for the instruments' connection pls"): the rack's
+        rows (magnet supply, LS475, 6221, 2400, Motor) on the left, the
+        lock-ins' rows (SR830-1, Zurich) on the right, whenever the box has
+        the width for both.  On SHHV the two only went side by side when the
+        rack WITH its readings beside it fitted too, which the 2000 px
+        window on Windows just missed.  Here the supply's line, the LS475's
+        reading and the field setting (``live``, the box's children) move
+        under the right column's rows while the two are side by side, where
+        that column has three free lines, so both columns are five lines
+        tall; stacked (the 1101 px window) they stay beside the rack's first
+        three rows, as on SHHV, and the box is no taller.
+
+        The decision uses widths that do not change with it: the rack's six
+        connection columns, the right column's rows and the three moved
+        parts, each as it asks."""
+        def rack_width() -> int:
+            total = 0
+            for column in range(6):
+                # The lamp's column has 3 px either side of it.
+                total += max((widget.winfo_reqwidth() + (6 if column == 4 else 0)
+                              for widget in rack.grid_slaves(column=column) if widget not in live), default=0)
+            return total
+
+        def right_width() -> int:
+            rows = [child.winfo_reqwidth() for child in instruments.winfo_children()
+                    if child.winfo_manager() == 'grid']
+            return max([*rows, *(widget.winfo_reqwidth() for widget in live)], default=0)
+
+        self._arrange_pair_by_width(measurement, rack, instruments, gap=12, stack_gap=4,
+                                    left_width=rack_width, right_width=right_width)
+
+        def place(_event=None) -> None:
+            # After the pair's own decision, on the same <Configure>.
+            side = getattr(measurement, '_pair_side_by_side', None)
+            if side is None or getattr(measurement, '_rte_live_beside_rack', None) is (not side):
+                return
+            measurement._rte_live_beside_rack = not side
+            try:
+                for index, widget in enumerate(live):
+                    if side:
+                        # Under the SR830 rows (0 to 2) and the Zurich's (3).
+                        widget.grid(in_=instruments, row=4 + index, column=0, columnspan=3, sticky='w',
+                                    padx=0, pady=(2, 0))
+                        self._stfmr_lockin_raise(widget, instruments)
+                    else:
+                        widget.grid(in_=rack, row=index, column=6, columnspan=1, sticky='w', padx=(10, 0), pady=0)
+                        self._stfmr_lockin_raise(widget, rack)
+            except tk.TclError:
+                pass        # the window is closing
+
+        measurement.bind('<Configure>', place, add='+')
+        place()
 
     def _rte_mode_changed(self, _event=None):
         mode = self.ppms_simple_mode.get()
@@ -61261,6 +61333,12 @@ class SwitchPanel(RTEPanel):
     # SR830-1 only (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in
     # Switch"); the two others stay unmeasured and off screen.
     rte_shown_sr830_keys = ('830_a',)
+    # The Zurich's harmonic row right under SR830-1's, where SR830-2's is
+    # on SHHV (user, 2026-11-21: "close the gap").
+    ppms_zurich_harmonic_row = 1
+    # The connections in two columns (user, 2026-11-21: "make two columns
+    # for the instruments' connection pls").
+    rte_two_column_connections = True
 
     def __init__(self, parent, tab):
         super().__init__(parent, tab)

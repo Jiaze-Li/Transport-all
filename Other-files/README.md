@@ -27,7 +27,11 @@
   at 317.3 Hz on SR830-1 at the first harmonic.
 - **SR830-1 only on screen** (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in Switch"): the Switch page does
   not show the connection rows and harmonic rows of SR830-2 and SR830-3 (`rte_shown_sr830_keys`); SHHV shows all
-  three. The Zurich's rows stay.
+  three. The Zurich's rows stay, its harmonic row right under SR830-1's (`ppms_zurich_harmonic_row`).
+- **Connections in two columns** (user, 2026-11-21: "make two columns for the instruments' connection pls"): in
+  a window wide enough (the 2000 px one) the rack's five rows are left and SR830-1 and the Zurich right, with the
+  supply's line, the LS475's reading and Set field under them (`_rte_arrange_connection_columns`); stacked in the
+  1101 px window, those three beside the rack as on SHHV.
 - Not run on the instruments. The pulse's height and width have not been checked on an oscilloscope by this program.
 
 ## ST-FMR wide layout: two columns of connections, a five-row sweep table, more plot height (user, 2026-11-20)

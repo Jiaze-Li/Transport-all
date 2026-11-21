@@ -210,9 +210,34 @@ class SwitchPageTests(unittest.TestCase):
         hidden = [w for w in panel.test_widgets if w.grid_removed and w.grid_options.get("column") in (13, 14, 17, 18)
                   and w.grid_options.get("row") in (1, 2)]
         self.assertEqual(len(hidden), 8, "label, harmonic, Measure and range of two rows")
-        # SHHV keeps all three.
+        # The Zurich's harmonic row follows SR830-1's with no empty line
+        # between (user, 2026-11-21: "close the gap"): its four widgets on
+        # the second line of the block.
+        def zurich_rows(page):
+            return sorted((w.grid_options["column"], w.grid_options["row"]) for w in page.test_widgets
+                          if w.parent is page.ppms_settings_panel and not w.grid_removed
+                          and w.grid_options.get("column") in (13, 14, 17, 18) and w.grid_options.get("row") != 0)
+        self.assertEqual(zurich_rows(panel), [(13, 1), (14, 1), (17, 1), (18, 1)])
+        self.assertEqual(panel.zurich_harmonic_combo.grid_options["row"], 1)
+        # Two columns of connections (user, 2026-11-21): the supply's line,
+        # the LS475's reading and the field setting are the box's children,
+        # shown in the rack until the window has the width (GitHub's window
+        # tests check the two layouts).
+        self.assertIs(panel.rte_two_column_connections, True)
+        rack = panel.rte_connection_widgets["newmark"][0].parent
+        field_set = panel.rte_set_field_button.parent
+        self.assertIs(field_set.parent, rack.parent)
+        self.assertIs(field_set.grid_options["in_"], rack)
+        self.assertEqual((field_set.grid_options["row"], field_set.grid_options["column"]), (2, 6))
+        # SHHV keeps all three, the Zurich's on the fourth line.
         shhv = ete.build_page(kepco=False)
         shhv.test_widgets = list(Recorder.made)
+        self.assertEqual(shhv.zurich_harmonic_combo.grid_options["row"], 3)
+        self.assertEqual(shhv.zurich_select.grid_options["row"], 3)
+        self.assertIs(shhv.rte_two_column_connections, False)
+        shhv_rack = shhv.rte_connection_widgets["newmark"][0].parent
+        self.assertIs(shhv.rte_set_field_button.parent.parent, shhv_rack, "SHHV's field setting is the rack's own")
+        self.assertNotIn("in_", shhv.rte_set_field_button.parent.grid_options)
         self.assertEqual(shhv.rte_shown_sr830_keys, app.PPMS_SR830_KEYS)
         self.assertEqual(set(self.rows_shown(shhv).values()), {(True, True)})
 
