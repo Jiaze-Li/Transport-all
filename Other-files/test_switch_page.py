@@ -185,6 +185,29 @@ class SwitchPageTests(unittest.TestCase):
         # The list box shows this mode's fields.
         self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
 
+    def test_the_plots_have_a_row_of_x_against_time(self):
+        """User, 2026-11-21: "add a row to show the SR830 x signal vs time
+        pls": one plot across the three columns, in the row under the X / I,
+        Y / I and phase plots, with an equal share of the height; it moves
+        down when a second harmonic is measured."""
+        panel = build_switch_page(kepco=False)
+        frame, canvas = panel.switch_time_frame, panel.switch_time_canvas
+        self.assertIs(frame.parent, panel.ppms_plot_frame)
+        self.assertIs(canvas.parent, frame)
+        self.assertEqual(frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
+        self.assertFalse(frame.grid_removed)
+        self.assertEqual(frame.options["text"], "X vs time — 1st harmonic, SR830-1")
+        self.assertIs(canvas.ppms_compact_plot, True)
+        # The pulse plots keep their own x labels: the time row has another axis.
+        self.assertFalse(panel.ppms_harmonic_canvases[(1, "x")].ppms_hide_x_labels)
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
+            panel.ppms_lockin_selection["zurich"].set(True)
+            panel.zurich_harmonic.set("2")
+            panel._refresh_ppms2_plot_layout()
+            self.assertEqual(frame.grid_options["row"], 2)
+            self.assertEqual(frame.options["text"], "X vs time — 1st harmonic, SR830-1")
+            self.assertEqual(draw.call_args.args[2:5], ("Time (s)", "X voltage", "Waiting for scan data"))
+
     def rows_shown(self, panel):
         """{SR830 label: (its connection row shown, its harmonic row shown)}."""
         shown = {}
@@ -365,9 +388,22 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual([e["target_field_g"] for e in events if e["event"] == "field_programmed"], [100.0, -50.0])
         self.assertEqual(events[-1]["event"], "run_finished")
         # The plot: X / I in ohm against the pulse current, a curve per field.
+        # Under them the row of X against time (user, 2026-11-21: "add a row
+        # to show the SR830 x signal vs time pls").
         x_label = {call.args[2] for call in h.draw.call_args_list}
-        self.assertEqual(x_label, {"6221 pulse current (mA)"})
+        self.assertEqual(x_label, {"6221 pulse current (mA)", "Time (s)"})
         self.assertIn("X / I (Ω)", {call.args[3] for call in h.draw.call_args_list})
+        timed = [call for call in h.draw.call_args_list if call.args[2] == "Time (s)"][-1]
+        self.assertIs(timed.args[0], h.panel.switch_time_canvas)
+        self.assertEqual((timed.args[3], timed.kwargs["auto_voltage_unit"]), ("X voltage", True))
+        # Every saved point, in the order measured: its elapsed_s and its X
+        # in volts (not over the read current), one curve for the scan.
+        saved = h.panel.ppms_field_scan_rows
+        address = app.PPMSPanel._ppms_sr830_address(h.panel.ppms_instrument_controllers["830_a"].resource_name)
+        self.assertEqual(timed.args[1], {"SR830-1 P1": [(r["elapsed_s"], r[f"sr830_{address}_x_v"]) for r in saved]})
+        self.assertEqual(len(saved), 10)
+        times = [x for x, _y in timed.args[1]["SR830-1 P1"]]
+        self.assertEqual(times, sorted(times))
 
     def test_a_setting_that_does_not_read_back_arms_nothing(self):
         h = self.make_switch(fields="100", span=("2", "2", "1"))

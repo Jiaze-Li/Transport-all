@@ -32,6 +32,12 @@
   a window wide enough (the 2000 px one) the rack's five rows are left and SR830-1 and the Zurich right, with the
   supply's line, the LS475's reading and Set field under them (`_rte_arrange_connection_columns`); stacked in the
   1101 px window, those three beside the rack as on SHHV.
+- **A row of X against time** (user, 2026-11-21: "add a row to show the SR830 x signal vs time pls"): under the
+  X / I, Y / I and phase plots, one plot across the page: each saved point's X in volts (the reading averaged over
+  Acquire s) against the scan's elapsed time (`elapsed_s`), for the lock-ins of the lowest harmonic measured
+  (`_redraw_switch_time_plot`). It draws the saved rows; nothing more is read from the lock-in for it, so the
+  signal between two points (during the pulse and the settling) is not shown. The saved picture of the plots
+  includes it.
 - Not run on the instruments. The pulse's height and width have not been checked on an oscilloscope by this program.
 
 ## ST-FMR wide layout: two columns of connections, a five-row sweep table, more plot height (user, 2026-11-20)

@@ -3632,6 +3632,8 @@ SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 30.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
 SWITCH_READ_CURRENT_RMS_MA = 0.5
+# The Switch page's row of X against time (user, 2026-11-21).
+SWITCH_TIME_ROW_TITLE = 'X vs time'
 # Waited beyond the pulse train's own length before OUTP? is read (as
 # MS-fourState's PULSE_DONE_MARGIN_S).
 SWITCH_PULSE_DONE_MARGIN_S = 0.2
@@ -61346,9 +61348,80 @@ class SwitchPanel(RTEPanel):
         # rack's 317.3 Hz, on SR830-1 at the first harmonic, measured alone.
         self.ppms_transport_current_var.set(f'{SWITCH_READ_CURRENT_RMS_MA:g}')
         self.ppms_transport_harmonic_a_var.set('1')
-        self.ppms_plot_frame.configure(text='Switch: X / I, Y / I and phase vs 6221 pulse current')
+        self.ppms_plot_frame.configure(
+            text='Switch: X / I, Y / I and phase vs 6221 pulse current; X vs time')
+        # A row under them for the lock-in's X against time (user,
+        # 2026-11-21: "add a row to show the SR830 x signal vs time pls"),
+        # one plot across the three columns.
+        frame = ttk.LabelFrame(self.ppms_plot_frame, text=SWITCH_TIME_ROW_TITLE, padding=2)
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background='white',
+                           highlightthickness=0)
+        canvas.ppms_compact_plot = True
+        canvas.grid(row=0, column=0, sticky='nsew')
+        canvas.bind('<Configure>', lambda event: self._redraw_switch_time_plot())
+        self.switch_time_frame, self.switch_time_canvas = frame, canvas
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
+
+    def _switch_time_order(self):
+        """The harmonic order the time row shows and its lock-ins: the
+        lowest one measured, the page's first row of plots."""
+        orders = self._ppms2_measured_orders()
+        for order in PPMS_HARMONIC_ORDERS:
+            if orders.get(order):
+                return order, orders[order]
+        return None, []
+
+    def _refresh_ppms2_plot_layout(self):
+        """The harmonic rows as SHHV's, then the time row under the last
+        of them with an equal share of the height."""
+        super()._refresh_ppms2_plot_layout()
+        frame = self.__dict__.get('switch_time_frame')
+        if frame is None:
+            return      # the rack's own construction, before the row is made
+        orders = self._ppms2_measured_orders()
+        row = sum(1 for order in PPMS_HARMONIC_ORDERS if orders.get(order))
+        order, meters = self._switch_time_order()
+        names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in meters)
+        frame.configure(text=SWITCH_TIME_ROW_TITLE + (f' — {PPMS_HARMONIC_LABELS[order]}, {names}' if meters else ''))
+        frame.grid(row=row, column=0, columnspan=3, sticky='nsew')
+        self.ppms_plot_frame.rowconfigure(row, weight=1, uniform='ppms_plot_rows')
+        self._redraw_switch_time_plot()
+
+    def _redraw_ppms_transport_plot(self):
+        super()._redraw_ppms_transport_plot()
+        self._redraw_switch_time_plot()
+
+    def _redraw_switch_time_plot(self):
+        """The time row: each saved point's X (the reading averaged over
+        Acquire s, in volts) against the scan's elapsed time, its
+        ``elapsed_s`` column, one curve per lock-in and harmonic pass in the
+        lock-in's colour.  Nothing is read for it."""
+        canvas = self.__dict__.get('switch_time_canvas')
+        if canvas is None:
+            return
+        order, meters = self._switch_time_order()
+        series, colors, markers = {}, {}, {}
+        for meter in meters:
+            resolve_prefix = self._ppms2_prefix_resolver(meter, order)
+            label = PPMS_SR830_LABELS.get(meter, 'Zurich')
+            for row in self.ppms_field_scan_rows:
+                elapsed, prefix = row.get('elapsed_s'), resolve_prefix(row)
+                if prefix is None or not isinstance(elapsed, (int, float)):
+                    continue
+                value = row.get(prefix + 'x_v')
+                if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    continue
+                name = f"{label} P{row.get('harmonic_pass', 1)}"
+                series.setdefault(name, []).append((elapsed, value))
+                colors[name] = PPMS_METER_COLORS.get(meter, '#666666')
+                if meter == 'zurich':
+                    markers[name] = 'open_circle'
+        self._draw_nonlocal_series(canvas, series, 'Time (s)', 'X voltage', 'Waiting for scan data', markers=True,
+                                   auto_voltage_unit=True, show_legend=False, series_colors=colors,
+                                   series_markers=markers)
 
 
 PPMS2Panel = PPMSPanel  # Former name of the PPMS page; kept for existing tests/scripts.
