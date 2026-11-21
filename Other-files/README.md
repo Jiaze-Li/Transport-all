@@ -25,6 +25,9 @@
   first harmonic). The plots show X / I and Y / I in ohm against the pulse current, a curve per field.
 - **Start-up values:** pulses -20 to +20 mA in 1 mA and back, fields 40, 20, 0, -20 G, 30 µs x 1, read 0.5 mA RMS
   at 317.3 Hz on SR830-1 at the first harmonic.
+- **SR830-1 only on screen** (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in Switch"): the Switch page does
+  not show the connection rows and harmonic rows of SR830-2 and SR830-3 (`rte_shown_sr830_keys`); SHHV shows all
+  three. The Zurich's rows stay.
 - Not run on the instruments. The pulse's height and width have not been checked on an oscilloscope by this program.
 
 ## ST-FMR wide layout: two columns of connections, a five-row sweep table, more plot height (user, 2026-11-20)

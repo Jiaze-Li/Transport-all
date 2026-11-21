@@ -185,6 +185,37 @@ class SwitchPageTests(unittest.TestCase):
         # The list box shows this mode's fields.
         self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
 
+    def rows_shown(self, panel):
+        """{SR830 label: (its connection row shown, its harmonic row shown)}."""
+        shown = {}
+        for key in app.PPMS_SR830_KEYS:
+            label = app.PPMS_SR830_LABELS[key]
+            group = panel.ppms_device_resource_widgets[key].parent
+            harmonic = [w for w in panel.test_widgets if w.options.get("text") == f"{label} harmonic"]
+            self.assertEqual(len(harmonic), 1, label)
+            shown[label] = (not group.grid_removed, not harmonic[0].grid_removed)
+        return shown
+
+    def test_only_sr830_1_has_rows_on_the_switch_page(self):
+        """User, 2026-11-21: "hide the SR830-2, SR830-3 rows in Switch": their
+        connection rows and harmonic rows are off screen; SR830-1's and the
+        Zurich's stay, and neither hidden lock-in is measured."""
+        panel = build_switch_page(kepco=False)
+        self.assertEqual(panel.rte_shown_sr830_keys, ("830_a",))
+        self.assertEqual(self.rows_shown(panel), {"SR830-1": (True, True), "SR830-2": (False, False),
+                                                  "SR830-3": (False, False)})
+        self.assertEqual({key: panel.ppms_lockin_selection[key].get() for key in ("830_b", "830_c")},
+                         {"830_b": False, "830_c": False})
+        # Every widget of a hidden harmonic row, not only its label.
+        hidden = [w for w in panel.test_widgets if w.grid_removed and w.grid_options.get("column") in (13, 14, 17, 18)
+                  and w.grid_options.get("row") in (1, 2)]
+        self.assertEqual(len(hidden), 8, "label, harmonic, Measure and range of two rows")
+        # SHHV keeps all three.
+        shhv = ete.build_page(kepco=False)
+        shhv.test_widgets = list(Recorder.made)
+        self.assertEqual(shhv.rte_shown_sr830_keys, app.PPMS_SR830_KEYS)
+        self.assertEqual(set(self.rows_shown(shhv).values()), {(True, True)})
+
     def test_the_shhv_page_is_as_before(self):
         panel = ete.build_page(kepco=False)
         self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))

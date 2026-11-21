@@ -57580,6 +57580,11 @@ class RTEPanel(PPMSPanel):
     # page (SwitchPanel) has its own.
     rte_scan_modes = RTE_SCAN_MODES
     rte_default_scan_mode = RTE_DEFAULT_SCAN_MODE
+    # The SR830s whose connection row and harmonic row the page shows: all
+    # three on SHHV; the Switch page shows SR830-1 only (user, 2026-11-21:
+    # "hide the SR830-2, SR830-3 rows in Switch").  A hidden lock-in keeps
+    # its controller and boxes, off screen, so the shared code is unchanged.
+    rte_shown_sr830_keys = PPMS_SR830_KEYS
 
     def _rte_harmonic_orders(self, key):
         """RT-E name for the shared harmonic-mode parser."""
@@ -57831,6 +57836,8 @@ class RTEPanel(PPMSPanel):
             device_row = i + 2 if i < 2 else 0
             if i >= 2:
                 group.grid(row=i - 2, column=0, sticky='w', padx=0)
+                if key not in self.rte_shown_sr830_keys:
+                    group.grid_remove()     # its row is not shown on this page
             ttk.Label(group, text=self.ppms_instrument_controllers[key].label, width=13).grid(row=device_row, column=0, sticky='w')
             variable = self.ppms_resource_vars[key]
             entry = ttk.Entry(group, textvariable=variable, width=18)
@@ -57963,7 +57970,8 @@ class RTEPanel(PPMSPanel):
         for grid_row, key in enumerate(PPMS_SR830_KEYS):
             # Share the safety row on the right to save one row of height.
             # The inherited Zurich controls follow SR830-3 at row 3.
-            ttk.Label(lockins, text=PPMS_SR830_LABELS[key] + ' harmonic').grid(row=grid_row, column=13, sticky='e', padx=(12, 3))
+            harmonic_label = ttk.Label(lockins, text=PPMS_SR830_LABELS[key] + ' harmonic')
+            harmonic_label.grid(row=grid_row, column=13, sticky='e', padx=(12, 3))
             combo = ttk.Combobox(lockins, textvariable=self._ppms_harmonic_var(key), values=(1, 2, 3, '1+2', '1+2+3'), width=7, state='readonly')
             combo.grid(row=grid_row, column=14, sticky='ew')
             combo.bind('<<ComboboxSelected>>', lambda event, k=key: self._ppms_apply_selected_harmonic(k))
@@ -57973,9 +57981,14 @@ class RTEPanel(PPMSPanel):
             select = ttk.Checkbutton(lockins, text='Measure', variable=self.ppms_lockin_selection[key], command=self._refresh_ppms2_plot_layout)
             select.grid(row=grid_row, column=17, padx=3)
             self.ppms_sr830_range_vars[key] = tk.StringVar(value='Autorange ON')
-            ttk.Label(lockins, textvariable=self.ppms_sr830_range_vars[key], width=16).grid(
-                row=grid_row, column=18, sticky='w', padx=(6, 0))
+            range_label = ttk.Label(lockins, textvariable=self.ppms_sr830_range_vars[key], width=16)
+            range_label.grid(row=grid_row, column=18, sticky='w', padx=(6, 0))
             self.ppms_lockin_choice_widgets.extend(((combo, 'readonly'), (select, 'normal')))
+            if key not in self.rte_shown_sr830_keys:
+                # Not shown on this page (the Switch page's SR830-2 and
+                # SR830-3): the row takes no height, the Zurich's follows.
+                for widget in (harmonic_label, combo, select, range_label):
+                    widget.grid_remove()
 
         # The Newmark NSC-A1 rotation stage (user, 2026-10-13).  Its rack row
         # and its row under the settings took about 84 px of height in the
@@ -61245,6 +61258,9 @@ class SwitchPanel(RTEPanel):
     ppms_page_name = 'Switch'
     rte_scan_modes = SWITCH_SCAN_MODES
     rte_default_scan_mode = SWITCH_SCAN_MODE
+    # SR830-1 only (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in
+    # Switch"); the two others stay unmeasured and off screen.
+    rte_shown_sr830_keys = ('830_a',)
 
     def __init__(self, parent, tab):
         super().__init__(parent, tab)
