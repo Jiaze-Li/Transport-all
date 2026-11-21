@@ -236,7 +236,10 @@ class LeaseLabelTests(unittest.TestCase):
             text = source.read()
         self.assertIn('"kepco": STFMRKepco4886Controller(self.thread_log, owner_scope="FMR")', text)
         self.assertIn('self.stfmr_controllers["gauss"].owner_scope = "FMR"', text)
-        self.assertIn("self.rte_controllers['kepco'].owner_scope = 'SHHV'", text)
+        # SHHV's rack names its controllers after its page since the Switch
+        # page shares the code (user, 2026-11-21): "SHHV" there, "Switch" here.
+        self.assertIn("self.rte_controllers['kepco'].owner_scope = self.ppms_page_name", text)
+        self.assertEqual((app.RTEPanel.ppms_page_name, app.SwitchPanel.ppms_page_name), ("SHHV", "Switch"))
 
 
 def inputs_app(start="-1", stop="1", step="0.5", loop="1"):

@@ -692,7 +692,8 @@ class NotebookTabTests(unittest.TestCase):
                       for index in range(notebook.index("end"))]
             self.assertEqual(titles, [
                 "MOKE light", "MOKE motor", "MOKE magnet", "CIDWM",
-                "MOKE-24", "Non-local", "PPMS", "SHHV", "FMR", "STFMR"])
+                # The Switch page after SHHV, whose rack it shares (user, 2026-11-21).
+                "MOKE-24", "Non-local", "PPMS", "SHHV", "Switch", "FMR", "STFMR"])
         finally:
             built.closing = True
             built.safe_close_hardware()

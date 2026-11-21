@@ -991,7 +991,11 @@ class SHVUnchangedTests(unittest.TestCase):
         import inspect
         source = inspect.getsource(app.RTEPanel)
         # Its own modes, Angle+Field and Angle+Current since 2026-10-18 (user).
-        self.assertIn("values=RTE_SCAN_MODES", source)
+        # The page's own list: RTE_SCAN_MODES on SHHV; the Switch page, which
+        # shares the class, has its one mode (user, 2026-11-21).
+        self.assertIn("values=self.rte_scan_modes", source)
+        self.assertIs(app.RTEPanel.rte_scan_modes, app.RTE_SCAN_MODES)
+        self.assertEqual(app.SwitchPanel.rte_scan_modes, ("Switch",))
         # Angle+Field2 is SHHV's own (user, 2026-11-17); no frequency mode.
         self.assertEqual(app.RTE_SCAN_MODES,
                          ("Field", "Current", "Angle", "Angle+Field", "Angle+Field2", "Angle+Current"))

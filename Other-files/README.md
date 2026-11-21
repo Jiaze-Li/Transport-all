@@ -1,5 +1,32 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Switch page: 6221 pulse write, lock-in read, loops at several fields (user, 2026-11-21)
+
+- **Request:** "add a Switch module containing 6221, 830, magnet like SHHV has LS643, Kepco4886, LS475, the motor.
+  6221 pulse write function. to get a switching results like this fig" (R_H against the pulse current, one loop per
+  field).
+- **The page** (`SwitchPanel`, tab "Switch" after SHHV) is SHHV's rack again with its own controllers: the 6221, the
+  three SR830s and the Zurich, the KEPCO 4886 or LS643, the LS475, the Newmark stage; its connections, Apply, Set
+  field, stage buttons and OFF buttons are SHHV's code (`RTEPanel`), whose texts now name the page
+  (`ppms_page_name`). An instrument is held by one page at a time, so disconnect it on SHHV before connecting it
+  here. The ST-FMR stage checks count the Switch page's 4886 and LS643 as SHHV's.
+- **The scan** (mode `Switch`, the page's only one): the outer box is a list of fields in G, each reached as Set
+  field reaches it (as Angle+Field2); Start / End / Step are the 6221 pulse currents in mA, Round trip on (up and
+  back, a loop). Each point: read current off (read back), one write of `Pulses` pulses of `Pulse µs` (the CIDWM
+  page's unipolar pulse, every setting read back before ARM, the latched compliance read around it, the output
+  confirmed off after it; 0 mA sends no pulse), the read current on again (the rack's 6221 mA RMS / Hz boxes;
+  MS-fourState's sine set-up, without the 6221's `*RST`, so its output relay is not switched at every point; the
+  SR830s' reference lock is waited for), then 5 x the slowest lock-in's time constant plus Settle s
+  (`SWITCH_READ_SETTLE_TAUS`, as MS-fourState's read), then the lock-ins read for Acquire s. The scan's one full
+  6221 set-up (reset, output low floating, lock-ins checked) comes before the first pulse. The compliance box serves the
+  pulse and the read. The end zeroes the 6221 and the magnet supply, as every SHHV scan.
+- **Saved:** SHHV's columns plus `pulse_current_ma`, `pulse_width_s`, `pulse_count`, `pulse_in_compliance`,
+  `outer_target_field_g`, and `sr830_<address>_x_over_i_ohm` (X over the read current: the Hall resistance at the
+  first harmonic). The plots show X / I and Y / I in ohm against the pulse current, a curve per field.
+- **Start-up values:** pulses -20 to +20 mA in 1 mA and back, fields 40, 20, 0, -20 G, 30 µs x 1, read 0.5 mA RMS
+  at 317.3 Hz on SR830-1 at the first harmonic.
+- Not run on the instruments. The pulse's height and width have not been checked on an oscilloscope by this program.
+
 ## ST-FMR wide layout: two columns of connections, a five-row sweep table, more plot height (user, 2026-11-20)
 
 - **Request:** "add a column in the instruments connection and reduce the height of the field sweep section to

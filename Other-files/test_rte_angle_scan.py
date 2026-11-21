@@ -1166,7 +1166,7 @@ class AngleScanWorkerTests(StageBase):
         # The settle wait before the first point: after its 15 s the scan
         # goes on with a note, not a failure (user, 2026-10-18).
         panel = types.SimpleNamespace(thread_log=Mock(), post_ui=lambda f: None, rte_field_live=Var(""),
-                                      _rte_wait=lambda seconds: None, _rte_log=Mock())
+                                      _rte_wait=lambda seconds: None, _rte_log=Mock(), ppms_page_name="SHHV")
         readings = iter([0., 10., 20., 30., 40., 50., 60., 70., 80., 90.])
         panel._rte_read_field = lambda: next(readings)
         clock = iter(range(0, 100, 2))
@@ -3093,7 +3093,10 @@ class OuterListTests(unittest.TestCase):
     def test_the_mode_and_its_row(self):
         self.assertIn("Angle+Field2", app.RTE_SCAN_MODES)
         self.assertIn("Angle+Field2", app.RTE_ANGLE_MODES)
-        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Angle+Field2"))
+        # The Switch page's scan steps the magnet too (user, 2026-11-21); it
+        # is not one of the SHHV page's modes.
+        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Angle+Field2", "Switch"))
+        self.assertNotIn("Switch", app.RTE_SCAN_MODES)
         row = app.RTE_OUTER_ROWS["Angle+Field2"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))

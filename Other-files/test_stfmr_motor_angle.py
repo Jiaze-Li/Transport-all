@@ -925,7 +925,7 @@ class SetZeroTests(MotorBase):
         self.assertEqual({thread for _name, thread in run.dll.calls}, {worker}, "every DLL call on the worker")
         # RT-E asks the same question.
         source = Path(app.__file__).read_text(encoding="utf-8")
-        self.assertIn("messagebox.askyesno('SHHV stage zero', newmark_set_zero_question(), parent=self.root)",
+        self.assertIn("messagebox.askyesno(f'{self.ppms_page_name} stage zero', newmark_set_zero_question(), parent=self.root)",
                       source)
 
     def test_a_refusal_shows_an_error(self):
