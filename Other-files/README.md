@@ -21,8 +21,12 @@
 - **A field sweep's start-up boxes** (Field and Field+Angle, `RTE_FIELD_DEFAULT_RANGE`,
   `RTE_FIELD_ACQUISITION_S`): Start -1, End 1, Step 0.02 A, Round trip on, Acquire s 2 (it was -3 to 3 A in 0.05 A,
   Acquire s as left). Choosing a mode now also sets Acquire s: 2 for those two, 5 (`RTE_ACQUISITION_S`) for every
-  other, as it already set Start / End / Step and Round trip. Loops 1 and Settle s 0.5 are the page's start-up
-  values and are not changed by a mode.
+  other, unless the box holds a value the user typed, which is kept (the PPMS page's rule of 2026-10-16). Loops 1
+  and Settle s 0.5 are the page's start-up values and are not changed by a mode.
+- **From the review before release:** Stop stage pressed during a Field+Angle sweep ends the scan at the next
+  point (the stage only looks at it in a move, once per angle); the stage columns of a sweep's rows are the
+  read-back of the move that started it, not re-read per point; at the first angle the stage turns with the
+  supply as it was left, and the Yes/No says so; refusals name "a Field+Angle scan".
 - Not run on the instruments.
 
 ## "SHHV & Switch": one page, Switch a scan mode, connections in two columns (user, 2026-11-22)

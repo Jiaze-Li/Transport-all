@@ -323,15 +323,9 @@ class EndToEnd(unittest.TestCase):
         panel._rte_connect("newmark")
         self.pump(h)
         self.assertTrue(stage.connected, h.showerror.call_args)
-        # A mode change puts the mode's own Acquire s in the box since
-        # 2026-11-22 (5 s, or 2 s for a field sweep; test_rte_angle_scan's
-        # test_mode_change_defaults); the harness keeps its short one.
-        real_mode_changed = panel._rte_mode_changed
-
-        def mode_changed(*args):
-            real_mode_changed(*args)
-            panel.ppms_acquisition_time_var.set("0.01")
-        panel._rte_mode_changed = mode_changed
+        # The 0.01 s typed above stays through the mode changes: a mode puts
+        # its own Acquire s in the box only while the box still holds the
+        # last mode's (2026-11-22; test_rte_angle_scan's mode tests).
         panel.ppms_simple_mode.set("Angle")
         panel._rte_mode_changed()
         for variable, value in zip(panel.ppms_simple_range, span):
@@ -1435,6 +1429,33 @@ class OuterScanTests(RunLogBase):
         self.assertEqual(drawn.args[2], "Measured magnetic field (G)")
         self.assertEqual({" ".join(name.split(" ")[1:3]) for name in drawn.args[1]}, {"#1 +0°", "#2 +10°"})
         self.assertEqual({len(points) for points in drawn.args[1].values()}, {3})
+
+    def test_field_angle_stop_stage_during_a_sweep_ends_the_scan_at_the_next_point(self):
+        """Review, 2026-11-22: the stage only looks at Stop stage in a move,
+        and Field+Angle moves once per angle; pressed during a sweep it
+        ended nothing until the next angle, a whole sweep later."""
+        h = self.make_field_angle("0, 10")
+        panel = h.panel
+        real_step = h.kepco.set_scan_current
+        seen = []
+
+        def step(value):
+            real_step(value)
+            if not seen:
+                seen.append(value)
+                panel.rte_stage_stop_event.set()      # Stop stage, during the first angle's sweep
+        h.kepco.set_scan_current = step
+        self.start(h)
+        h.showerror.assert_not_called()
+        self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0], "no second angle")
+        self.assertEqual([e[2] for e in h.log if e[:2] == ("kepco", "set_scan_current")], [0.0],
+                         "the point in progress is read, no further current")
+        self.assertEqual(len(self.rows(h)), 2)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Stopped; KEPCO and 6221 zeroed; stage at +0.000°")
+        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
+        last = self.events(h)[-1]
+        self.assertEqual((last["outcome"], last["stop_reason"]),
+                         ("stopped", "SHHV stopped: Stop stage was pressed; stage at +0.000°"))
 
     def test_field_angle_refuses_a_bad_list_before_anything_moves(self):
         for typed, message in (("", "Outer stage °: type the stage angles in degrees in the order to scan"),

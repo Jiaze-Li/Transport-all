@@ -3283,6 +3283,19 @@ class OuterRowPageTests(unittest.TestCase):
         supply = panel._rte_supply_label()
         self.assertEqual(panel.rte_scan_units.get(), f"{supply} A")
         self.assertEqual(panel.rte_scan_note.get(), f"Field+Angle: {supply} A; outer: stage °")
+        # An Acquire s the user typed is kept through a mode change, as on
+        # the PPMS page (user, 2026-10-16; review, 2026-11-22).
+        panel.ppms_acquisition_time_var.set("10")
+        self.mode(panel, "Angle")
+        self.mode(panel, "Field")
+        self.assertEqual(panel.ppms_acquisition_time_var.get(), "10")
+        panel.ppms_acquisition_time_var.set("2")      # back on what a field sweep shows
+        self.mode(panel, "Field+Angle")
+        self.assertEqual(panel.ppms_acquisition_time_var.get(), "2")
+        self.assertEqual(app.rte_angle_not_started_text("Stop stage was pressed", "Field+Angle"),
+                         "Field+Angle scan not started: Stop stage was pressed")
+        self.assertEqual(app.rte_angle_not_started_text("Stop stage was pressed"),
+                         "Angle scan not started: Stop stage was pressed")
         # The typed angles are kept when the mode is chosen again, as the typed fields are.
         panel.rte_outer_ranges["Field+Angle"][0].set("90, 0, -90")
         self.mode(panel, "Angle+Field")

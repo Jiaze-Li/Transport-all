@@ -3585,10 +3585,10 @@ RTE_TRANSPORT_CURRENT_RMS_MA = 1.5
 # -360 deg in 5 deg steps, Acquire s 2 (Settle s 0.5 and Loops 1 as before),
 # round trip off since 2026-10-18 (user: "default not click Round trip").
 # The Angle range is also what choosing Angle puts in the boxes.
-# SHHV starts on Angle+Field (user's figure, 2026-11-17: "change default
-# setting as fig like."); on Angle from 2026-11-16, and from 2026-10-19 on
-# Angle+Field, outer KEPCO 3 to 9 A in 1 A steps (still that row's start-up
-# range).
+# SHHV starts on Angle+Field, the typed fields (user's figure, 2026-11-17:
+# "change default setting as fig like."; named Angle+Field2 until
+# 2026-11-22); on Angle from 2026-11-16, and from 2026-10-19 on the first
+# Angle+Field, outer KEPCO 3 to 9 A in 1 A steps, which is gone.
 RTE_DEFAULT_SCAN_MODE = 'Angle+Field'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # The SHHV scan modes.  Angle+Field and Angle+Current (user, 2026-10-18: "add
@@ -57624,7 +57624,7 @@ RTE_SCAN_NOTES = {
 }
 
 
-def rte_angle_not_started_text(reason):
+def rte_angle_not_started_text(reason, mode='Angle'):
     """The RT-E status line for an Angle Start that did not start (review,
     2026-10-17): "Angle scan not started: <reason>".  ``reason`` is a short
     text, or an error cut to 44 characters (short_status_error, without a
@@ -57633,8 +57633,9 @@ def rte_angle_not_started_text(reason):
     last stop was not conf…") measures about 478 px in Arial 15 px, under the
     505 px of the longest line CI's RTEStatusRowTests checks; 48 characters
     made it 507 px."""
-    text = short_status_error(reason, 44).rstrip('; ') if isinstance(reason, BaseException) else reason
-    return f'Angle scan not started: {text}'
+    text = (short_status_error(reason, 44 - (len(mode) - len('Angle'))).rstrip('; ')
+            if isinstance(reason, BaseException) else reason)
+    return f'{mode} scan not started: {text}'
 
 
 class RTEPanel(PPMSPanel):
@@ -57764,6 +57765,7 @@ class RTEPanel(PPMSPanel):
         # The mode change sets the range, round trip, units label, scan note,
         # outer row (removed) and plot axis, as choosing Angle does.
         self.ppms_acquisition_time_var.set(f'{RTE_ACQUISITION_S:g}')
+        self.rte_acquisition_default_shown = f'{RTE_ACQUISITION_S:g}'
         self.ppms_simple_mode.set(self.rte_default_scan_mode)
         self._rte_mode_changed()
         # The Lake Shore 643 by default (user, 2026-10-23: "change SHV and
@@ -58698,9 +58700,16 @@ class RTEPanel(PPMSPanel):
             variable.set(value)
         # Acquire s with the mode too (user's figure, 2026-11-22): 2 s for a
         # field sweep, the page's start-up value for every other mode.
+        # Unless the box holds something other than what the mode before
+        # put there, a value the user typed: that is kept, as on the PPMS
+        # page (user, 2026-10-16; review, 2026-11-22).
         acquire = self.__dict__.get('ppms_acquisition_time_var')
         if acquire is not None:      # the offline tests' page stand-ins have none
-            acquire.set(f'{RTE_FIELD_ACQUISITION_S if mode in RTE_FIELD_SWEEP_MODES else RTE_ACQUISITION_S:g}')
+            shown = self.__dict__.get('rte_acquisition_default_shown')
+            new = f'{RTE_FIELD_ACQUISITION_S if mode in RTE_FIELD_SWEEP_MODES else RTE_ACQUISITION_S:g}'
+            if shown is None or str(acquire.get()).strip() == shown:
+                acquire.set(new)
+                self.rte_acquisition_default_shown = new
         self._rte_show_scan_units(mode)
         self._rte_show_pulse_row(mode)
         self._rte_show_outer_row(mode)
@@ -59871,16 +59880,17 @@ class RTEPanel(PPMSPanel):
                 # The stage turns the sample holder while the KEPCO holds a
                 # fixed field (user, 2026-10-13), or steps it (Angle+Field).
                 stage = self.rte_controllers['newmark']
+                kind = 'a Field+Angle scan' if field_angle else 'an angle scan'
                 if not stage.connected:
                     # Where its Connect is: the rack's "Motor" row since
                     # 2026-10-17 (user), and whether the STFMR page has it.
                     owner = self._newmark_stage_ownership().owner
                     if owner not in (None, self.ppms_page_name):
                         raise ValueError(f'The motor is connected on the {owner} page: disconnect it there and '
-                                         'connect it here (the "Motor" row of the measurement instruments) for an '
-                                         'angle scan')
+                                         'connect it here (the "Motor" row of the measurement instruments) for '
+                                         f'{kind}')
                     raise ValueError(f'Connect the {stage.label} (the "Motor" row of the measurement instruments) '
-                                     'for an angle scan')
+                                     f'for {kind}')
                 if not stage.steps_per_degree:
                     # Fixed at 40 x NEWMARK_MICROSTEP since the driver is no
                     # longer read (user, 2026-10-17); kept as a guard.
@@ -60330,7 +60340,10 @@ class RTEPanel(PPMSPanel):
             # stage's Yes/No, a plain stage refusal or failure of the check or
             # its fix, a refusal before or after the question, a Stop or OFF
             # meanwhile (review, 2026-10-17).
-            self.ppms_field_scan_status_var.set(rte_angle_not_started_text(reason))
+            # Named "Field+Angle" for that mode (review, 2026-11-22), the
+            # error cut that much shorter so the line is no wider.
+            self.ppms_field_scan_status_var.set(
+                rte_angle_not_started_text(reason, FIELD_ANGLE_SCAN_MODE if field_angle else 'Angle'))
 
         def checked(_mst):
             try:
@@ -60343,7 +60356,8 @@ class RTEPanel(PPMSPanel):
                 return
             if self.ppms_field_scan_stop_event.is_set() or self.rte_stage_stop_event.is_set():
                 pressed = 'Stop stage' if self.rte_stage_stop_event.is_set() else 'an OFF button'
-                self.thread_log(f'{self.ppms_page_name} Angle scan not started: {pressed} was pressed during the stage check')
+                self.thread_log(f"{self.ppms_page_name} {FIELD_ANGLE_SCAN_MODE if field_angle else 'Angle'} scan not "
+                                f'started: {pressed} was pressed during the stage check')
                 not_started(f'{pressed} was pressed')
                 return
             begin(_mst)
@@ -60587,7 +60601,7 @@ class RTEPanel(PPMSPanel):
         return (f'Field+Angle scan.\n\n'
                 f'Stage angle, the OUTER loop: {len(outer)} angles in the order typed: {rte_outer_angles_text(outer)}. '
                 f'The stage turns to each before its field sweep, while the {name} stays at the current the sweep '
-                'before it ended on.\n\n'
+                'before it ended on (at the first angle, as it is now: the sweep sets it after that turn).\n\n'
                 f'{name} current at each angle, the INNER loop: from {currents[0]:+g} A to '
                 f'{max(currents, key=lambda value: abs(value - currents[0])):+g} A (step '
                 f'{abs(float(self.ppms_simple_range[2].get())):g} A{trip}), {len(plan) // loops} currents a loop, '
@@ -61038,6 +61052,13 @@ class RTEPanel(PPMSPanel):
                     self._rte_log('current_programmed', index=progress, step_index=step_index,
                                   steps=len(outer), current_rms_ma=step_value)
                     self._rte_log_check()
+                if field_angle and self.rte_stage_stop_event.is_set():
+                    # Stop stage during a sweep (review, 2026-11-22): the
+                    # stage is still and its next move would be refused only
+                    # at the next angle, a whole sweep later; the scan ends
+                    # here instead, as an Angle scan ends at its next move.
+                    raise PPMSScanCancelled(f"{self.ppms_page_name} stopped: Stop stage was pressed; "
+                                            f"{self.rte_stage_where or 'stage not moved'}")
                 if field_angle and new_step:
                     # The typed angle first, the supply staying where the
                     # sweep before it ended (at the first angle of the scan,
