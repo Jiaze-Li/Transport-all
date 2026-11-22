@@ -1,5 +1,15 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: no Angle mode alone, Magnet current A starts at 1 A (user, 2026-11-22)
+
+- **Request:** "delete the only angle scan in SHHV & Switch module. the default magnetic current set as 1 A."
+- **Modes offered:** Field, Current, Angle+Field, Angle+Current, Field+Angle, Switch (`RTE_SCAN_MODES`). The Angle
+  mode (the stage swept at one held field) is no longer in the list. Its code is kept: the angle sweep is the inner
+  loop of Angle+Field and Angle+Current, and the offline tests still run the sweep through it. A one-field angle
+  scan is Angle+Field with one field typed, or Angle+Current with one current.
+- **Magnet current A** starts at 1 A (`RTE_KEPCO_DEFAULT_CURRENT_A`; 0.6 A before). Only Apply LS643 / Apply KEPCO
+  or an Angle+Current scan's Start sends it, each after a Yes/No naming it.
+
 ## SHHV & Switch: Apply pulse in the settings, compliance 100 V at start-up (user, 2026-11-22)
 
 - **Request:** "add another pulse apply below here RMS continuous settings. Change default compliance to 100V".

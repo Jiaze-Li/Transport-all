@@ -3619,7 +3619,11 @@ RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # A, as the Field mode's) runs, and the plots are against the measured field,
 # a curve per angle.
 FIELD_ANGLE_SCAN_MODE = 'Field+Angle'
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, 'Switch')
+# The Angle mode alone (the stage swept at one held field) is no longer
+# offered (user, 2026-11-22: "delete the only angle scan in SHHV & Switch
+# module").  Its code stays: the angle sweep is Angle+Field's and
+# Angle+Current's inner loop, and RTE_ANGLE_MODES still names it.
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, 'Switch')
 # The modes whose inner loop is the stage's angle sweep (the stage columns,
 # the plots against the angle).
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Current')
@@ -3742,12 +3746,12 @@ def rte_outer_list_chars(text, measure, zero_width):
 RTE_FIELD_SETTLE_POLL_S = 0.2
 # Acquire s at start-up: 5 s (user's figure, 2026-11-16; 2 s since 2026-10-18).
 RTE_ACQUISITION_S = 5.0
-# The "Magnet current A" box at start-up, the field an Angle scan holds: 0.6 A
-# (user's figure, 2026-11-17; 5 A since 2026-11-16, 8 A since 2026-10-18,
-# before that 0 A).  Only
-# Apply KEPCO / Apply LS643 or an Angle scan's Start, each after its Yes/No
-# naming the current, sends it.
-RTE_KEPCO_DEFAULT_CURRENT_A = 0.6
+# The "Magnet current A" box at start-up, the field Angle+Current holds: 1 A
+# (user, 2026-11-22: "the default magnetic current set as 1 A"; 0.6 A from
+# 2026-11-17, 5 A since 2026-11-16, 8 A since 2026-10-18, before that 0 A).
+# Only Apply KEPCO / Apply LS643 or an Angle+Current scan's Start, each after
+# its Yes/No naming the current, sends it.
+RTE_KEPCO_DEFAULT_CURRENT_A = 1.0
 # The Zurich's harmonics at start-up (user's figure, 2026-10-18; was 1+2+3).
 RTE_ZURICH_DEFAULT_HARMONICS = '1+2'
 PPMS_TRANSPORT_COMPLIANCE_V = 50.0

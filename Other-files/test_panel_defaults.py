@@ -57,7 +57,8 @@ class PanelDefaultTests(unittest.TestCase):
         # 100 V (user, 2026-11-22: "Change default compliance to 100V"); 50 V before.
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
         # Magnet current A 0.6 (user's figure, 2026-11-17; 5 from 2026-11-16).
-        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("0.6", "5"))
+        # 1 A (user, 2026-11-22: "the default magnetic current set as 1 A"; 0.6 A before).
+        self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("1", "5"))
         self.assertEqual(panel.zurich_expected_frequency, 317.3)
         # The PPMS page keeps its own excitation.
         self.assertEqual(self.app.ppms_panel.ppms_transport_frequency_var.get(), "317.3")

@@ -1941,7 +1941,7 @@ class AnglePageTests(unittest.TestCase):
         # Angle+Field after Angle+Field (user, 2026-11-17); Switch last
         # (user, 2026-11-22).
         self.assertEqual(combo.options["values"],
-                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Current", "Field+Angle", "Switch"))
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Switch"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3093,6 +3093,13 @@ class OuterListTests(unittest.TestCase):
         # of supply currents), which is gone (user: "delete the old
         # Angle+Field, change Angle+Field to Angle+Field").
         self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2")])
+        # The Angle mode alone is not offered (user, 2026-11-22: "delete the
+        # only angle scan in SHHV & Switch module"); its sweep is still the
+        # inner loop of the two outer-loop angle modes.
+        self.assertNotIn("Angle", app.RTE_SCAN_MODES)
+        self.assertIn("Angle", app.RTE_ANGLE_MODES)
+        self.assertEqual([mode for mode in app.RTE_SCAN_MODES if mode in app.RTE_ANGLE_MODES],
+                         ["Angle+Field", "Angle+Current"])
         row = app.RTE_OUTER_ROWS["Angle+Field"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))
