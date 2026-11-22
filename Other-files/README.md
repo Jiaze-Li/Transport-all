@@ -1,5 +1,10 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: the settings box is "Settings" (user, 2026-11-22)
+
+- **Request:** [the box titled "SHHV settings"] "change the name to Settings." The box's title only, as the scan
+  box became "Scan"; the dialogs, files and columns still say SHHV.
+
 ## SHHV & Switch: Field+Angle mode, Angle+Field2 renamed Angle+Field, field-sweep defaults (user, 2026-11-22)
 
 - **Requests:** "add a Field+Angle scan mode in the SHHV & Switch, like Angle+Field but the Angle is the outer loop

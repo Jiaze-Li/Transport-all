@@ -58046,7 +58046,9 @@ class RTEPanel(PPMSPanel):
         controls = ttk.Frame(outer)
         controls.grid(row=2, column=0, sticky='ew')
         controls.columnconfigure(1, weight=1)
-        settings = ttk.LabelFrame(controls, text=f'{self.ppms_page_name} settings', padding=4)
+        # "Settings" (user, 2026-11-22: "change the name to Settings"; it was
+        # "SHHV settings"), as the scan box is "Scan".
+        settings = ttk.LabelFrame(controls, text='Settings', padding=4)
         settings.grid(row=0, column=0, sticky='nsew')
         # The source settings on the left, the lock-in choices on the right,
         # stacked when the settings box is narrower than both.  The pair's

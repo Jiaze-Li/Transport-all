@@ -181,7 +181,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                     self.assertIn(final[2], ("beside lock-ins", "under params"))
                 body = rte_stage_parts(self.a)[0]
                 self.assertFalse(getattr(body, "_pair_flip_guard", {}).get("held"))
-        self.assertEqual(rte_stage_parts(self.a)[3].master.master.cget("text"), "SHHV settings")
+        self.assertEqual(rte_stage_parts(self.a)[3].master.master.cget("text"), "Settings")       # user, 2026-11-22
 
     def test_the_block_costs_no_height_and_fits_at_1101_px(self):
         self.root.geometry(f"1101x{CI_SHOT_HEIGHT}+0+0")

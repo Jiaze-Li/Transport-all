@@ -155,7 +155,7 @@ class SwitchPageTests(unittest.TestCase):
         panel = self.switch_page()
         self.assertEqual({c.owner_scope for c in panel.rte_controllers.values()}, {"SHHV"})
         texts = {str(w.options.get("text", "")) for w in panel.test_widgets}
-        self.assertTrue({"SHHV settings", "Scan", "6221 write", "Pulse µs", "Pulses"} <= texts, texts)
+        self.assertTrue({"Settings", "Scan", "6221 write", "Pulse µs", "Pulses"} <= texts, texts)
         # All three SR830s and the Zurich keep their rows, the Zurich's
         # harmonic row under the three.
         self.assertEqual(panel.zurich_harmonic_combo.grid_options["row"], 3)

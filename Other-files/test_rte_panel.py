@@ -476,7 +476,7 @@ class RTE(unittest.TestCase):
             self.assertEqual(panel.rte_resources['newmark'].get(), 'auto')
             self.assertEqual(panel.rte_connections['newmark'].get(), 'Not connected')
             block = panel.rte_stage_stop_button.parent
-            self.assertEqual(block.parent.parent.options['text'], 'SHHV settings')
+            self.assertEqual(block.parent.parent.options['text'], 'Settings')
             self.assertEqual(panel.rte_start_button.parent.parent.options['text'], 'Scan')
             self.assertNotIn('text', panel.ppms_instruments_frame.options)
             self.assertEqual(panel.zurich_harmonic.get(), '1+2')     # user's figure, 2026-10-18

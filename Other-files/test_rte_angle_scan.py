@@ -1878,7 +1878,7 @@ class AnglePageTests(unittest.TestCase):
         # the 2000 px window; arrange_stage_block moves it beside the
         # lock-ins in the 1101 px window).
         block = panel.rte_stage_stop_button.parent
-        settings_box = next(w for w in Recorder.made if w.options.get("text") == "SHHV settings")
+        settings_box = next(w for w in Recorder.made if w.options.get("text") == "Settings")
         self.assertIs(block.parent.parent, settings_box)
         self.assertEqual((block.grid_options["row"], block.grid_options["column"]), (1, 0))
         rows = panel.rte_start_button.parent
