@@ -28,7 +28,7 @@ from pathlib import Path
 
 PROGRAM = Path(__file__).resolve().parents[2] / "Transport_all.py"
 COMPACT = ("CIDWM", "STFMR", "FMR")
-REPORTED = ("MOKE light", "MOKE motor", "MOKE magnet", "MOKE-24", "Non-local", "PPMS", "SHHV", "Switch")
+REPORTED = ("MOKE light", "MOKE motor", "MOKE magnet", "MOKE-24", "Non-local", "PPMS", "SHHV & Switch")
 SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (2560, 1440, 2000),  # the lab PC, window widened by hand
     (2560, 1440, 0),     # the lab PC, the program's default window
@@ -36,7 +36,7 @@ SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (1600, 1586, 0),
 )
 SHOT_PAGES = ("MOKE light", "MOKE motor", "MOKE magnet", "CIDWM", "MOKE-24",
-              "Non-local", "PPMS", "SHHV", "Switch", "FMR", "STFMR")
+              "Non-local", "PPMS", "SHHV & Switch", "FMR", "STFMR")
 # The Non-local page's measurements are sub-tabs; each is checked and shot.
 SUB_TABS = {"Non-local": ("nonlocal_measurements", ("resistance", "iv", "iv6221", "gate"))}
 
@@ -351,16 +351,16 @@ def main():
                 if args.shots and screen_w == 2560 and name in SHOT_PAGES:
                     # The lab PC: the widened 2000 px window and the default one.
                     args.shots.mkdir(parents=True, exist_ok=True)
-                    page = f"{name}_{sub}" if sub else name
+                    page = (f"{name}_{sub}" if sub else name).replace(" & ", "-")
                     shot = args.shots / f"{page}_{root.winfo_width()}px.png"
                     print(f"       screenshot: {screenshot(root, tab, shot)}")
-                    if name == "SHHV":
-                        # SHHV with its Switch mode chosen (user, 2026-11-22),
+                    if name == "SHHV & Switch":
+                        # The page with its Switch mode chosen (user, 2026-11-22),
                         # then back on the mode it had.
                         panel, was = app.rte_panel, app.rte_panel.ppms_simple_mode.get()
                         panel.ppms_simple_mode.set("Switch")
                         panel._rte_mode_changed()
-                        shot = args.shots / f"SHHV_Switch-mode_{root.winfo_width()}px.png"
+                        shot = args.shots / f"SHHV-Switch_Switch-mode_{root.winfo_width()}px.png"
                         print(f"       screenshot: {screenshot(root, tab, shot)}")
                         panel.ppms_simple_mode.set(was)
                         panel._rte_mode_changed()

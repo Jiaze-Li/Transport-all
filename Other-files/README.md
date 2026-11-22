@@ -1,20 +1,28 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
-## SHHV: the scan box is "Scan", and Switch is one of its modes (user, 2026-11-22)
+## "SHHV & Switch": one page, Switch a scan mode, connections in two columns (user, 2026-11-22)
 
-- **Request:** "I think there're many the same between SHHV and Switch module. Can you change the name of SHHV scan
-  to Scan, and add the switch scan to the selection like angle + field2 scan?"
-- **The box** is titled "Scan" on SHHV (`rte_scan_box_title`); the dialogs still say "SHHV scan". The Switch page's
-  box is still "Switch scan".
-- **Switch is SHHV's last mode** (`RTE_SCAN_MODES`): the Switch page's scan, the same code, on SHHV's instruments.
-  Choosing it sets the pulse loop (-20 to 20 mA in 1 mA, Round trip on), shows the Outer field G list (40, 20, 0,
-  -20) and the `6221 write` row (Pulse µs, Pulses; `_rte_show_pulse_row`), and adds the X-vs-time row under the
-  plots (`_rte_time_row_shown`: while the plots' axis is the pulse current). Every other mode's box and plots are
-  as before; SHHV still starts on Angle+Field2.
-- **Not changed by choosing the mode:** the 6221 mA RMS box (the read current; 1.5 mA at SHHV's start-up, 0.5 mA on
-  the Switch page) and the lock-ins' harmonics (SR830-1 starts at 2 on SHHV, at 1 on the Switch page). Set them
-  before a Switch scan on SHHV; the Yes/No before the scan shows the read current.
-- The Switch page itself is unchanged. Not run on the instruments.
+- **Requests:** "I think there're many the same between SHHV and Switch module. Can you change the name of SHHV scan
+  to Scan, and add the switch scan to the selection like angle + field2 scan?"; "change the name of SHHV to SHHV &
+  Switch. delete the before Switch module"; "also two columns for the instruments connection panel."
+- **The tab** is "SHHV & Switch" (`RTE_TAB_TITLE`). Only the tab: the page's boxes and dialogs ("SHHV settings",
+  "SHHV scan"), its run folders and files, the rows' `module` column and the instrument leases still say `SHHV`
+  (`RTEPanel.ppms_page_name`), so earlier data and the analysis scripts are not affected.
+- **The Switch page of 2026-11-21 is gone** (`SwitchPanel`, its tab, its SR830-1-only layout). Its scan is the
+  page's last mode (`RTE_SCAN_MODES`), the same code. The section below describes the scan; where it says "the
+  Switch page", read this page with Switch chosen.
+- **The scan box** is titled "Scan". Choosing Switch sets the pulse loop (-20 to 20 mA in 1 mA, Round trip on),
+  shows the Outer field G list (40, 20, 0, -20) and the `6221 write` row (Pulse µs, Pulses; `_rte_show_pulse_row`),
+  and adds the X-vs-time row under the plots (`_rte_time_row_shown`: while the plots' axis is the pulse current).
+  Every other mode's box and plots are as before; the page still starts on Angle+Field2.
+- **Not changed by choosing the mode:** the 6221 mA RMS box (the read current; 1.5 mA at start-up, the old Switch
+  page started at 0.5 mA) and the lock-ins' harmonics (SR830-1 starts at 2; the old Switch page started at 1). Set
+  them before a Switch scan; the Yes/No before the scan shows the read current.
+- **Connections in two columns** (`_rte_arrange_connection_columns`): in a window wide enough (the 2000 px one)
+  the rack's five rows are left and SR830-1 to 3 and the Zurich right, with the supply's line, the LS475's reading
+  and Set field beside the three SR830 rows; the box is five rows tall instead of nine, and the plots get the
+  height. Stacked in the 1101 px window, as before.
+- Not run on the instruments.
 
 ## Switch page: 6221 pulse write, lock-in read, loops at several fields (user, 2026-11-21)
 
@@ -41,15 +49,10 @@
   first harmonic). The plots show X / I and Y / I in ohm against the pulse current, a curve per field.
 - **Start-up values:** pulses -20 to +20 mA in 1 mA and back, fields 40, 20, 0, -20 G, 30 µs x 1, read 0.5 mA RMS
   at 317.3 Hz on SR830-1 at the first harmonic.
-- **SR830-1 only on screen** (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in Switch"): the Switch page does
-  not show the connection rows and harmonic rows of SR830-2 and SR830-3 (`rte_shown_sr830_keys`); SHHV shows all
-  three. The Zurich's rows stay, its harmonic row right under SR830-1's (`ppms_zurich_harmonic_row`).
-- **Connections in two columns** (user, 2026-11-21: "make two columns for the instruments' connection pls"): in
-  a window wide enough (the 2000 px one) the rack's five rows are left and SR830-1 and the Zurich right, with the
-  supply's line, the LS475's reading and Set field under them (`_rte_arrange_connection_columns`); stacked in the
-  1101 px window, those three beside the rack as on SHHV.
+- (Until 2026-11-22 the Switch page showed SR830-1 only and had its own two-column connections; both went with
+  the page, see the section above.)
 - **A row of X against time** (user, 2026-11-21: "add a row to show the SR830 x signal vs time pls"): under the
-  X / I, Y / I and phase plots, one plot across the page: each saved point's X in volts (the reading averaged over
+  X / I, Y / I and phase plots of a Switch scan, one plot across the page: each saved point's X in volts (the reading averaged over
   Acquire s) against the scan's elapsed time (`elapsed_s`), for the lock-ins of the lowest harmonic measured
   (`_redraw_switch_time_plot`). It draws the saved rows; nothing more is read from the lock-in for it, so the
   signal between two points (during the pulse and the settling) is not shown. The saved picture of the plots

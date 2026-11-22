@@ -51,7 +51,7 @@ class PanelDefaultTests(unittest.TestCase):
             "830_c": ("3", False),
             "zurich": ("1+2", False),
         })
-        self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHHV")
+        self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHHV & Switch")
         self.assertEqual(panel.ppms_transport_current_var.get(), "1.5")
         self.assertEqual(panel.ppms_transport_frequency_var.get(), "317.3")
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "50")
@@ -692,8 +692,9 @@ class NotebookTabTests(unittest.TestCase):
                       for index in range(notebook.index("end"))]
             self.assertEqual(titles, [
                 "MOKE light", "MOKE motor", "MOKE magnet", "CIDWM",
-                # The Switch page after SHHV, whose rack it shares (user, 2026-11-21).
-                "MOKE-24", "Non-local", "PPMS", "SHHV", "Switch", "FMR", "STFMR"])
+                # "SHHV & Switch" since 2026-11-22 (user); the Switch page of
+                # 2026-11-21 is gone.
+                "MOKE-24", "Non-local", "PPMS", "SHHV & Switch", "FMR", "STFMR"])
         finally:
             built.closing = True
             built.safe_close_hardware()
@@ -783,7 +784,7 @@ class RTEStatusRowTests(unittest.TestCase):
         notebook = next(w for w in cls.app.__dict__.values()
                         if isinstance(w, tk.ttk.Notebook))
         for index in range(notebook.index("end")):
-            if notebook.tab(index, "text") == "SHHV":
+            if notebook.tab(index, "text") == "SHHV & Switch":
                 notebook.select(index)
         cls.root.update()
 
@@ -845,14 +846,15 @@ class RTEStatusRowTests(unittest.TestCase):
 
 # Named to run after PanelDefaultTests' message boxes and before TCRackTests,
 # as RTEStatusRowTests does: it maps and destroys a program copy too.
-class SwitchConnectionColumnsTests(unittest.TestCase):
-    """The Switch page's connections (user, 2026-11-21: "hide the SR830-2,
-    SR830-3 rows in Switch", "close the gap", "make two columns for the
-    instruments' connection pls"), as the lab PC shows them: in the 2000 px
-    window two columns, the rack's five rows left and SR830-1 and the
-    Zurich right, with the supply's line, the LS475's reading and Set field
-    under them; stacked in the 1101 px window, those three beside the rack
-    as on SHHV; nothing past the page's edge; whatever the resize history."""
+class SHHVConnectionColumnsTests(unittest.TestCase):
+    """The SHHV & Switch page's connections (user, 2026-11-22: "also two
+    columns for the instruments connection panel"; first on the Switch page
+    of 2026-11-21), as the lab PC shows them: in the 2000 px window two
+    columns, the rack's five rows left and the three SR830s and the Zurich
+    right, with the supply's line, the LS475's reading and Set field beside
+    the SR830 rows; stacked in the 1101 px window, those three beside the
+    rack as before; nothing past the page's edge; whatever the resize
+    history."""
 
     @classmethod
     def setUpClass(cls):
@@ -863,7 +865,7 @@ class SwitchConnectionColumnsTests(unittest.TestCase):
         cls.app = build_lab_app(app, cls.root)  # as the lab PC shows it
         notebook = cls.app.notebook
         for index in range(notebook.index("end")):
-            if notebook.tab(index, "text") == "Switch":
+            if notebook.tab(index, "text") == "SHHV & Switch":
                 notebook.select(index)
         cls.root.update()
 
@@ -883,13 +885,13 @@ class SwitchConnectionColumnsTests(unittest.TestCase):
     def descendants(widget):
         for child in widget.winfo_children():
             yield child
-            yield from SwitchConnectionColumnsTests.descendants(child)
+            yield from SHHVConnectionColumnsTests.descendants(child)
 
     def test_two_columns_when_wide_and_stacked_when_narrow(self):
-        panel = self.app.switch_panel
+        panel = self.app.rte_panel
         motor = panel.rte_connection_widgets["newmark"][0]
         source = panel.ppms_device_resource_widgets["6221"]
-        sr830 = panel.ppms_device_resource_widgets["830_a"]
+        first, third = (panel.ppms_device_resource_widgets[key] for key in ("830_a", "830_c"))
         zurich = panel.zurich_connect_button
         set_field = panel.rte_set_field_button
         tab = panel.ppms_tab
@@ -899,40 +901,35 @@ class SwitchConnectionColumnsTests(unittest.TestCase):
                 self.show(width)
             wide = history[-1] == LAB_WIDE
             with self.subTest(history=history):
-                for widget in (motor, source, sr830, zurich, set_field):
+                for widget in (motor, source, first, third, zurich, set_field):
                     self.assertTrue(widget.winfo_ismapped())
                 right = tab.winfo_rootx() + tab.winfo_width()
                 over = [w for w in self.descendants(tab)
                         if w.winfo_ismapped() and w.winfo_rootx() + w.winfo_width() > right + 1]
                 self.assertEqual(over, [], "widgets past the right edge")
+                middle = lambda widget: widget.winfo_rooty() + widget.winfo_height() / 2
                 if wide:
                     # SR830-1 beside the rack's first row, right of its rows.
-                    self.assertGreater(sr830.winfo_rootx(), motor.winfo_rootx() + motor.winfo_width())
-                    self.assertLess(sr830.winfo_rooty(), source.winfo_rooty())
-                    # The field setting under the Zurich's row, in that column.
-                    self.assertGreater(set_field.winfo_rooty(), zurich.winfo_rooty())
-                    self.assertGreater(set_field.winfo_rootx(), sr830.master.winfo_rootx())
-                    # The second column is no taller than the rack's five
-                    # rows, so the box is as tall as the rack alone.
-                    self.assertLessEqual(set_field.winfo_rooty() + set_field.winfo_height(),
+                    self.assertGreater(first.winfo_rootx(), motor.winfo_rootx() + motor.winfo_width())
+                    self.assertLess(first.winfo_rooty(), source.winfo_rooty())
+                    # The field setting beside SR830-3's row, right of its
+                    # connection widgets, above the Zurich's row.
+                    self.assertLessEqual(abs(middle(set_field) - middle(third)), 6)
+                    self.assertGreater(set_field.winfo_rootx(), third.master.winfo_rootx() + third.master.winfo_width())
+                    self.assertLess(set_field.winfo_rooty() + set_field.winfo_height(), zurich.winfo_rooty() + 2)
+                    # The lock-ins' four rows are no taller than the rack's
+                    # five, so the box is as tall as the rack alone.
+                    self.assertLessEqual(zurich.winfo_rooty() + zurich.winfo_height(),
                                          motor.winfo_rooty() + motor.winfo_height() + 2)
                 else:
                     # Stacked: SR830-1 under the Motor row, in its column.
-                    self.assertGreaterEqual(sr830.winfo_rooty(), motor.winfo_rooty() + motor.winfo_height())
-                    # The field setting beside the 6221's row, as on SHHV.
+                    self.assertGreaterEqual(first.winfo_rooty(), motor.winfo_rooty() + motor.winfo_height())
+                    # The field setting beside the 6221's row, as before.
                     self.assertGreater(set_field.winfo_rootx(), source.winfo_rootx() + source.winfo_width())
-                    self.assertLessEqual(abs((set_field.winfo_rooty() + set_field.winfo_height() / 2)
-                                             - (source.winfo_rooty() + source.winfo_height() / 2)), 6)
-        # SR830-2 and SR830-3 have no rows; the Zurich's harmonic row is
-        # right under SR830-1's.
-        self.show(LAB_WIDE)
-        for key in ("830_b", "830_c"):
-            self.assertFalse(panel.ppms_device_resource_widgets[key].winfo_ismapped(), key)
-        self.assertEqual(int(panel.zurich_harmonic_combo.grid_info()["row"]), 1)
-        # SHHV keeps its three SR830 rows and its layout.
-        shhv = self.app.rte_panel
-        self.assertEqual(int(shhv.zurich_harmonic_combo.grid_info()["row"]), 3)
-        self.assertIs(shhv.rte_set_field_button.master.master.master, shhv.ppms_device_resource_widgets["6221"].master.master)
+                    self.assertLessEqual(abs(middle(set_field) - middle(source)), 6)
+        # The Zurich's harmonic row under the three SR830s'.
+        self.assertEqual(int(panel.zurich_harmonic_combo.grid_info()["row"]), 3)
+        self.assertFalse(hasattr(self.app, "switch_panel"))
 
 
 class ReviewFixWidgetTests(unittest.TestCase):

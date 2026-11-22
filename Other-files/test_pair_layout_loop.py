@@ -128,7 +128,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         cls.build()
         notebook = next(w for w in cls.a.__dict__.values() if isinstance(w, tk.ttk.Notebook))
         for index in range(notebook.index("end")):
-            if notebook.tab(index, "text") == "SHHV":
+            if notebook.tab(index, "text") == "SHHV & Switch":
                 notebook.select(index)
         # Three plot rows, the worst case for height: SHHV starts with
         # SR830-1 at 1 and SR830-2 at 2 measured and the Zurich not (user's

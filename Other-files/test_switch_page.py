@@ -1,48 +1,24 @@
-"""The Switch page (user, 2026-11-21: "add a Switch module containing 6221,
+"""The Switch scan (user, 2026-11-21: "add a Switch module containing 6221,
 830, magnet like SHHV has LS643, Kepco4886, LS475, the motor. 6221 pulse
 write function. to get a switching results like this fig", R_H against the
-pulse current at several fields).
+pulse current at several fields).  Since 2026-11-22 it is the last mode of
+the "SHHV & Switch" page (user: "add the switch scan to the selection like
+angle + field2 scan"; "change the name of SHHV to SHHV & Switch. delete the
+before Switch module"), and the Switch page is gone.
 
-The real SwitchPanel (SHHV's rack again) on test_rte_angle_end_to_end's
-harness: stand-in widgets, a real one-thread worker, a KEPCO and an LS475
-whose field follows its current, and here a 6221 that records every command
-of the write pulse.  No VISA session, no window."""
-from contextlib import ExitStack
+The real RTEPanel on test_rte_angle_end_to_end's harness: stand-in widgets,
+a real one-thread worker, a KEPCO and an LS475 whose field follows its
+current, and here a 6221 that records every command of the write pulse.  No
+VISA session, no window."""
 import threading
-import types
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import test_rte_angle_end_to_end as ete
-import test_rte_panel as rte_tests
 from test_ppms_motor_debug import app
-from test_ppms_two_panels import ImmediateExecutor, Var
 from test_rte_angle_scan import Recorder
 
 setUpModule, tearDownModule = ete.setUpModule, ete.tearDownModule
-
-
-def build_switch_page(kepco=True):
-    """The real SwitchPanel constructor on stand-in widgets, as
-    test_rte_angle_end_to_end.build_page builds SHHV's."""
-    parent = Mock(closing=False)
-    parent.root.after.return_value = "timer"
-    Recorder.made = []
-    with ExitStack() as stack:
-        for name in ("Frame", "LabelFrame", "Label", "Entry", "Button", "Combobox", "Checkbutton", "Progressbar"):
-            stack.enter_context(patch.object(app.ttk, name, Recorder))
-        stack.enter_context(patch.object(app.tk, "Canvas", Recorder))
-        for name in ("StringVar", "IntVar", "BooleanVar"):
-            stack.enter_context(patch.object(app.tk, name, Var))
-        stack.enter_context(patch.object(app, "ThreadPoolExecutor", ImmediateExecutor))
-        stack.enter_context(patch.object(app.CombinedControlApp, "_create_connection_indicator",
-                                         lambda _self, parent, key: Recorder(parent, indicator=key)))
-        stack.enter_context(patch.object(app.CombinedControlApp, "_set_connection_indicator", Mock()))
-        stack.enter_context(patch.object(app.CombinedControlApp, "_draw_nonlocal_series", Mock()))
-        panel = app.SwitchPanel(parent, rte_tests.Widget())
-        made = list(Recorder.made)
-    panel.test_widgets = made
-    return ete.kepco_chosen(panel) if kepco else panel
 
 
 class Fake6221:
@@ -91,15 +67,15 @@ class Fake6221:
 
 
 class SwitchScan(ete.EndToEnd):
-    def make_switch(self, fields="100, -50", span=("-2", "2", "2"), width="30", pulses="1", shhv=False):
-        """The Switch page ready for its scan: SR830-1 alone at the first
-        harmonic, the KEPCO and an LS475 that reads 100 G per A of it, the
-        fake 6221, and the field setting's waits made tiny.  ``shhv``: the
-        SHHV page instead, its Switch mode chosen (user, 2026-11-22)."""
-        with patch.object(ete, "build_page", ete.build_page if shhv else build_switch_page):
-            h = self.make(meter="sr830")
+    def make_switch(self, fields="100, -50", span=("-2", "2", "2"), width="30", pulses="1"):
+        """The page ready for a Switch scan: SR830-1 alone at the first
+        harmonic, 0.5 mA RMS read current, the KEPCO and an LS475 that reads
+        100 G per A of it, the fake 6221, and the field setting's waits made
+        tiny."""
+        h = self.make(meter="sr830")
         panel = h.panel
-        self.assertIs(type(panel), app.RTEPanel if shhv else app.SwitchPanel)
+        self.assertIs(type(panel), app.RTEPanel)
+        panel.ppms_transport_current_var.set("0.5")
         panel.ppms_transport_harmonic_a_var.set("1")
         h.harmonic["830_a"] = 1
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
@@ -156,114 +132,77 @@ class SwitchScan(ete.EndToEnd):
 
 
 class SwitchPageTests(unittest.TestCase):
-    def test_the_page_is_shhvs_rack_with_the_switch_scan(self):
-        panel = build_switch_page(kepco=False)
-        self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes, panel.rte_default_scan_mode),
-                         ("Switch", ("Switch",), "Switch"))
-        # The start-up scan: the pulse loop -20 to +20 mA in 1 mA and back,
-        # the figure's fields, 30 us x 1, read with 0.5 mA RMS on SR830-1
-        # at the first harmonic.
-        self.assertEqual(panel.ppms_simple_mode.get(), "Switch")
-        self.assertEqual([v.get() for v in panel.ppms_simple_range], ["-20", "20", "1"])
-        self.assertIs(panel.rte_round_trip.get(), True)
-        self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "40, 20, 0, -20")
-        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("30", "1"))
-        self.assertEqual((panel.ppms_transport_current_var.get(), panel.ppms_transport_frequency_var.get()),
-                         ("0.5", "317.3"))
-        self.assertEqual(panel.ppms_transport_harmonic_a_var.get(), "1")
-        self.assertEqual({key: panel.ppms_lockin_selection[key].get() for key in ("830_a", "830_b", "830_c", "zurich")},
-                         {"830_a": True, "830_b": False, "830_c": False, "zurich": False})
-        self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get(), panel.rte_outer_label.get()),
-                         ("Pulse mA", "Switch: 6221 pulse mA; outer: field G", "Outer field G:"))
-        self.assertEqual(panel.ppms_plot_axis, "pulse")
-        # The rack is SHHV's: the same instruments, its own controllers.
-        self.assertEqual(set(panel.rte_controllers), {"kepco", "gauss", "newmark", "lakeshore"})
-        self.assertEqual({c.owner_scope for c in panel.rte_controllers.values()}, {"Switch"})
-        # The page's texts name it.
+    def switch_page(self):
+        """The page with its Switch mode chosen."""
+        panel = ete.build_page(kepco=False)
+        panel.test_widgets = list(Recorder.made)
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Switch")
+            panel._rte_mode_changed()
+        return panel
+
+    def test_the_tab_is_shhv_and_switch_and_the_switch_page_is_gone(self):
+        """User, 2026-11-22: "change the name of SHHV to SHHV & Switch.
+        delete the before Switch module".  The tab's title only: the page's
+        texts, files, columns and controllers still say SHHV."""
+        self.assertEqual(app.RTE_TAB_TITLE, "SHHV & Switch")
+        self.assertFalse(hasattr(app, "SwitchPanel"))
+        self.assertEqual(app.RTEPanel.ppms_page_name, "SHHV")
+        with open(app.__file__, encoding="utf-8") as source:
+            text = source.read()
+        self.assertIn("self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)", text)
+        self.assertNotIn("switch_panel", text)
+        panel = self.switch_page()
+        self.assertEqual({c.owner_scope for c in panel.rte_controllers.values()}, {"SHHV"})
         texts = {str(w.options.get("text", "")) for w in panel.test_widgets}
-        self.assertTrue({"Switch settings", "Switch scan", "6221 write", "Pulse µs", "Pulses"} <= texts, texts)
-        self.assertFalse([text for text in texts if "SHHV" in text])
-        # The list box shows this mode's fields.
-        self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
+        self.assertTrue({"SHHV settings", "Scan", "6221 write", "Pulse µs", "Pulses"} <= texts, texts)
+        # All three SR830s and the Zurich keep their rows, the Zurich's
+        # harmonic row under the three.
+        self.assertEqual(panel.zurich_harmonic_combo.grid_options["row"], 3)
+        for key in app.PPMS_SR830_KEYS:
+            self.assertFalse(panel.ppms_device_resource_widgets[key].parent.grid_removed, key)
+
+    def test_the_connections_can_go_in_two_columns(self):
+        """User, 2026-11-22: "also two columns for the instruments connection
+        panel".  The supply's line, the LS475's reading and the field setting
+        are the box's children, shown in the rack until the window has the
+        width for two columns (GitHub's window tests check both layouts)."""
+        panel = ete.build_page(kepco=False)
+        rack = panel.rte_connection_widgets["newmark"][0].parent
+        field_set = panel.rte_set_field_button.parent
+        self.assertIs(field_set.parent, rack.parent)
+        self.assertIs(field_set.grid_options["in_"], rack)
+        self.assertEqual((field_set.grid_options["row"], field_set.grid_options["column"]), (2, 6))
+        lines = [w for w in Recorder.made if w.options.get("textvariable") in (panel.rte_field_live,
+                                                                                panel.rte_drive_live)]
+        self.assertEqual(sorted((w.grid_options["row"], w.grid_options["column"]) for w in lines), [(0, 6), (1, 6)])
+        self.assertEqual({w.grid_options["in_"] for w in lines}, {rack})
+        self.assertEqual({w.parent for w in lines}, {rack.parent})
 
     def test_the_plots_have_a_row_of_x_against_time(self):
         """User, 2026-11-21: "add a row to show the SR830 x signal vs time
         pls": one plot across the three columns, in the row under the X / I,
         Y / I and phase plots, with an equal share of the height; it moves
         down when a second harmonic is measured."""
-        panel = build_switch_page(kepco=False)
+        panel = self.switch_page()
         frame, canvas = panel.rte_time_frame, panel.rte_time_canvas
         self.assertIs(frame.parent, panel.ppms_plot_frame)
         self.assertIs(canvas.parent, frame)
         self.assertEqual(frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
         self.assertFalse(frame.grid_removed)
-        self.assertEqual(frame.options["text"], "X vs time — 1st harmonic, SR830-1")
+        # SR830-1 is at the second harmonic at the page's start-up.
+        self.assertEqual(frame.options["text"], "X vs time — 2nd harmonic, SR830-1")
         self.assertIs(canvas.ppms_compact_plot, True)
         # The pulse plots keep their own x labels: the time row has another axis.
-        self.assertFalse(panel.ppms_harmonic_canvases[(1, "x")].ppms_hide_x_labels)
+        self.assertFalse(panel.ppms_harmonic_canvases[(2, "x")].ppms_hide_x_labels)
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
+            panel.ppms_transport_harmonic_a_var.set("1")
             panel.ppms_lockin_selection["zurich"].set(True)
             panel.zurich_harmonic.set("2")
             panel._refresh_ppms2_plot_layout()
             self.assertEqual(frame.grid_options["row"], 2)
             self.assertEqual(frame.options["text"], "X vs time — 1st harmonic, SR830-1")
             self.assertEqual(draw.call_args.args[2:5], ("Time (s)", "X voltage", "Waiting for scan data"))
-
-    def rows_shown(self, panel):
-        """{SR830 label: (its connection row shown, its harmonic row shown)}."""
-        shown = {}
-        for key in app.PPMS_SR830_KEYS:
-            label = app.PPMS_SR830_LABELS[key]
-            group = panel.ppms_device_resource_widgets[key].parent
-            harmonic = [w for w in panel.test_widgets if w.options.get("text") == f"{label} harmonic"]
-            self.assertEqual(len(harmonic), 1, label)
-            shown[label] = (not group.grid_removed, not harmonic[0].grid_removed)
-        return shown
-
-    def test_only_sr830_1_has_rows_on_the_switch_page(self):
-        """User, 2026-11-21: "hide the SR830-2, SR830-3 rows in Switch": their
-        connection rows and harmonic rows are off screen; SR830-1's and the
-        Zurich's stay, and neither hidden lock-in is measured."""
-        panel = build_switch_page(kepco=False)
-        self.assertEqual(panel.rte_shown_sr830_keys, ("830_a",))
-        self.assertEqual(self.rows_shown(panel), {"SR830-1": (True, True), "SR830-2": (False, False),
-                                                  "SR830-3": (False, False)})
-        self.assertEqual({key: panel.ppms_lockin_selection[key].get() for key in ("830_b", "830_c")},
-                         {"830_b": False, "830_c": False})
-        # Every widget of a hidden harmonic row, not only its label.
-        hidden = [w for w in panel.test_widgets if w.grid_removed and w.grid_options.get("column") in (13, 14, 17, 18)
-                  and w.grid_options.get("row") in (1, 2)]
-        self.assertEqual(len(hidden), 8, "label, harmonic, Measure and range of two rows")
-        # The Zurich's harmonic row follows SR830-1's with no empty line
-        # between (user, 2026-11-21: "close the gap"): its four widgets on
-        # the second line of the block.
-        def zurich_rows(page):
-            return sorted((w.grid_options["column"], w.grid_options["row"]) for w in page.test_widgets
-                          if w.parent is page.ppms_settings_panel and not w.grid_removed
-                          and w.grid_options.get("column") in (13, 14, 17, 18) and w.grid_options.get("row") != 0)
-        self.assertEqual(zurich_rows(panel), [(13, 1), (14, 1), (17, 1), (18, 1)])
-        self.assertEqual(panel.zurich_harmonic_combo.grid_options["row"], 1)
-        # Two columns of connections (user, 2026-11-21): the supply's line,
-        # the LS475's reading and the field setting are the box's children,
-        # shown in the rack until the window has the width (GitHub's window
-        # tests check the two layouts).
-        self.assertIs(panel.rte_two_column_connections, True)
-        rack = panel.rte_connection_widgets["newmark"][0].parent
-        field_set = panel.rte_set_field_button.parent
-        self.assertIs(field_set.parent, rack.parent)
-        self.assertIs(field_set.grid_options["in_"], rack)
-        self.assertEqual((field_set.grid_options["row"], field_set.grid_options["column"]), (2, 6))
-        # SHHV keeps all three, the Zurich's on the fourth line.
-        shhv = ete.build_page(kepco=False)
-        shhv.test_widgets = list(Recorder.made)
-        self.assertEqual(shhv.zurich_harmonic_combo.grid_options["row"], 3)
-        self.assertEqual(shhv.zurich_select.grid_options["row"], 3)
-        self.assertIs(shhv.rte_two_column_connections, False)
-        shhv_rack = shhv.rte_connection_widgets["newmark"][0].parent
-        self.assertIs(shhv.rte_set_field_button.parent.parent, shhv_rack, "SHHV's field setting is the rack's own")
-        self.assertNotIn("in_", shhv.rte_set_field_button.parent.grid_options)
-        self.assertEqual(shhv.rte_shown_sr830_keys, app.PPMS_SR830_KEYS)
-        self.assertEqual(set(self.rows_shown(shhv).values()), {(True, True)})
 
     def test_the_shhv_page_has_switch_as_its_last_mode(self):
         """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
@@ -318,21 +257,6 @@ class SwitchPageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
             app.rte_scan_plan("Switch", "0", "106", "106", 1, False)
 
-    def test_the_stfmr_stage_counts_the_switch_pages_supplies(self):
-        a = object.__new__(app.CombinedControlApp)
-        a.stfmr_lockin_controllers = {"kepco": Mock(connected=True, output_owned=False),
-                                      "lakeshore": Mock(connected=True, output_on=False, short_label="LS643")}
-        a.stfmr_lockin_magnet_choice = "LS643"
-        a.switch_panel = types.SimpleNamespace(rte_controllers={"lakeshore": Mock(output_on=True), "kepco": None})
-        with self.assertRaisesRegex(RuntimeError, "Switch page's LS643 output is not at zero"):
-            a._stfmr_lockin_require_4886_off()
-        a.switch_panel = types.SimpleNamespace(rte_controllers={"kepco": Mock(output_owned=True)})
-        with self.assertRaisesRegex(RuntimeError, "KEPCO 4886 output of the Switch page is on"):
-            a._stfmr_lockin_require_4886_off()
-        a.switch_panel = types.SimpleNamespace(rte_controllers={"kepco": Mock(output_owned=False),
-                                                                "lakeshore": Mock(output_on=False)})
-        a._stfmr_lockin_require_4886_off()
-
 
 class SwitchScanTests(SwitchScan):
     def test_each_point_is_written_with_a_pulse_then_read(self):
@@ -342,7 +266,7 @@ class SwitchScanTests(SwitchScan):
         panel = h.panel
         h.showerror.assert_not_called()
         title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "Switch scan")
+        self.assertEqual(title, "SHHV scan")
         self.assertIn("Field, the OUTER loop: 2 fields in the order typed: +100, -50 G, each within ±2 G", question)
         self.assertIn("6221 pulse current, the INNER loop: from -2 mA to +2 mA and back (step 2 mA), 5 pulses a "
                       "loop, 1 loop(s). Largest pulse 2 mA.", question)
@@ -354,7 +278,7 @@ class SwitchScanTests(SwitchScan):
                           for r in rows],
                          [("100.0", "1", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)]
                          + [("-50.0", "2", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
-        self.assertEqual({(r["module"], r["scan_mode"]) for r in rows}, {("Switch", "Switch")})
+        self.assertEqual({(r["module"], r["scan_mode"]) for r in rows}, {("SHHV", "Switch")})
         self.assertEqual([r["pulse_in_compliance"] for r in rows[:5]], ["False", "no pulse", "False", "no pulse", "False"])
         self.assertEqual({(float(r["pulse_width_s"]), r["pulse_count"]) for r in rows}, {(3e-5, "1")})
         for r in rows:
@@ -445,27 +369,6 @@ class SwitchScanTests(SwitchScan):
         times = [x for x, _y in timed.args[1]["SR830-1 P1"]]
         self.assertEqual(times, sorted(times))
 
-    def test_the_switch_scan_runs_on_the_shhv_page(self):
-        """User, 2026-11-22: the Switch scan chosen on SHHV is the Switch
-        page's scan: the same pulses, read current and rows, under SHHV's
-        name; the time row shows its points."""
-        h = self.make_switch(fields="100", span=("-2", "2", "2"), shhv=True)
-        self.start(h)
-        h.showerror.assert_not_called()
-        title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHHV scan")
-        self.assertTrue(question.startswith("Switch scan."), question)
-        rows = self.rows(h)
-        self.assertEqual([(r["module"], r["scan_mode"], float(r["pulse_current_ma"])) for r in rows],
-                         [("SHHV", "Switch", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
-        self.assertEqual([t["SOUR:WAVE:OFFS"] for t in h.fake.trains], [-1e-3, 1e-3, -1e-3])
-        self.assertEqual(len(h.fake.sines), 5)
-        self.assertEqual(h.fake.sent.count("FULL SET-UP"), 1)
-        self.assertIs(h.panel.rte_time_row_on, True)
-        timed = [call for call in h.draw.call_args_list if call.args[2] == "Time (s)"][-1]
-        self.assertEqual([len(points) for points in timed.args[1].values()], [5])
-        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
-
     def test_a_setting_that_does_not_read_back_arms_nothing(self):
         h = self.make_switch(fields="100", span=("2", "2", "1"))
         h.fake.readback["SOUR:WAVE:AMPL"] = 5e-3
@@ -486,7 +389,7 @@ class SwitchScanTests(SwitchScan):
         self.start(h)
         h.showerror.assert_not_called()
         self.assertEqual([r["pulse_in_compliance"] for r in self.rows(h)], ["True", "True", "True"][:1])
-        self.assertTrue([line for line in h.logged if "Switch: the 6221 reached compliance" in line
+        self.assertTrue([line for line in h.logged if "SHHV: the 6221 reached compliance" in line
                          and "+2 mA pulse" in line], h.logged)
 
     def test_start_refuses_a_pulse_beyond_the_limits_before_anything_is_sent(self):
@@ -498,7 +401,7 @@ class SwitchScanTests(SwitchScan):
             with self.subTest(message=message):
                 h = self.make_switch(span=span, width=width, pulses=pulses)
                 self.start(h)
-                self.assertEqual(h.showerror.call_args.args[0], "Switch scan parameters")
+                self.assertEqual(h.showerror.call_args.args[0], "SHHV scan parameters")
                 self.assertIn(message, h.showerror.call_args.args[1])
                 h.askyesno.assert_not_called()
                 self.assertEqual(h.fake.sent, [])

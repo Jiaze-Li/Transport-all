@@ -3604,38 +3604,42 @@ RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # field is reached as Set field reaches it (run_magnet_field_set against the
 # LS475, within Set field's tolerance box), and the current is then left
 # there for that field's whole angle sweep.
-# Switch, the Switch page's scan, is the last choice here too (user,
-# 2026-11-22: "add the switch scan to the selection like angle + field2
-# scan").
+# Switch is the last choice (user, 2026-11-22: "add the switch scan to the
+# selection like angle + field2 scan").
 RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current', 'Switch')
 # The modes that turn the stage (the stage check at Start, the stage columns).
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current')
-# The Switch page's one scan (user, 2026-11-21: "add a Switch module containing
+# The Switch scan (user, 2026-11-21: "add a Switch module containing
 # 6221, 830, magnet like SHHV has LS643, Kepco4886, LS475, the motor. 6221
 # pulse write function. to get a switching results like this fig", R_H against
-# the pulse current at several fields): current-induced switching loops.  The
-# page is SHHV's rack again (SwitchPanel); its scan, for each field typed in
-# the outer box (reached as Set field reaches it, as Angle+Field2's), writes
+# the pulse current at several fields): current-induced switching loops.  It
+# had a page of its own, SHHV's rack again, until 2026-11-22 (user: "delete
+# the before Switch module"); now a mode of SHHV's.  For each field typed in
+# the outer box (reached as Set field reaches it, as Angle+Field2's), it writes
 # with a 6221 pulse of each current of the loop and after each pulse reads
 # the lock-ins with the 6221's AC read current.
 SWITCH_SCAN_MODE = 'Switch'
-SWITCH_SCAN_MODES = (SWITCH_SCAN_MODE,)
+# The page's tab (user, 2026-11-22: "change the name of SHHV to SHHV &
+# Switch"); its texts, files and columns keep "SHHV".
+RTE_TAB_TITLE = 'SHHV & Switch'
+# Between a lock-in row (or the rack's rows) and the readings beside it.
+RTE_LIVE_BESIDE_PAD_PX = 10
 # The modes whose outer loop steps the magnet supply.
 RTE_FIELD_OUTER_MODES = ('Angle+Field', 'Angle+Field2', SWITCH_SCAN_MODE)
 # The modes whose outer loop is a typed list of fields in G, each reached as
 # Set field reaches it.
 RTE_FIELD_LIST_MODES = ('Angle+Field2', SWITCH_SCAN_MODE)
-# The Switch page's start-up values.  The pulse loop -20 to +20 mA in 1 mA
+# The Switch mode's start-up values.  The pulse loop -20 to +20 mA in 1 mA
 # steps and back (Round trip), one loop; the fields of the user's figure,
 # +40, +20, 0 and -20 Oe; the pulse and the read current as MS-fourState's
-# (30 us, one pulse per write; 0.5 mA RMS at the rack's 317.3 Hz), read on
-# SR830-1 at the first harmonic.  All are boxes on the page.
+# (30 us, one pulse per write).  All are boxes on the page.  The read
+# current and the lock-ins' harmonics are the page's own boxes, not changed
+# by choosing the mode.
 SWITCH_PULSE_DEFAULT_RANGE = ('-20', '20', '1')
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 30.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
-SWITCH_READ_CURRENT_RMS_MA = 0.5
-# The Switch page's row of X against time (user, 2026-11-21).
+# The Switch scan's row of X against time (user, 2026-11-21).
 SWITCH_TIME_ROW_TITLE = 'X vs time'
 # Waited beyond the pulse train's own length before OUTP? is read (as
 # MS-fourState's PULSE_DONE_MARGIN_S).
@@ -21235,11 +21239,12 @@ class CombinedControlApp:
         self.ppms_panel_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.ppms_panel_tab, text="PPMS")
         self.rte_panel_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.rte_panel_tab, text="SHHV")
-        # The Switch page (user, 2026-11-21): SHHV's rack again, with the
-        # pulse-write scan (SwitchPanel).
-        self.switch_panel_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.switch_panel_tab, text="Switch")
+        # "SHHV & Switch" (user, 2026-11-22: "change the name of SHHV to
+        # SHHV & Switch. delete the before Switch module"): the Switch scan
+        # is one of this page's modes, and the Switch page of 2026-11-21 is
+        # gone.  The page's texts, files and columns still say SHHV
+        # (RTEPanel.ppms_page_name).
+        self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)
         self.notebook.add(self.stfmr_tab, text="FMR")
         self.notebook.add(self.stfmr_lockin_tab, text="STFMR")
         self.led_tab.rowconfigure(0, weight=1)
@@ -21264,7 +21269,6 @@ class CombinedControlApp:
         self.build_nonlocal_vi_ui()
         self.ppms_panel = PPMSPanel(self, self.ppms_panel_tab)
         self.rte_panel = RTEPanel(self, self.rte_panel_tab)
-        self.switch_panel = SwitchPanel(self, self.switch_panel_tab)
         self.build_stfmr_ui()
         self.build_stfmr_lockin_ui()
 
@@ -25409,14 +25413,11 @@ class CombinedControlApp:
         never blocks this stage (user, 2026-10-21, after review).  Read from
         __dict__, as _stfmr_lockin_other_4886_on."""
         own = self.stfmr_lockin_controllers.get("lakeshore") if self._stfmr_lockin_lakeshore_chosen() else None
-        # The Switch page's rack is SHHV's again (user, 2026-11-21), on the
-        # same magnet: its LS643 counts as SHHV's does.
         candidates = ((f"this page's {self._stfmr_lockin_ls_name()}", None if own is not None
                        else self.stfmr_lockin_controllers.get("lakeshore")),
                       *((f"{page} page's LS643", (getattr(panel, "__dict__", {}).get("rte_controllers") or {})
                          .get("lakeshore"))
-                        for page, panel in (("SHHV", self.__dict__.get("rte_panel")),
-                                            ("Switch", self.__dict__.get("switch_panel")))
+                        for page, panel in (("SHHV", self.__dict__.get("rte_panel")),)
                         if panel is not None))
         return [name for name, supply in candidates
                 if supply is not None and supply is not own and getattr(supply, "output_on", False) is True]
@@ -25432,11 +25433,9 @@ class CombinedControlApp:
         own_page = (("STFMR", own),) if self._stfmr_lockin_lakeshore_chosen() else ()
         if own_page:
             own = None
-        # The Switch page's 4886 as SHHV's (user, 2026-11-21).
         candidates = own_page + (("FMR", (self.__dict__.get("stfmr_controllers") or {}).get("kepco")),
                       *((page, (getattr(panel, "__dict__", {}).get("rte_controllers") or {}).get("kepco"))
-                        for page, panel in (("SHHV", self.__dict__.get("rte_panel")),
-                                            ("Switch", self.__dict__.get("switch_panel")))
+                        for page, panel in (("SHHV", self.__dict__.get("rte_panel")),)
                         if panel is not None))
         return [page for page, kepco in candidates
                 if kepco is not None and kepco is not own and getattr(kepco, "output_owned", False)]
@@ -53374,7 +53373,7 @@ class CombinedControlApp:
     def safe_close_ppms(self) -> None:
         # Each panel on its own: a failure in one must not skip the next's
         # 6221/2400 OFF (review, 2026-10-09).
-        for name in ("switch_panel", "rte_panel", "ppms_panel"):
+        for name in ("rte_panel", "ppms_panel"):
             panel = self.__dict__.get(name)
             if panel is None:
                 continue
@@ -54182,8 +54181,7 @@ class CombinedControlApp:
         # thread reaches its page, which could take tens of seconds while the
         # FMR, STFMR, PPMS and RT-E scans went on driving their sources
         # (review, 2026-10-09).
-        for owner in (self, self.__dict__.get("ppms_panel"), self.__dict__.get("rte_panel"),
-                      self.__dict__.get("switch_panel")):
+        for owner in (self, self.__dict__.get("ppms_panel"), self.__dict__.get("rte_panel")):
             if owner is None:
                 continue
             for name in (
@@ -55538,10 +55536,8 @@ class PPMSPanel(CombinedControlApp):
         # "TC (s)" on the PPMS page too, as RT-E's row says; the row only
         # gets narrower (user, 2026-10-14).
         ttk.Label(row, text="TC (s)").grid(row=0, column=8 if compact else 4, padx=(4, 2))
-        # Laid out as the SR830 harmonic rows above it: under the three of
-        # them, or on the Switch page, which shows SR830-1 only, right under
-        # that one (user, 2026-11-21: "close the gap").
-        zurich_row = int(getattr(type(self), "ppms_zurich_harmonic_row", 3))
+        # Laid out as the SR830 harmonic rows above it, under the three of them.
+        zurich_row = 3
         ttk.Label(self.ppms_settings_panel, text="Zurich harmonic").grid(row=zurich_row, column=13, sticky="e", padx=(12, 3))
         # Every meter's autorange status sits in one column, right of Measure.
         self.zurich_range_var = tk.StringVar(value="Autorange ON")
@@ -57581,24 +57577,13 @@ class RTEPanel(PPMSPanel):
     KEPCO setpoints are A; independently measured LS475 fields are signed G.
     """
 
-    # The page's name in the scan's log lines (user, 2026-10-14), and since
-    # the Switch page (user, 2026-11-21) in every text the page shows.
+    # The page's name in the scan's log lines (user, 2026-10-14), in every
+    # text the page shows, in its files and in the rows' module column.  The
+    # tab is "SHHV & Switch" (RTE_TAB_TITLE; user, 2026-11-22).
     ppms_page_name = 'SHHV'
-    # The scan modes the page offers and the one it starts on; the Switch
-    # page (SwitchPanel) has its own.
+    # The scan modes the page offers and the one it starts on.
     rte_scan_modes = RTE_SCAN_MODES
     rte_default_scan_mode = RTE_DEFAULT_SCAN_MODE
-    # The scan box's title (user, 2026-11-22: "change the name of SHHV scan
-    # to Scan"); the dialogs still name the page.
-    rte_scan_box_title = 'Scan'
-    # The SR830s whose connection row and harmonic row the page shows: all
-    # three on SHHV; the Switch page shows SR830-1 only (user, 2026-11-21:
-    # "hide the SR830-2, SR830-3 rows in Switch").  A hidden lock-in keeps
-    # its controller and boxes, off screen, so the shared code is unchanged.
-    rte_shown_sr830_keys = PPMS_SR830_KEYS
-    # True on the Switch page (user, 2026-11-21: "make two columns for the
-    # instruments' connection pls"): see _rte_arrange_connection_columns.
-    rte_two_column_connections = False
 
     def _rte_harmonic_orders(self, key):
         """RT-E name for the shared harmonic-mode parser."""
@@ -57684,7 +57669,7 @@ class RTEPanel(PPMSPanel):
         # An unconfirmed stop is the program's, seen by both pages across a
         # reconnect (review, 2026-10-18); Connect's claim shares it again.
         self.rte_controllers['newmark'].share_stop_record(self._newmark_stage_ownership())
-        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: X, Y, phase vs measured field / excitation current / sample angle')
+        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: X, Y, phase vs measured field / excitation current / sample angle / pulse current')
         # SHHV start-up defaults (the user's figures, 2026-10-07, 2026-10-18
         # and 2026-11-16): 6221 1.5 mA RMS at 317.3 Hz; the lock-ins below.
         # Every lock-in keeps a harmonic setting so ticking Measure needs no
@@ -57902,12 +57887,12 @@ class RTEPanel(PPMSPanel):
         self.rte_drive_live = tk.StringVar(value='KEPCO: no output command sent')
         # Fixed boxes, so a new reading never shifts the lists.  A longer
         # message, such as a failed read or OFF, wraps inside its box.
-        # On the Switch page (two columns of connections) the two readings
-        # and the field setting are the box's children, shown here in the
-        # rack (grid's in_) or under the second column's rows; on SHHV they
-        # are the rack's own, as before.
-        live_parent = measurement if self.rte_two_column_connections else rack
-        shown_in_rack = {'in_': rack} if self.rte_two_column_connections else {}
+        # The two readings and the field setting are the box's children,
+        # shown here in the rack (grid's in_) or, with the connections in
+        # two columns, beside the SR830 rows (user, 2026-11-22; see
+        # _rte_arrange_connection_columns).
+        live_parent = measurement
+        shown_in_rack = {'in_': rack}
         live_lines = {}
         for row, variable in ((1, self.rte_field_live), (0, self.rte_drive_live)):
             live = ttk.Label(live_parent, textvariable=variable, width=32)
@@ -57945,8 +57930,6 @@ class RTEPanel(PPMSPanel):
             device_row = i + 2 if i < 2 else 0
             if i >= 2:
                 group.grid(row=i - 2, column=0, sticky='w', padx=0)
-                if key not in self.rte_shown_sr830_keys:
-                    group.grid_remove()     # its row is not shown on this page
             ttk.Label(group, text=self.ppms_instrument_controllers[key].label, width=13).grid(row=device_row, column=0, sticky='w')
             variable = self.ppms_resource_vars[key]
             entry = ttk.Entry(group, textvariable=variable, width=18)
@@ -57983,13 +57966,11 @@ class RTEPanel(PPMSPanel):
         ttk.Label(rack, textvariable=self.rte_connections['newmark'], width=13).grid(row=4, column=5, sticky='w')
         # Locked and released like the other rack rows' connection widgets.
         self.rte_connection_widgets['newmark'] = (entry, connect, disconnect)
-        if laid_out and self.rte_two_column_connections:
+        if laid_out:
+            # Side by side in the widened lab window; stacked in the 1101 px
+            # window the program opens with, where the two do not fit.
             self._rte_arrange_connection_columns(measurement, rack, instruments,
                                                  [live_lines[0], live_lines[1], field_set])
-        elif laid_out:
-            # Side by side in the widened lab window; stacked in the 1101 px
-            # window the program opens with, where the two did not fit.
-            self._arrange_pair_by_width(measurement, rack, instruments, gap=12, stack_gap=4)
 
         # Settings and scan side by side when both fit, else stacked.
         controls = ttk.Frame(outer)
@@ -58096,11 +58077,6 @@ class RTEPanel(PPMSPanel):
             range_label = ttk.Label(lockins, textvariable=self.ppms_sr830_range_vars[key], width=16)
             range_label.grid(row=grid_row, column=18, sticky='w', padx=(6, 0))
             self.ppms_lockin_choice_widgets.extend(((combo, 'readonly'), (select, 'normal')))
-            if key not in self.rte_shown_sr830_keys:
-                # Not shown on this page (the Switch page's SR830-2 and
-                # SR830-3): the row takes no height, the Zurich's follows.
-                for widget in (harmonic_label, combo, select, range_label):
-                    widget.grid_remove()
 
         # The Newmark NSC-A1 rotation stage (user, 2026-10-13).  Its rack row
         # and its row under the settings took about 84 px of height in the
@@ -58180,7 +58156,9 @@ class RTEPanel(PPMSPanel):
         if laid_out:
             live.configure(wraplength=32 * tkfont.nametofont('TkDefaultFont', root=live).measure('0'))
 
-        scan = ttk.LabelFrame(controls, text=self.rte_scan_box_title, padding=4)
+        # "Scan" (user, 2026-11-22: "change the name of SHHV scan to Scan");
+        # the dialogs still name the page.
+        scan = ttk.LabelFrame(controls, text='Scan', padding=4)
         scan.grid(row=0, column=1, sticky='nsew', padx=(6, 0))
         scan.columnconfigure(0, weight=1)
         # The scan rows keep their own width; the spare width is right of
@@ -58568,18 +58546,20 @@ class RTEPanel(PPMSPanel):
         self.ppms_plot_axis = 'current'
 
     def _rte_arrange_connection_columns(self, measurement, rack, instruments, live):
-        """The Switch page's connections in two columns (user, 2026-11-21:
-        "make two columns for the instruments' connection pls"): the rack's
-        rows (magnet supply, LS475, 6221, 2400, Motor) on the left, the
-        lock-ins' rows (SR830-1, Zurich) on the right, whenever the box has
-        the width for both.  On SHHV the two only went side by side when the
-        rack WITH its readings beside it fitted too, which the 2000 px
-        window on Windows just missed.  Here the supply's line, the LS475's
-        reading and the field setting (``live``, the box's children) move
-        under the right column's rows while the two are side by side, where
-        that column has three free lines, so both columns are five lines
-        tall; stacked (the 1101 px window) they stay beside the rack's first
-        three rows, as on SHHV, and the box is no taller.
+        """The connections in two columns (user, 2026-11-22: "also two
+        columns for the instruments connection panel"; first on the Switch
+        page of 2026-11-21): the rack's rows (magnet supply, LS475, 6221,
+        2400, Motor) on the left, the lock-ins' rows (SR830-1 to 3, Zurich)
+        on the right, whenever the box has the width for both.  Until then
+        the two only went side by side when the rack WITH its readings
+        beside it fitted too, which the 2000 px window on Windows just
+        missed.  The supply's line, the LS475's reading and the field
+        setting (``live``, the box's children) move beside the three SR830
+        rows while the two are side by side: those rows are shorter than
+        the Zurich's (its Ref. and TC boxes), so the right column hardly
+        widens, and the box is five lines tall instead of nine.  Stacked
+        (the 1101 px window) they stay beside the rack's first three rows,
+        as before, and the box is no taller.
 
         The decision uses widths that do not change with it: the rack's six
         connection columns, the right column's rows and the three moved
@@ -58593,9 +58573,17 @@ class RTEPanel(PPMSPanel):
             return total
 
         def right_width() -> int:
-            rows = [child.winfo_reqwidth() for child in instruments.winfo_children()
-                    if child.winfo_manager() == 'grid']
-            return max([*rows, *(widget.winfo_reqwidth() for widget in live)], default=0)
+            beside = spanning = 0
+            for child in instruments.winfo_children():
+                if child.winfo_manager() != 'grid':
+                    continue
+                # The Zurich's row spans the column the moved parts are in.
+                if int(child.grid_info().get('columnspan', 1)) > 1:
+                    spanning = max(spanning, child.winfo_reqwidth())
+                else:
+                    beside = max(beside, child.winfo_reqwidth())
+            moved = max((widget.winfo_reqwidth() for widget in live), default=0)
+            return max(beside + RTE_LIVE_BESIDE_PAD_PX + moved, spanning)
 
         self._arrange_pair_by_width(measurement, rack, instruments, gap=12, stack_gap=4,
                                     left_width=rack_width, right_width=right_width)
@@ -58609,12 +58597,13 @@ class RTEPanel(PPMSPanel):
             try:
                 for index, widget in enumerate(live):
                     if side:
-                        # Under the SR830 rows (0 to 2) and the Zurich's (3).
-                        widget.grid(in_=instruments, row=4 + index, column=0, columnspan=3, sticky='w',
-                                    padx=0, pady=(2, 0))
+                        # Beside SR830-1, SR830-2 and SR830-3 (rows 0 to 2).
+                        widget.grid(in_=instruments, row=index, column=1, columnspan=1, sticky='w',
+                                    padx=(RTE_LIVE_BESIDE_PAD_PX, 0), pady=0)
                         self._stfmr_lockin_raise(widget, instruments)
                     else:
-                        widget.grid(in_=rack, row=index, column=6, columnspan=1, sticky='w', padx=(10, 0), pady=0)
+                        widget.grid(in_=rack, row=index, column=6, columnspan=1, sticky='w',
+                                    padx=(RTE_LIVE_BESIDE_PAD_PX, 0), pady=0)
                         self._stfmr_lockin_raise(widget, rack)
             except tk.TclError:
                 pass        # the window is closing
@@ -61426,43 +61415,6 @@ class RTEPanel(PPMSPanel):
             self.zurich_executor.shutdown(wait=False)
         self.ppms_executor.submit(cleanup)
         self.ppms_executor.shutdown(wait=False)
-
-
-class SwitchPanel(RTEPanel):
-    """The Switch page (user, 2026-11-21: "add a Switch module containing
-    6221, 830, magnet like SHHV has LS643, Kepco4886, LS475, the motor. 6221
-    pulse write function"): SHHV's rack again, with its own controllers (the
-    6221, the lock-ins, the KEPCO 4886 or LS643, the LS475, the stage), its
-    connections, Set field, stage buttons and OFF buttons, and one scan,
-    Switch: at each typed field the 6221 writes with a pulse of each current
-    of a loop and the lock-ins read after each pulse (RTEPanel's Switch
-    mode).  An instrument is held by one page at a time (the leases), so it
-    is disconnected on SHHV before it is connected here."""
-
-    ppms_page_name = 'Switch'
-    rte_scan_modes = SWITCH_SCAN_MODES
-    rte_default_scan_mode = SWITCH_SCAN_MODE
-    rte_scan_box_title = 'Switch scan'
-    # SR830-1 only (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in
-    # Switch"); the two others stay unmeasured and off screen.
-    rte_shown_sr830_keys = ('830_a',)
-    # The Zurich's harmonic row right under SR830-1's, where SR830-2's is
-    # on SHHV (user, 2026-11-21: "close the gap").
-    ppms_zurich_harmonic_row = 1
-    # The connections in two columns (user, 2026-11-21: "make two columns
-    # for the instruments' connection pls").
-    rte_two_column_connections = True
-
-    def __init__(self, parent, tab):
-        super().__init__(parent, tab)
-        # The read (start-up values as MS-fourState's): 0.5 mA RMS at the
-        # rack's 317.3 Hz, on SR830-1 at the first harmonic, measured alone.
-        self.ppms_transport_current_var.set(f'{SWITCH_READ_CURRENT_RMS_MA:g}')
-        self.ppms_transport_harmonic_a_var.set('1')
-        self.ppms_plot_frame.configure(
-            text='Switch: X / I, Y / I and phase vs 6221 pulse current; X vs time')
-        self._refresh_ppms2_plot_layout()
-        self._update_ppms_control_ui()
 
 
 PPMS2Panel = PPMSPanel  # Former name of the PPMS page; kept for existing tests/scripts.
