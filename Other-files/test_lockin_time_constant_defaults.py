@@ -111,16 +111,9 @@ class OneTimeConstantSettle(NoWindows):
             "MFLI", app.STFMR_LOCKIN_DEFAULT_SETTLE_S, app.STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE,
             app.STFMR_LOCKIN_MFLI_TIME_CONSTANT_S)
         self.assertEqual(settle + app.STFMR_LOCKIN_DEFAULT_ACQUIRE_S, 3.0)
-        # The constant's comment gives the user's reason.
+        # The program's comments and docstrings were removed (user, 2026-11-22: "Minimize the total length of the Python source code"); their reasons live in git history and Other-files/README.md.
         with open(app.__file__, encoding="utf-8") as source:
-            text = source.read()
-        lines = text[:text.index("\nLOCKIN_SETTLE_TAUS = 1.0\n")].splitlines()
-        comment = []
-        while lines and lines[-1].startswith("#"):
-            comment.insert(0, lines.pop())
-        comment = " ".join(line.lstrip("# ") for line in comment)
-        for words in ('"change all to 1*TC please"', "26 %", "0.5 step", "2026-10-14"):
-            self.assertIn(words, comment)
+            self.assertIn("\nLOCKIN_SETTLE_TAUS = 1.0\n", source.read())
 
 
 class WaitsAtTheNewDefaults(NoWindows):

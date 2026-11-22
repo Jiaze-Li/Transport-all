@@ -1,5 +1,25 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## The program files without comments, docstrings or blank lines (user, 2026-11-22)
+
+- **Request:** "check and optimize the whole code, then update the exe", then "Minimize the total length of the
+  Python source code as much as possible" (chosen: strip comments only).
+- `Transport_all.py` 61,909 -> 49,589 lines (3.09 -> 2.44 MB); `MS-fourState.py`, `Test_Microwave_NH_dev.py`,
+  `Avtech_pulse_test.py` likewise. Kept: the copy tool's BEGIN / END marker lines, `Avtech_pulse_test.py`'s
+  module docstring (its `--help` text), every line inside a multi-line string. Each file's syntax tree was checked
+  equal to the original's with its docstrings removed, so the code is the same statement for statement. The exe is
+  not smaller or faster for it (PyInstaller ships bytecode). The reasons the comments gave stay in git history
+  (the last commented version is `539010c`) and in this README.
+- `Newmark_motor_test.py` was not stripped: it is deleted in the lab Mac's working folder, and changing it on
+  `main` would stop that folder from updating.
+- New code may carry comments again; to strip once more, a syntax-tree-checked stripper was used (not kept in the
+  repository).
+- **From the whole-code review before this release:** a Switch read current in compliance now stops the scan with
+  the resistance it means (Compliance V / peak read current) right after the read current is on again; each Switch
+  row keeps `read_in_compliance_before_pulse` (the 6221's latched compliance from the reading before the pulse);
+  the not-started and stage-failure texts name the scan mode; a window resize redraws the scan plots once, not once
+  per plot canvas (`_request_plot_redraw`). The full window-free suite and pyflakes were clean before stripping.
+
 ## SHHV & Switch: no Angle mode alone, Magnet current A starts at 1 A (user, 2026-11-22)
 
 - **Request:** "delete the only angle scan in SHHV & Switch module. the default magnetic current set as 1 A."

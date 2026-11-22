@@ -1,65 +1,26 @@
-"""Microwave_Transport_Test_NH_dev. Standalone fixed-field two-frequency test.
-Instrument controllers copied from integrated development source; no hardware on import.
-"""
 from __future__ import annotations
-
-
 import csv
-
-
 import ctypes
-
-
 import datetime as datetime_module
-
-
 import json
-
-
 import math
-
-
 import os
-
-
 import queue
-
-
 import re
-
-
 import socket
-
-
 import subprocess
-
-
 import sys
-
-
 import threading
-
-
 import time
-
-
 import tkinter as tk
-
-
 from pathlib import Path
-
-
 from tkinter import filedialog, font as tkfont, messagebox, ttk
-
-
 from typing import Callable
-
-
 # ===== BEGIN English dialogs copied from Transport_all.py (Other-files/tools/ms_fourstate_copy_core.py) =====
 # The English dialogs (Tk's own message boxes and file dialogs) it shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 dee2670f5eb7…
+# Copied from Transport_all.py, SHA-256 85e2fe01edc5…
 import ctypes
 
 
@@ -128,21 +89,11 @@ _NATIVE_MESSAGE_SHOW = None
 
 
 def english_message_box(title=None, message=None, _icon=None, _type=None, **options) -> str:
-    """tkinter.messagebox's boxes, in English, each its own window with its
-    own answer (review, 2026-10-12: Tk's own message box shares one window
-    and one answer, so a box popping up over another closed it and gave the
-    first the second's answer).  The buttons sit at the bottom, so a long
-    message never pushes them off the screen.  Returns what tk_messageBox
-    returns ("yes", "no", "ok", "cancel" ...)."""
     parent = options.get("parent") or getattr(tk, "_default_root", None)
     if not isinstance(parent, tk.Misc) or _NATIVE_MESSAGE_SHOW is None:
-        # Not a Tk window (a stand-in in the tests, or no window yet): the
-        # standard box.  Walking a stand-in's masters never ends (2026-10-12).
         if _NATIVE_MESSAGE_SHOW is None:
             raise RuntimeError("A message box needs a Tk window")
         return _NATIVE_MESSAGE_SHOW(title, message, _icon, _type, **options)
-    # "parent" is the first argument already (2026-10-12: passed twice, every
-    # box with a parent raised TypeError).
     rest = {key: value for key, value in options.items() if key != "parent"}
     try:
         return _english_message_box(parent, title, message, _icon, _type, **rest)
@@ -155,7 +106,6 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
     buttons = _ENGLISH_MESSAGE_BUTTONS.get(kind, _ENGLISH_MESSAGE_BUTTONS["ok"])
     names = [name for name, _text in buttons]
     default = str(options.get("default") or names[0])
-    # Closing the window or Escape: the safe answer.
     cancel = next((name for name in ("cancel", "no", "abort", "ok") if name in names), names[-1])
     top = tk.Toplevel(parent, class_="EnglishMessageBox")
     try:
@@ -163,7 +113,7 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
                                          names, default, cancel, options)
     except BaseException:
         try:
-            top.destroy()  # never a box left on screen that nothing waits on
+            top.destroy()
         except tk.TclError:
             pass
         raise
@@ -216,13 +166,10 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
         )
     top.protocol("WM_DELETE_WINDOW", lambda: answer.set(cancel))
     top.bind("<Escape>", lambda _event: answer.set(cancel))
-
     def press(_event=None) -> None:
-        # Return presses the focused button, else the default one.
         focused = top.focus_get()
         target = focused if focused in widgets.values() else widgets.get(default, widgets[names[0]])
         target.invoke()
-
     top.bind("<Return>", press)
     top.update_idletasks()
     width, height = top.winfo_reqwidth(), top.winfo_reqheight()
@@ -239,19 +186,12 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
     except tk.TclError:
         pass
     top.deiconify()
-    # In front of every window (the program's own and others, e.g. VS Code)
-    # while it waits: a box opened during start-up, before the main window
-    # is up, was easy to lose behind them.
     try:
         top.lift()
         top.attributes("-topmost", True)
         top.focus_force()
     except tk.TclError:
         pass
-    # The window holding the grab, by its Tcl name: a Combobox's open list
-    # and Tk's own file dialogs are not tkinter widgets, and grab_current()
-    # raised KeyError for them, which left this box on top for good (review,
-    # 2026-10-12).
     try:
         previous_grab = str(top.tk.call("grab", "current", top._w)) or None
     except tk.TclError:
@@ -296,11 +236,9 @@ _NATIVE_ASK_DIRECTORY = None
 
 
 def folder_name_problem(name: str) -> str:
-    """Why the typed folder name cannot be used; "" when it can."""
     text = str(name)
     if not text.strip():
         return "Type a name."
-    # A leading dot: the list leaves such folders out.
     if (text != text.strip() or text.startswith(".") or text.endswith(".") or len(text) > 255
             or re.search(r'[<>:"/\\|?*\x00-\x1f]', text)
             or text.split(".")[0].upper() in WINDOWS_RESERVED_FILE_NAMES):
@@ -309,16 +247,11 @@ def folder_name_problem(name: str) -> str:
 
 
 def folder_name_sort_key(name: str) -> list:
-    """SRO2 before SRO14, and no difference between capitals and small
-    letters: the order of Tk's own folder dialog."""
     return [(0, int(part), "") if part.isdigit() else (1, 0, part.casefold())
             for part in re.split(r"(\d+)", str(name)) if part]
 
 
 def list_subfolders(directory) -> list[str]:
-    """The names of the folders in directory, in the dialog's order.  Hidden
-    ones (a leading dot, or hidden on Windows) are left out.  OSError when
-    the directory cannot be read."""
     names = []
     with os.scandir(directory) as entries:
         for entry in entries:
@@ -334,19 +267,14 @@ def list_subfolders(directory) -> list[str]:
 
 
 def _folder_key(path) -> str:
-    # The real path: the same folder through a link, a junction, a mapped
-    # drive or a short Windows name is the same folder (review, 2026-11-15).
     return os.path.normcase(os.path.realpath(str(path)))
 
 
 def open_scan_runs() -> list:
-    """The recorders of the scans that are saving now."""
     return [recorder for recorder in list(_OPEN_SCAN_RUNS) if not getattr(recorder, "closed", True)]
 
 
 def scan_run_using_folder(folder) -> Path | None:
-    """The folder a scan is still saving into, when that is folder itself or
-    one inside it (its run folder, or its images' folder); else None."""
     target = _folder_key(folder)
     for recorder in open_scan_runs():
         for used in (recorder.directory, *getattr(recorder, "other_folders", ())):
@@ -357,7 +285,6 @@ def scan_run_using_folder(folder) -> Path | None:
 
 
 def folder_is_link(folder) -> bool:
-    """A symbolic link or a Windows junction: another folder under this name."""
     try:
         if os.path.islink(folder):
             return True
@@ -367,10 +294,6 @@ def folder_is_link(folder) -> bool:
 
 
 def folder_contents(folder, limit: int | None = None) -> tuple[int, int, int, bool]:
-    """(files, folders, bytes, all of it counted) of everything in folder.
-    Not all of it: the count stopped after ``limit`` entries
-    (FOLDER_DIALOG_COUNT_LIMIT by default), a part could not be read, or a
-    folder in it is a link to another folder (not entered)."""
     if limit is None:
         limit = FOLDER_DIALOG_COUNT_LIMIT
     files = folders = size = 0
@@ -400,11 +323,9 @@ def _folder_size_text(size: int) -> str:
 
 
 def _folder_edit_refusal(folder: Path, action: str) -> str:
-    """Why folder may not be renamed or deleted at all; "" when it may."""
     if not folder.is_dir():
         return f"{folder.name} is not a folder any more."
     if sys.platform == "win32" and folder.name != folder.name.rstrip(". "):
-        # Windows drops a last dot or space, and would act on another folder.
         return f"Windows cannot address the name {folder.name!r}; it is left alone here."
     run = scan_run_using_folder(folder)
     if run is not None:
@@ -414,8 +335,6 @@ def _folder_edit_refusal(folder: Path, action: str) -> str:
 
 
 def make_subfolder(directory, name: str) -> Path:
-    """Make <directory>/<name> and return it.  ValueError (the text for the
-    user) when the name is refused or taken; OSError when it cannot be made."""
     problem = folder_name_problem(name)
     if problem:
         raise ValueError(problem)
@@ -427,8 +346,6 @@ def make_subfolder(directory, name: str) -> Path:
 
 
 def rename_subfolder(folder, name: str) -> Path:
-    """Rename folder to <its directory>/<name> and return the new path.
-    ValueError (the text for the user) when it is refused."""
     folder = Path(folder)
     refusal = _folder_edit_refusal(folder, "renamed")
     if refusal:
@@ -440,7 +357,6 @@ def rename_subfolder(folder, name: str) -> Path:
         return folder
     target = folder.with_name(name)
     if os.path.lexists(target):
-        # A change of capitals only is the same folder on Windows.
         same = name.casefold() == folder.name.casefold() and os.path.samefile(folder, target)
         if not same:
             raise ValueError(f"{name} is already there.")
@@ -449,7 +365,6 @@ def rename_subfolder(folder, name: str) -> Path:
 
 
 class _RecycleBinInfo(ctypes.Structure):
-    """Windows' SHQUERYRBINFO (packed on 32-bit Windows only)."""
     if ctypes.sizeof(ctypes.c_void_p) == 4:
         _pack_ = 1
     _fields_ = [("cbSize", ctypes.c_uint32), ("i64Size", ctypes.c_int64),
@@ -457,7 +372,6 @@ class _RecycleBinInfo(ctypes.Structure):
 
 
 class _ShellFileOperation(ctypes.Structure):
-    """Windows' SHFILEOPSTRUCTW (packed on 32-bit Windows only)."""
     if ctypes.sizeof(ctypes.c_void_p) == 4:
         _pack_ = 1
     _fields_ = [("hwnd", ctypes.c_void_p), ("wFunc", ctypes.c_uint), ("pFrom", ctypes.c_void_p),
@@ -467,9 +381,6 @@ class _ShellFileOperation(ctypes.Structure):
 
 
 def _windows_drive_root(folder) -> str:
-    """The drive of folder with a backslash ("C:" + "\\"), when it is on a
-    drive letter of this computer; "" for a network share (a mapped drive's
-    real path is one) or no drive at all."""
     drive = os.path.splitdrive(os.path.realpath(str(folder)))[0]
     if len(drive) != 2 or not drive.endswith(":"):
         return ""
@@ -477,9 +388,6 @@ def _windows_drive_root(folder) -> str:
 
 
 def recycle_bin_item_count(folder) -> int | None:
-    """How many items the Windows Recycle Bin of folder's drive holds; None
-    when that drive has none (a network share, or not Windows) or it cannot
-    be asked."""
     if sys.platform != "win32":
         return None
     try:
@@ -499,9 +407,6 @@ def recycle_bin_item_count(folder) -> int | None:
 
 
 def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
-    """(switched off, largest size in bytes or None when Windows' default)
-    of the Recycle Bin of the drive ``root`` (_windows_drive_root), from the registry
-    where Windows keeps the bin's Properties."""
     import winreg
     for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
         try:
@@ -516,7 +421,6 @@ def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
     name.restype = ctypes.c_int
     if not name(root, volume, 64):
         raise OSError("the drive's volume name could not be read")
-    # "\\?\Volume{...}\" -> "{...}"
     guid = volume.value[volume.value.index("{"):volume.value.rindex("}") + 1]
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -530,12 +434,10 @@ def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
             megabytes = value("MaxCapacity")
             return bool(value("NukeOnDelete")), None if megabytes is None else megabytes * 1024 * 1024
     except OSError:
-        return False, None  # never set: the bin is on, at Windows' default size
+        return False, None
 
 
 def recycle_bin_refusal(folder, size: int = 0) -> str:
-    """Why Windows would not put folder (``size`` bytes) into the Recycle
-    Bin, so that deleting it would be for good; "" when it would."""
     if sys.platform != "win32":
         return "There is no Recycle Bin for it here"
     try:
@@ -543,14 +445,12 @@ def recycle_bin_refusal(folder, size: int = 0) -> str:
         drive_type = ctypes.windll.kernel32.GetDriveTypeW
         drive_type.argtypes = [ctypes.c_wchar_p]
         drive_type.restype = ctypes.c_uint
-        # 3: DRIVE_FIXED.  A removable or network drive has no bin.
         if not root or drive_type(root) != 3 or recycle_bin_item_count(folder) is None:
             return "There is no Recycle Bin for it here"
         switched_off, largest = _recycle_bin_settings(root)
         if switched_off:
             return "The Recycle Bin is switched off for its drive"
         if largest is None:
-            # Windows' default is 5 % of the drive or more.
             largest = int(0.05 * _windows_drive_size(root))
         if size > 0.9 * largest:
             return (f"It is larger than the Recycle Bin of its drive "
@@ -571,21 +471,14 @@ def _windows_drive_size(root: str) -> int:
 
 
 def move_folder_to_recycle_bin(folder, window_handle: int = 0) -> None:
-    """Send folder, with everything in it, to the Windows Recycle Bin.
-    OSError when Windows does not do it; the folder is then still there, or
-    partly there."""
     if sys.platform != "win32":
         raise OSError("There is no Recycle Bin on this computer.")
     name = Path(folder).name
-    # The list of paths ends with two nulls (the buffer adds the second).
     source = ctypes.create_unicode_buffer(os.path.abspath(str(folder)) + "\0")
     operation = _ShellFileOperation()
     operation.hwnd = window_handle or None
-    operation.wFunc = 3  # FO_DELETE
+    operation.wFunc = 3
     operation.pFrom = ctypes.cast(source, ctypes.c_void_p)
-    # FOF_ALLOWUNDO (the Recycle Bin), no progress window, no question (the
-    # program has asked) and no error window (the error is shown here), and
-    # FOF_WANTNUKEWARNING: Windows itself asks if it would delete for good.
     operation.fFlags = 0x0040 | 0x0004 | 0x0010 | 0x0400 | 0x4000
     function = ctypes.windll.shell32.SHFileOperationW
     function.argtypes = [ctypes.POINTER(_ShellFileOperation)]
@@ -616,9 +509,6 @@ _FOLDER_DELETE_WHILE_SCANNING = (
 
 
 def folder_delete_question(folder) -> tuple[str, str]:
-    """(how, the question to ask) before folder is deleted: how is "empty"
-    (the folder is removed) or "recycle" (it goes to the Recycle Bin).
-    ValueError (the text for the user) when it may not be deleted."""
     folder = Path(folder)
     refusal = _folder_delete_refusal(folder)
     if refusal:
@@ -626,7 +516,6 @@ def folder_delete_question(folder) -> tuple[str, str]:
     if _folder_is_empty(folder):
         return "empty", f"Delete the empty folder {folder.name}?"
     if open_scan_runs():
-        # Before the count, which also takes the Tk thread.
         raise ValueError(_FOLDER_DELETE_WHILE_SCANNING)
     files, folders, size, complete = folder_contents(folder)
     if not complete:
@@ -645,10 +534,6 @@ def folder_delete_question(folder) -> tuple[str, str]:
 
 
 def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
-    """Delete folder as folder_delete_question said ("empty" or "recycle").
-    The refusals are checked again; an "empty" folder that holds something
-    by now is not removed (OSError).  Returns "" or, when the Recycle Bin
-    did not gain an item, a warning for the user."""
     folder = Path(folder)
     refusal = _folder_delete_refusal(folder)
     if refusal:
@@ -673,9 +558,6 @@ def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
 
 
 def folder_dialog_start_directory(initialdir="") -> Path:
-    """Where the dialog opens: initialdir, or the nearest folder above it
-    that exists; without one, where the last dialog was, else the program's
-    current directory."""
     for text in (initialdir, _FOLDER_DIALOG_LAST_DIRECTORY):
         if not str(text or "").strip():
             continue
@@ -687,10 +569,6 @@ def folder_dialog_start_directory(initialdir="") -> Path:
 
 
 class EditableFolderDialog:
-    """The program's folder dialog: choose a folder, and make, rename or
-    delete folders in it.  show() waits for OK or Cancel and returns the
-    folder ("/" between its parts, as Tk's dialog gave it) or ""."""
-
     def __init__(self, parent, title="", initialdir="", mustexist=False) -> None:
         self.parent = parent
         self.mustexist = bool(mustexist)
@@ -706,7 +584,6 @@ class EditableFolderDialog:
             except tk.TclError:
                 pass
             raise
-
     def _build(self, title: str) -> None:
         top = self.top
         top.withdraw()
@@ -764,35 +641,25 @@ class EditableFolderDialog:
         self.selection_entry.bind("<Return>", lambda _event: self.ok())
         top.bind("<Escape>", lambda _event: self.cancel())
         top.protocol("WM_DELETE_WINDOW", self.cancel)
-        # Destroyed from outside (the program closing): show() must not wait
-        # for ever (review, 2026-11-15).
         top.bind("<Destroy>", self._destroyed)
         self.show_directory(self.directory)
-
     def _destroyed(self, event) -> None:
         if event.widget is self.top:
             try:
                 self.done.set(True)
             except tk.TclError:
                 pass
-
-    # ----- what the dialog shows -----
-
     def selected_folder(self) -> Path | None:
-        """The folder picked in the list, or None."""
         picked = self.listbox.curselection()
         if not picked or picked[0] >= len(self.names):
             return None
         return self.directory / self.names[picked[0]]
-
     def _volumes(self) -> list[str]:
         try:
             return [str(volume) for volume in self.top.tk.splitlist(self.top.tk.call("file", "volumes"))]
         except tk.TclError:
             return []
-
     def show_directory(self, directory, select: str = "") -> None:
-        """List directory (it becomes the dialog's), with ``select`` picked."""
         self.directory = Path(directory)
         try:
             self.names = list_subfolders(self.directory)
@@ -818,7 +685,6 @@ class EditableFolderDialog:
             self.listbox.selection_set(index)
             self.listbox.see(index)
         self._selection_changed()
-
     def _selection_changed(self) -> None:
         folder = self.selected_folder()
         self.selection_var.set((folder or self.directory).as_posix())
@@ -826,9 +692,7 @@ class EditableFolderDialog:
         self.rename_button.state(state)
         self.delete_button.state(state)
         self.up_button.state(["disabled"] if self.directory.parent == self.directory else ["!disabled"])
-
     def go_to(self, text) -> bool:
-        """Show the typed directory; False (and a message) when it is none."""
         path = self._typed_path(text)
         if path is None or not path.is_dir():
             self._error("Choose a folder", f"{str(text).strip() or 'That'} is not a folder.")
@@ -836,16 +700,13 @@ class EditableFolderDialog:
             return False
         self.show_directory(path)
         return True
-
     def go_up(self) -> None:
         if self.directory.parent != self.directory:
             self.show_directory(self.directory.parent, select=self.directory.name)
-
     def open_selected(self) -> None:
         folder = self.selected_folder()
         if folder is not None:
             self.show_directory(folder)
-
     def _typed_path(self, text) -> Path | None:
         text = str(text).strip()
         if not text:
@@ -854,33 +715,23 @@ class EditableFolderDialog:
         if not path.is_absolute():
             path = self.directory / path
         return Path(os.path.abspath(path))
-
-    # ----- the messages and questions, each over this dialog -----
-
     def _regrab(self) -> None:
-        """This dialog takes the input again after a box or a prompt over it
-        (a prompt drops the grab when it closes)."""
         try:
             if int(self.top.winfo_exists()):
                 self.top.grab_set()
-                self.listbox.focus_set()  # F2 and Delete work on at once
+                self.listbox.focus_set()
         except tk.TclError:
             pass
-
     def _error(self, title: str, text: str) -> None:
         try:
             messagebox.showerror(title, text, parent=self.top)
         finally:
             self._regrab()
-
     def _ask_name(self, title: str, prompt: str, initial: str = "") -> str | None:
         try:
             return simpledialog.askstring(title, prompt, initialvalue=initial, parent=self.top)
         finally:
             self._regrab()
-
-    # ----- New folder, Rename, Delete -----
-
     def new_folder(self) -> None:
         name = self._ask_name("New folder", f"Name of the new folder in {self.directory.as_posix()}:")
         if name is None:
@@ -891,7 +742,6 @@ class EditableFolderDialog:
             self._error("New folder", f"The folder was not made: {error}")
             return
         self.show_directory(self.directory, select=folder.name)
-
     def rename_selected(self) -> None:
         folder = self.selected_folder()
         if folder is None:
@@ -906,7 +756,6 @@ class EditableFolderDialog:
             self.show_directory(self.directory, select=folder.name)
             return
         self.show_directory(self.directory, select=renamed.name)
-
     def delete_selected(self) -> None:
         folder = self.selected_folder()
         if folder is None:
@@ -934,9 +783,7 @@ class EditableFolderDialog:
                 messagebox.showwarning("Delete folder", warning, parent=self.top)
             finally:
                 self._regrab()
-
     def _window_handle(self) -> int:
-        """This window for Windows (its own question, if any, comes over it)."""
         if sys.platform != "win32":
             return 0
         try:
@@ -945,9 +792,6 @@ class EditableFolderDialog:
             return int(parent(self.top.winfo_id()) or 0)
         except Exception:
             return 0
-
-    # ----- OK and Cancel -----
-
     def ok(self) -> None:
         path = self._typed_path(self.selection_var.get()) or self.directory
         if not path.is_dir():
@@ -972,11 +816,9 @@ class EditableFolderDialog:
         result = path.as_posix()
         self.result = result.rstrip("/") if result.startswith("//") else result
         self.done.set(True)
-
     def cancel(self) -> None:
         self.result = ""
         self.done.set(True)
-
     def show(self) -> str:
         global _FOLDER_DIALOG_LAST_DIRECTORY
         top, parent = self.top, self.parent
@@ -1007,7 +849,6 @@ class EditableFolderDialog:
             top.focus_force()
         except tk.TclError:
             pass
-        # The window holding the grab, by its Tcl name (see the message box).
         try:
             previous_grab = str(top.tk.call("grab", "current", top._w)) or None
         except tk.TclError:
@@ -1015,7 +856,6 @@ class EditableFolderDialog:
         try:
             top.grab_set()
         except tk.TclError:
-            # Not on the screen yet (X11): once more when it is.
             top.after(100, self._regrab)
         self.listbox.focus_set()
         try:
@@ -1038,11 +878,8 @@ class EditableFolderDialog:
 
 
 def editable_folder_dialog(**options) -> str:
-    """tkinter.filedialog.askdirectory, as the program's own folder dialog
-    (parent, title, initialdir, mustexist).  The chosen folder, or ""."""
     parent = options.get("parent") or getattr(tk, "_default_root", None)
     if not isinstance(parent, tk.Misc) or _NATIVE_ASK_DIRECTORY is None:
-        # Not a Tk window (a stand-in in the tests, or no window yet).
         if _NATIVE_ASK_DIRECTORY is None:
             raise RuntimeError("A folder dialog needs a Tk window")
         return _NATIVE_ASK_DIRECTORY(**options)
@@ -1055,30 +892,14 @@ def editable_folder_dialog(**options) -> str:
 
 
 def use_english_tk_dialogs(root: tk.Misc) -> bool:
-    """Message boxes (Yes/No, OK) and the open, save and folder dialogs in
-    English, whatever the language of Windows.  tkinter's messagebox and
-    filedialog call the Tk commands replaced here, so every call site is
-    covered.  On X11 Tk's own dialogs are already used.  The folder dialog
-    is the program's own (editable_folder_dialog), which can also make,
-    rename and delete folders (user, 2026-11-15).  Returns whether Tk's own
-    dialogs are in use."""
-    # tkinter.messagebox's functions all go through _show: each box becomes
-    # its own window (english_message_box).  Tcl's own tk_messageBox (the
-    # file dialogs' "overwrite?") is Tk's English one, below.
     import tkinter.messagebox as tk_messagebox
     global _NATIVE_MESSAGE_SHOW
     if hasattr(tk_messagebox, "_show"):
-        # tkinter's own _show, kept once per process on tkinter.messagebox:
-        # MS-fourState.py and Test_Microwave_NH_dev.py carry copies of this
-        # code, and two copies in one process (the tests) must not each keep
-        # the other's box as their standard one.
         native = getattr(tk_messagebox, "_english_native_show", None)
         if native is None:
             native = tk_messagebox._english_native_show = tk_messagebox._show
         _NATIVE_MESSAGE_SHOW = native
         tk_messagebox._show = english_message_box
-    # filedialog.askdirectory: the program's own folder dialog.  Tk's own is
-    # kept once per process, as the message box's is.
     import tkinter.filedialog as tk_filedialog
     global _NATIVE_ASK_DIRECTORY
     native_folder = getattr(tk_filedialog, "_english_native_askdirectory", None)
@@ -1103,37 +924,19 @@ WINDOWS_RESERVED_FILE_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 )
 # ===== END English dialogs copied from Transport_all.py =====
-
-
 def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
-    """Apply one predictable font system to every Tk/ttk window.
-
-    The Windows control computer is the primary target, so Microsoft YaHei UI
-    is preferred there: unlike Segoe UI it contains Chinese glyphs itself and
-    does not produce visibly different fallback glyphs inside one label.  The
-    selected family is resolved from fonts actually installed on the machine;
-    named Tk fonts are then updated so ordinary Tk widgets, ttk widgets,
-    dialogs and dynamically-created child windows inherit the same result.
-
-    Serial logs retain one consistent monospaced family because byte columns
-    need to stay aligned, while all operator-facing text uses the UI family.
-    """
-
     installed = tuple(tkfont.families(root))
     installed_lookup = {name.casefold(): name for name in installed}
-
     def choose(candidates: tuple[str, ...], fallback: str) -> str:
         for candidate in candidates:
             actual = installed_lookup.get(candidate.casefold())
             if actual is not None:
                 return actual
         return fallback
-
     default_font = tkfont.nametofont("TkDefaultFont", root=root)
     fixed_font = tkfont.nametofont("TkFixedFont", root=root)
     default_family = str(default_font.actual("family"))
     fixed_family = str(fixed_font.actual("family"))
-
     if sys.platform.startswith("win"):
         ui_candidates = (
             "Microsoft YaHei UI",
@@ -1153,7 +956,6 @@ def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
             "DejaVu Sans",
         )
         mono_candidates = ("Noto Sans Mono CJK SC", "DejaVu Sans Mono")
-
     ui_family = choose(ui_candidates, default_family)
     mono_family = choose(mono_candidates, fixed_family)
     top_level = root.winfo_toplevel()
@@ -1180,10 +982,6 @@ def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
             size=size,
             weight=weight,
         )
-
-    # Tk widgets that do not have a ttk style (Canvas, Text, Button, etc.)
-    # now inherit the same named fonts.  Explicit Canvas sizes below use the
-    # resolved family while retaining their intended visual hierarchy.
     root.option_add("*Font", "TkDefaultFont", "widgetDefault")
     root.option_add("*Menu.Font", "TkMenuFont", "widgetDefault")
     setattr(top_level, "_moke_ui_font_family", ui_family)
@@ -1191,8 +989,6 @@ def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
     setattr(top_level, "_moke_ui_font_size", normal_size)
     setattr(top_level, "_moke_ui_small_font_size", small_size)
     return ui_family, mono_family
-
-
 try:
     import numpy as np
 except ImportError:
@@ -1201,45 +997,25 @@ try:
     from PIL import Image, ImageTk
 except ImportError:
     Image = ImageTk = None
-
-
-
 try:
     import pyvisa
 except ImportError:
     pyvisa = None
-
-
 try:
     import zhinst.core as zi_core
 except ImportError:
     zi_core = None
-
-
 try:
     import zhinst.utils as zi_utils
 except ImportError:
     zi_utils = None
-
-
 def short_status_error(error: BaseException, limit: int = 120) -> str:
-    """One-line error summary suitable for a fixed-height Tk status bar."""
     text = " ".join(str(error).replace("\r", "\n").split())
     first_sentence = re.split(r"(?<=[\u3002\uff1b;])\s+|\n", text, maxsplit=1)[0]
     if len(first_sentence) <= limit:
         return first_sentence
     return first_sentence[: max(1, limit - 1)].rstrip() + "…"
-
-
 class LabOneDotNetAdapter:
-    """Python-shaped wrapper around the LabOne-version-matched .NET API.
-
-    LabOne 18.12 predates current Python 3.11 wheels.  Its installer does,
-    however, include a matching .NET client library.  Loading that library via
-    pythonnet keeps all control inside the current Python process while avoiding
-    the incompatible modern zhinst-core transport.
-    """
-
     def __init__(self, host: str, port: int, api_level: int) -> None:
         if sys.platform != "win32":
             raise RuntimeError("The LabOne .NET API can only be loaded on the Windows control PC")
@@ -1249,7 +1025,6 @@ class LabOneDotNetAdapter:
             raise RuntimeError(
                 "The current Python lacks pythonnet; cannot load the .NET API bundled with LabOne"
             ) from error
-
         dll_directory, api_dll = self._find_dotnet_api()
         self.dll_directory = dll_directory
         self.api_dll = api_dll
@@ -1259,16 +1034,11 @@ class LabOneDotNetAdapter:
         if str(dll_directory) not in sys.path:
             sys.path.insert(0, str(dll_directory))
         try:
-            # The public assembly resolves ziDotNETCore-win64.dll from the same
-            # directory.  Loading by absolute path avoids GAC/version ambiguity.
             assembly = clr.AddReference(str(api_dll))
             from System import Activator, Enum
             api_type = assembly.GetType("zhinst.ziDotNET")
             enum_type = assembly.GetType("zhinst.ZIAPIVersion_enum")
             if api_type is None or enum_type is None:
-                # Avoid importing ``zhinst`` here: the installed Python package
-                # has the same namespace as the CLR assembly.  Reflection is
-                # unambiguous even when both APIs coexist in one interpreter.
                 exported = list(assembly.GetExportedTypes())
                 if api_type is None:
                     api_type = next(
@@ -1290,13 +1060,9 @@ class LabOneDotNetAdapter:
             raise RuntimeError(
                 f"Failed to load the LabOne .NET DLL ({api_dll}): {error}"
             ) from error
-
         self._daq = Activator.CreateInstance(api_type)
         enum_level = Enum.ToObject(enum_type, int(api_level))
         try:
-            # Use the overload that explicitly permits version mismatch.  When
-            # the loaded DLL and Data Server both come from LabOne 18.12 they
-            # normally match, but the flag also supports a local server update.
             try:
                 self._daq.init(str(host), int(port), enum_level, True)
             except TypeError:
@@ -1311,10 +1077,8 @@ class LabOneDotNetAdapter:
             raise RuntimeError(
                 f"LabOne .NET API failed to connect to {host}:{port}: {error}"
             ) from error
-
     @staticmethod
     def _find_dotnet_api() -> tuple[Path, Path]:
-        """Locate the x64/Win32 LabOne .NET assembly matching this Python."""
         is_64_bit = sys.maxsize > 2**32
         suffix = "win64" if is_64_bit else "win32"
         api_filename = f"ziDotNET-{suffix}.dll"
@@ -1323,8 +1087,6 @@ class LabOneDotNetAdapter:
             value = os.environ.get(environment_name, "").strip()
             if value:
                 roots.append(Path(value))
-        # Standard fallbacks are retained because ProgramW6432 may be absent
-        # in a terminal launched by a 32-bit parent process.
         roots.extend((Path(r"C:\Program Files"), Path(r"C:\Program Files (x86)")))
         candidates: list[Path] = []
         explicit = os.environ.get("MOKE_LABONE_DOTNET_API", "").strip().strip('"')
@@ -1371,7 +1133,6 @@ class LabOneDotNetAdapter:
             "No matching-version .NET API bundled with LabOne was found. Please confirm that the full "
             "LabOne (including API/DotNet) is installed. Checked: " + "; ".join(checked)
         )
-
     def _close_dll_directory(self) -> None:
         handle = self._dll_directory_handle
         self._dll_directory_handle = None
@@ -1380,16 +1141,12 @@ class LabOneDotNetAdapter:
                 handle.close()
             except BaseException:
                 pass
-
     def setInt(self, path: str, value: int) -> None:
         self._daq.setInt(str(path), int(value))
-
     def getInt(self, path: str) -> int:
         return int(self._daq.getInt(str(path)))
-
     def sync(self) -> None:
         self._daq.sync()
-
     def getSample(self, path: str) -> dict[str, float]:
         sample = self._daq.getDemodSample(str(path))
         return {
@@ -1398,23 +1155,16 @@ class LabOneDotNetAdapter:
             "frequency": float(sample.frequency),
             "phase": float(sample.phase),
         }
-
     def getString(self, path: str) -> str:
         return str(self._daq.getString(str(path)))
-
     def connectDevice(self, device: str, interface: str) -> None:
         self._daq.connectDevice(str(device), str(interface), "")
-
     def disconnect(self) -> None:
         try:
             self._daq.disconnect()
         finally:
             self._close_dll_directory()
-
-
 class LabOneCAPIAdapter:
-    """Current-Python adapter for the LabOne-version-matched native C API."""
-
     class _DemodSample(ctypes.Structure):
         _fields_ = (
             ("timeStamp", ctypes.c_uint64),
@@ -1427,7 +1177,6 @@ class LabOneCAPIAdapter:
             ("auxIn0", ctypes.c_double),
             ("auxIn1", ctypes.c_double),
         )
-
     def __init__(self, host: str, port: int, api_level: int) -> None:
         if sys.platform != "win32":
             raise RuntimeError("The LabOne C API can only be loaded on the Windows control PC")
@@ -1458,7 +1207,6 @@ class LabOneCAPIAdapter:
         except BaseException:
             self._destroy()
             raise
-
     def _bind_functions(self) -> None:
         connection = ctypes.c_void_p
         result = ctypes.c_int
@@ -1503,7 +1251,6 @@ class LabOneCAPIAdapter:
             ctypes.POINTER(self._DemodSample),
         ]
         self._lib.ziAPIGetDemodSample.restype = result
-
     @staticmethod
     def _candidate_labview_roots() -> list[Path]:
         roots = []
@@ -1518,7 +1265,6 @@ class LabOneCAPIAdapter:
             except OSError:
                 continue
         return roots
-
     @classmethod
     def _find_c_api(cls) -> Path:
         suffix = "win64" if sys.maxsize > 2**32 else "win32"
@@ -1554,9 +1300,6 @@ class LabOneCAPIAdapter:
                 candidates.extend(root.rglob(filename))
             except OSError:
                 continue
-        # Some old LabVIEW installations place vendor DLLs outside instr.lib.
-        # Perform one bounded recursive search of the NI trees as a final
-        # automatic discovery step rather than making the user guess a path.
         for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
             ni_root = Path(base) / "National Instruments"
             try:
@@ -1580,16 +1323,13 @@ class LabOneCAPIAdapter:
             f"No {filename} with a matching bitness was found. Please install the LabOne C API, or point the environment variable "
             f"MOKE_LABONE_C_API to that DLL. Checked: {'; '.join(checked)}"
         )
-
     @staticmethod
     def _path(path: str) -> bytes:
         return str(path).encode("ascii")
-
     @staticmethod
     def _check(code: int, operation: str) -> None:
         if int(code) != 0:
             raise RuntimeError(f"{operation} failed, LabOne C API code={int(code)}")
-
     def setInt(self, path: str, value: int) -> None:
         self._check(
             self._lib.ziAPISetValueI(
@@ -1597,7 +1337,6 @@ class LabOneCAPIAdapter:
             ),
             f"setInt({path})",
         )
-
     def getInt(self, path: str) -> int:
         value = ctypes.c_int64()
         self._check(
@@ -1607,10 +1346,8 @@ class LabOneCAPIAdapter:
             f"getInt({path})",
         )
         return int(value.value)
-
     def sync(self) -> None:
         self._check(self._lib.ziAPISync(self._connection), "ziAPISync")
-
     def getSample(self, path: str) -> dict[str, float]:
         sample = self._DemodSample()
         self._check(
@@ -1625,12 +1362,8 @@ class LabOneCAPIAdapter:
             "frequency": float(sample.frequency),
             "phase": float(sample.phase),
         }
-
     def getString(self, path: str) -> str:
-        # Version text is optional in the GUI identity and is intentionally not
-        # needed for measurement.  Avoid a version-specific string ABI here.
         return ""
-
     def connectDevice(self, device: str, interface: str) -> None:
         self._check(
             self._lib.ziAPIConnectDevice(
@@ -1641,7 +1374,6 @@ class LabOneCAPIAdapter:
             ),
             f"connectDevice({device}, {interface})",
         )
-
     def _destroy(self) -> None:
         connection = getattr(self, "_connection", None)
         library = getattr(self, "_lib", None)
@@ -1658,77 +1390,40 @@ class LabOneCAPIAdapter:
                 handle.close()
             except BaseException:
                 pass
-
     def disconnect(self) -> None:
         try:
             if self._connection.value:
                 self._lib.ziAPIDisconnect(self._connection)
         finally:
             self._destroy()
-
-
 NONLOCAL_MFLI_SERVER_HOST = "192.168.69.78"
-
-
 NONLOCAL_MFLI_SERVER_PORT = 8004
-
-
 NONLOCAL_MFLI_SERVER_CANDIDATES = (
-    # Prefer the PC-side Data Server when LabOne is installed and running.
-    # It is normally the best version match for the Python API and can attach
-    # DEV4435 through the RNDIS link.  The embedded MFLI server remains the
-    # deterministic fallback when no local Data Server is listening.
     ("127.0.0.1", NONLOCAL_MFLI_SERVER_PORT),
     (NONLOCAL_MFLI_SERVER_HOST, NONLOCAL_MFLI_SERVER_PORT),
 )
-
-
 NONLOCAL_MFLI_API_LEVEL = 5
-
-
 NONLOCAL_MFLI_DEMODULATOR = 0
-
-
 NONLOCAL_MFLI_EXTREF_DEMODULATOR = 1
-
-
 NONLOCAL_MFLI_EXTREF_CHANNEL = 0
-
-
 NONLOCAL_MFLI_INPUT_SCALING = 1.0
-
-
 NONLOCAL_MFLI_REFERENCE_INPUTS = {
     "Aux Input 1": 8,
     "Aux Input 2": 9,
     "Trigger In 1": 2,
     "Trigger In 2": 3,
 }
-
-
 NONLOCAL_MFLI_DEFAULT_REFERENCE_INPUT = "Aux Input 1"
-
-
 NONLOCAL_MFLI_LEGACY_PYTHON_ENV = "MOKE_MFLI_PYTHON"
-
-
 NONLOCAL_SAMPLE_HZ = 1.0
-
-
 NONLOCAL_LOCKIN_TIME_CONSTANT_S = 1.0
-
-
 NONLOCAL_LOCKIN_FILTER_ORDER = 2
-
-
 NONLOCAL_SR830_FULL_SCALE_V = (
     2e-9, 5e-9, 10e-9, 20e-9, 50e-9, 100e-9, 200e-9, 500e-9,
     1e-6, 2e-6, 5e-6, 10e-6, 20e-6, 50e-6, 100e-6, 200e-6,
     500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3, 50e-3, 100e-3,
     200e-3, 500e-3, 1.0,
 )
-
-
 STFMR_LOCKIN_DEFAULT_RESOURCES = {
     "kepco": "GPIB0::6::INSTR",
     "gauss": "GPIB0::15::INSTR",
@@ -1736,45 +1431,21 @@ STFMR_LOCKIN_DEFAULT_RESOURCES = {
     "830": "GPIB0::9::INSTR",
     "mfli": "dev4435",
 }
-
-
 STFMR_KEPCO_MAX_CURRENT_A = 10.0
-
-
 STFMR_KEPCO_MAX_VOLTAGE_V = 20.0
-
-
-STFMR_LOCKIN_SR830_SENSITIVITY_CODE = 13  # 50 uV full scale
-
-
-STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE = 10  # 1 s
-
-
+STFMR_LOCKIN_SR830_SENSITIVITY_CODE = 13
+STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE = 10
 STFMR_LOCKIN_SR830_REFERENCE_INPUTS = {
     "Sine": 0,
     "TTL Rising": 1,
     "TTL Falling": 2,
 }
-
-
 STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT = "Sine"
-
-
 _INSTRUMENT_LEASE_LOCK = threading.RLock()
-
-
 _INSTRUMENT_LEASES: dict[str, tuple[object, str]] = {}
-
-
 _SHARED_VISA_MANAGER_LOCK = threading.RLock()
-
-
 _SHARED_VISA_MANAGER = None
-
-
 _SHARED_VISA_MANAGER_USERS = 0
-
-
 def acquire_shared_visa_manager():
     global _SHARED_VISA_MANAGER, _SHARED_VISA_MANAGER_USERS
     if pyvisa is None:
@@ -1796,14 +1467,10 @@ def acquire_shared_visa_manager():
                 manager = None
         if manager is None:
             manager = pyvisa.ResourceManager()
-            # Force validation here so a stale manager is rejected before a
-            # controller stores it as an active connection.
             manager.session
             _SHARED_VISA_MANAGER = manager
         _SHARED_VISA_MANAGER_USERS += 1
         return manager
-
-
 def release_shared_visa_manager(manager) -> None:
     global _SHARED_VISA_MANAGER, _SHARED_VISA_MANAGER_USERS
     if manager is None:
@@ -1815,18 +1482,12 @@ def release_shared_visa_manager(manager) -> None:
             0, _SHARED_VISA_MANAGER_USERS - 1
         )
         if _SHARED_VISA_MANAGER_USERS == 0:
-            # Close while holding the pool lock.  PyVISA keeps this manager in
-            # its own backend registry until close() returns; allowing another
-            # acquire in that small window could hand out the manager being
-            # closed.
             try:
                 manager.close()
             except BaseException:
                 pass
             finally:
                 _SHARED_VISA_MANAGER = None
-
-
 def acquire_instrument_lease(
     resource: str, owner: object, owner_label: str
 ) -> str:
@@ -1842,8 +1503,6 @@ def acquire_instrument_lease(
             )
         _INSTRUMENT_LEASES[key] = (owner, str(owner_label))
     return key
-
-
 def release_instrument_lease(resource: str, owner: object) -> None:
     key = str(resource).strip().upper()
     if not key:
@@ -1852,11 +1511,7 @@ def release_instrument_lease(resource: str, owner: object) -> None:
         current = _INSTRUMENT_LEASES.get(key)
         if current is not None and current[0] is owner:
             _INSTRUMENT_LEASES.pop(key, None)
-
-
 class SafeVisaIdentityController:
-    """One leased VISA session with fail-closed source disconnect semantics."""
-
     def __init__(
         self,
         logger: Callable[[str], None],
@@ -1885,11 +1540,9 @@ class SafeVisaIdentityController:
         self.resource_name = ""
         self.identity = ""
         self.lock = threading.RLock()
-
     @property
     def connected(self) -> bool:
         return self.instrument is not None
-
     def connect(self, resource_name: str) -> str:
         if pyvisa is None:
             raise RuntimeError(
@@ -1908,20 +1561,11 @@ class SafeVisaIdentityController:
             try:
                 manager = acquire_shared_visa_manager()
                 if self.enumerate_before_open:
-                    # The legacy BIT 4886 path was only reliable on the
-                    # experiment PC after NI-VISA had enumerated the GPIB bus.
-                    # This is read-only discovery and sends no programming
-                    # command to the power supply.
                     manager.list_resources()
                 instrument = manager.open_resource(resource_name)
                 instrument.timeout = (
                     3000 if self.preserve_visa_io_defaults else 5000
                 )
-                # Most newer SCPI instruments in this application explicitly
-                # use LF.  Older GPIB instruments such as the KEPCO BIT 4886
-                # instead rely on the native IEEE-488 EOI handshake.  In that
-                # case preserve the backend defaults (including send_end=True)
-                # exactly as a plain PyVISA open_resource/query sequence does.
                 if not self.preserve_visa_io_defaults:
                     instrument.write_termination = "\n"
                     instrument.read_termination = "\n"
@@ -1930,18 +1574,10 @@ class SafeVisaIdentityController:
                     except (AttributeError, ValueError):
                         pass
                 else:
-                    # Match the I/O profile verified by the read-only
-                    # Scan_GPIB.py diagnostic on the STFMR computer.  The BIT
-                    # 4886 accepts CR/LF plus the IEEE-488 EOI handshake and
-                    # returns its reply by EOI rather than a text terminator.
                     instrument.write_termination = "\r\n"
                     instrument.read_termination = None
                     instrument.send_end = True
                 if self.connect_settle_seconds > 0:
-                    # Scan_GPIB.py reaches GPIB address 6 only after its first
-                    # serial-port timeout.  Reproduce that known-good warm-up
-                    # interval so the first *IDN? is not issued immediately
-                    # after opening the old BIT 4886 GPIB session.
                     time.sleep(self.connect_settle_seconds)
                 try:
                     identity = instrument.query("*IDN?").strip()
@@ -1955,8 +1591,6 @@ class SafeVisaIdentityController:
                         f"{resource_name} returned a device that is not {self.label}: {identity}"
                     )
                 identity_verified = True
-                # Connecting a source must never inherit an output left on by
-                # an earlier crashed program.  SR830 rows have no off commands.
                 if self.safe_off_on_connect:
                     for command in self.safe_off_commands:
                         try:
@@ -1975,11 +1609,6 @@ class SafeVisaIdentityController:
                 return identity
             except BaseException:
                 if instrument is not None:
-                    # Never send source-control commands to an instrument whose
-                    # identity query failed.  Besides being unsafe for a wrong
-                    # device, doing so after a timed-out GPIB query can leave an
-                    # old controller in a bus state that also breaks the next
-                    # standalone Scan_GPIB.py run.
                     if identity_verified and self.safe_off_on_connect:
                         for command in self.safe_off_commands:
                             try:
@@ -1993,7 +1622,6 @@ class SafeVisaIdentityController:
                 release_shared_visa_manager(manager)
                 release_instrument_lease(resource_name, self)
                 raise
-
     def safe_output_off(self) -> None:
         with self.lock:
             if self.instrument is None:
@@ -2008,7 +1636,6 @@ class SafeVisaIdentityController:
                 raise RuntimeError(
                     f"{self.label} failed to turn output off: " + "; ".join(errors)
                 )
-
     def disconnect(self) -> None:
         with self.lock:
             instrument = self.instrument
@@ -2039,16 +1666,7 @@ class SafeVisaIdentityController:
             self.logger(f"{self.owner_scope} {self.label} disconnected")
             if shutdown_error is not None:
                 raise shutdown_error
-
-
 class STFMRKepco4886Controller:
-    """Trace-backed, write-only KEPCO BIT 4886 / BOP 20-10 session.
-
-    The supplied LabVIEW NI I/O Trace never queries this controller.  Opening
-    and closing therefore only manage the VISA session; output writes happen
-    only after the operator explicitly presses Apply or Zero/OFF.
-    """
-
     def __init__(self, logger: Callable[[str], None]) -> None:
         self.logger = logger
         self.resource_manager = None
@@ -2060,11 +1678,9 @@ class STFMRKepco4886Controller:
         self.output_owned = False
         self.cached_current_a = 0.0
         self.cached_voltage_v = 0.0
-
     @property
     def connected(self) -> bool:
         return self.instrument is not None
-
     def connect(self, resource_name: str) -> str:
         if pyvisa is None:
             raise RuntimeError("pyvisa is missing; please run: py -m pip install pyvisa")
@@ -2083,7 +1699,6 @@ class STFMRKepco4886Controller:
                 manager = acquire_shared_visa_manager()
                 instrument = manager.open_resource(resource_name)
                 instrument.timeout = 3000
-                # LabVIEW capture: exact ASCII buffer, GPIB EOI, no CR/LF.
                 instrument.write_termination = None
                 instrument.read_termination = None
                 instrument.send_end = True
@@ -2104,7 +1719,6 @@ class STFMRKepco4886Controller:
                 release_shared_visa_manager(manager)
                 release_instrument_lease(resource_name, self)
                 raise
-
     def _write_exact(self, command: str) -> None:
         if self.instrument is None:
             raise RuntimeError("KEPCO is not connected")
@@ -2114,7 +1728,6 @@ class STFMRKepco4886Controller:
             writer(payload)
         else:
             self.instrument.write(str(command))
-
     def _cached_state(self) -> dict[str, object]:
         return {
             "mode": self.active_mode or "CURR",
@@ -2124,15 +1737,11 @@ class STFMRKepco4886Controller:
             "programmed_current_a": self.cached_current_a,
             "programmed_voltage_v": self.cached_voltage_v,
         }
-
     def readback(self) -> dict[str, object]:
-        # Deliberately cached: this BIT 4886 path is write-only in the proven
-        # LabVIEW trace.  The Lake Shore 475 is the independent field readback.
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("KEPCO is not connected")
             return self._cached_state()
-
     def set_output(
         self, mode: str, target: float, complementary_limit: float
     ) -> dict[str, object]:
@@ -2153,7 +1762,6 @@ class STFMRKepco4886Controller:
                 raise ValueError("Current limit in voltage mode must be within 0–10 A")
         else:
             raise ValueError(f"Unsupported KEPCO mode: {mode}")
-
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("KEPCO is not connected")
@@ -2181,9 +1789,6 @@ class STFMRKepco4886Controller:
                 for command in commands:
                     self._write_exact(command)
                     if command == "OUTP ON":
-                        # A later setpoint write can fail after the supply has
-                        # already been enabled; retain ownership immediately so
-                        # the exception path can make a best-effort Zero/OFF.
                         self.output_owned = True
             except BaseException:
                 if self.output_owned:
@@ -2199,14 +1804,7 @@ class STFMRKepco4886Controller:
                 self.cached_voltage_v = target
                 self.cached_current_a = limit
             return self._cached_state()
-
     def set_scan_current(self, current_a: float) -> dict[str, object]:
-        """Change only the active current setpoint during an FMR scan.
-
-        The full mode/range/output sequence is sent once at scan start.  Each
-        later point is then the single command present in the LabVIEW trace,
-        avoiding unnecessary output toggles and GPIB traffic on the old 4886.
-        """
         current = float(current_a)
         if not math.isfinite(current):
             raise ValueError("KEPCO sweep current must be a finite number")
@@ -2220,7 +1818,6 @@ class STFMRKepco4886Controller:
             self._write_exact(f"CURR {current:.6f}")
             self.cached_current_a = current
             return self._cached_state()
-
     def safe_output_off(self) -> None:
         with self.lock:
             if self.instrument is None or not self.output_owned:
@@ -2235,11 +1832,9 @@ class STFMRKepco4886Controller:
             self.output_owned = False
             self.cached_current_a = 0.0
             self.cached_voltage_v = 0.0
-
     def zero_output(self) -> dict[str, object]:
         self.safe_output_off()
         return self._cached_state()
-
     def disconnect(self) -> None:
         with self.lock:
             instrument = self.instrument
@@ -2267,13 +1862,8 @@ class STFMRKepco4886Controller:
             self.logger("STFMR KEPCO VISA session closed")
             if shutdown_error is not None:
                 raise shutdown_error
-
-
 class STFMRGauss475Controller(SafeVisaIdentityController):
-    """Read-only Lake Shore 475 field interface preserving front-panel units."""
-
     UNIT_LABELS = {1: "G", 2: "T", 3: "Oe", 4: "A/m"}
-
     def __init__(self, logger: Callable[[str], None]) -> None:
         super().__init__(
             logger,
@@ -2281,7 +1871,6 @@ class STFMRGauss475Controller(SafeVisaIdentityController):
             "MODEL475",
             owner_scope="STFMR",
         )
-
     def read_field(self) -> dict[str, object]:
         with self.lock:
             if self.instrument is None:
@@ -2295,26 +1884,20 @@ class STFMRGauss475Controller(SafeVisaIdentityController):
                 "unit_code": unit_code,
                 "unit": self.UNIT_LABELS.get(unit_code, f"UNIT {unit_code}"),
             }
-
     @staticmethod
     def value_in_gauss(result: dict[str, object]) -> float:
-        """Convert the 475 front-panel unit to gauss for one plot axis."""
         value = float(result["field"])
         unit_code = int(result["unit_code"])
         factors = {
-            1: 1.0,                 # G
-            2: 1.0e4,               # T -> G
-            3: 1.0,                 # Oe -> G in air/vacuum
-            4: 4.0 * math.pi / 1000.0,  # A/m -> G in air/vacuum
+            1: 1.0,
+            2: 1.0e4,
+            3: 1.0,
+            4: 4.0 * math.pi / 1000.0,
         }
         if unit_code not in factors:
             raise RuntimeError(f"Cannot convert Lake Shore UNIT {unit_code} to G")
         return value * factors[unit_code]
-
-
 class STFMRSR830Controller(SafeVisaIdentityController):
-    """SR830 voltage-input reader for the SMB100A-modulated STFMR path."""
-
     def __init__(self, logger: Callable[[str], None]) -> None:
         super().__init__(
             logger,
@@ -2327,14 +1910,12 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         self.auto_range_enabled = True
         self.low_range_count = 0
         self.range_cooldown = 0
-
     @staticmethod
     def _numbers(response: str, expected: int) -> list[float]:
         values = [float(item.strip()) for item in str(response).split(",")]
         if len(values) != expected or not all(math.isfinite(v) for v in values):
             raise RuntimeError(f"SR830 readback cannot be parsed: {response!r}")
         return values
-
     def configure(
         self,
         reference_input: str = STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT,
@@ -2350,20 +1931,20 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 raise RuntimeError("SR830 is not connected")
             for command in (
                 "*CLS",
-                "FMOD 0",       # external reference
+                "FMOD 0",
                 f"RSLP {reference_slope}",
                 "HARM 1",
-                "ISRC 0",       # voltage input A
+                "ISRC 0",
                 "IGND 0",
                 "ICPL 0",
-                "ILIN 0",      # disable both line notch filters, as the main program does
-                "SYNC 0",      # disable optional synchronous filter
+                "ILIN 0",
+                "SYNC 0",
                 f"SENS {STFMR_LOCKIN_SR830_SENSITIVITY_CODE}",
                 f"OFLT {STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE}",
                 "OFSL 1",
                 "RMOD 1",
-                "DDEF 1,0,0",   # X and Y on the display (user, 2026-11-15;
-                "DDEF 2,0,0",   # it was R and theta)
+                "DDEF 1,0,0",
+                "DDEF 2,0,0",
             ):
                 self.instrument.write(command)
             actual_reference_mode = int(round(float(
@@ -2405,7 +1986,6 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 "sensitivity_index": actual_sensitivity,
                 "auto_range": self.auto_range_enabled,
             }
-
     def wait_for_reference(
         self,
         expected_frequency_hz: float,
@@ -2443,7 +2023,6 @@ class STFMRSR830Controller(SafeVisaIdentityController):
             "please confirm that SMB100A LFO OUTPUT is connected to SR830 REF IN, "
             "and select the Sine/TTL edge matching the waveform"
         )
-
     def _auto_range_locked(self, r_value: float, status: int) -> str:
         if not self.auto_range_enabled:
             return ""
@@ -2481,7 +2060,6 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         self.sensitivity_index = actual
         self.range_cooldown = 3
         return f"SENS {old}->{actual} ({reason})"
-
     def auto_phase(self) -> float:
         with self.lock:
             if self.instrument is None:
@@ -2489,7 +2067,6 @@ class STFMRSR830Controller(SafeVisaIdentityController):
             self.instrument.write("APHS")
             time.sleep(0.25)
             return float(self.instrument.query("PHAS?").strip())
-
     def read_sample(self, expected_frequency_hz: float) -> dict[str, object]:
         with self.lock:
             if self.instrument is None:
@@ -2523,11 +2100,7 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 reference_valid and not (lias & 0x07) and not auto_range_action
             ),
         }
-
-
 class STFMRSMB100AController(SafeVisaIdentityController):
-    """Trace-backed SMB100A microwave plus low-frequency AM source."""
-
     def __init__(self, logger: Callable[[str], None]) -> None:
         super().__init__(
             logger,
@@ -2536,7 +2109,6 @@ class STFMRSMB100AController(SafeVisaIdentityController):
             safe_off_commands=("AM:STAT OFF", "LFO OFF", "OUTPUT OFF"),
             owner_scope="STFMR",
         )
-
     def configure(self, frequency_ghz: float, power_dbm: float, lfo_hz: float) -> None:
         frequency_ghz = float(frequency_ghz)
         power_dbm = float(power_dbm)
@@ -2550,7 +2122,6 @@ class STFMRSMB100AController(SafeVisaIdentityController):
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("SMB100A is not connected")
-            # Exact setup order recovered from the supplied full LabVIEW trace.
             for command in (
                 ":AM:DEPT:LIN 1.0E+2",
                 "LFO:VOLT 0.50 V",
@@ -2562,9 +2133,7 @@ class STFMRSMB100AController(SafeVisaIdentityController):
                 "AM:STAT ON",
             ):
                 self.instrument.write(command)
-
     def set_frequency(self, frequency_ghz: float) -> None:
-        """Change only the carrier frequency while AM/LFO/RF remain enabled."""
         frequency_ghz = float(frequency_ghz)
         if not math.isfinite(frequency_ghz) or frequency_ghz <= 0.0:
             raise ValueError("SMB100A microwave frequency must be a finite positive number")
@@ -2572,14 +2141,9 @@ class STFMRSMB100AController(SafeVisaIdentityController):
             if self.instrument is None:
                 raise RuntimeError("SMB100A is not connected")
             self.instrument.write(f"FREQ {frequency_ghz:.9g}GHz")
-
     def rf_off(self) -> None:
         self.safe_output_off()
-
-
 _MFLI_BRIDGE_PREFIX = "MOKE_MFLI_JSON:"
-
-
 _MFLI_BRIDGE_SOURCE = r'''
 from __future__ import print_function
 
@@ -2838,10 +2402,7 @@ for request_line in sys.stdin:
     except BaseException:
         emit({"ok": False, "error": traceback.format_exc()})
 '''
-
-
 def _find_mfli_legacy_python() -> Path:
-    """Locate and validate the exact Python 3.7/LabOne 18.12 environment."""
     configured = os.environ.get(NONLOCAL_MFLI_LEGACY_PYTHON_ENV, "").strip()
     candidates = []
     if configured:
@@ -2913,11 +2474,7 @@ def _find_mfli_legacy_python() -> Path:
         f"exists, or set the environment variable {NONLOCAL_MFLI_LEGACY_PYTHON_ENV}. "
         f"Checked: {searched}. Rejected environments: {rejected_text}"
     )
-
-
 class LegacyMFLIBridge:
-    """JSON-line bridge from the Python 3.11 GUI to old zhinst/Python 3.7."""
-
     def __init__(self, device_id: str, timeout_s: float = 20.0) -> None:
         self.python_path = _find_mfli_legacy_python()
         self.process = None
@@ -2966,14 +2523,12 @@ class LegacyMFLIBridge:
         except BaseException:
             self.close(force=True)
             raise
-
     def _append_diagnostic(self, line: str) -> None:
         line = str(line).strip()
         if not line:
             return
         self.diagnostics.append(line)
         del self.diagnostics[:-12]
-
     def _read_stdout(self) -> None:
         stream = self.process.stdout if self.process is not None else None
         if stream is None:
@@ -2993,19 +2548,16 @@ class LegacyMFLIBridge:
                     self._append_diagnostic(line)
         finally:
             self.responses.put({"_eof": True})
-
     def _read_stderr(self) -> None:
         stream = self.process.stderr if self.process is not None else None
         if stream is None:
             return
         for line in stream:
             self._append_diagnostic(line)
-
     def _diagnostic_suffix(self) -> str:
         if not self.diagnostics:
             return ""
         return "; legacy environment output: " + " | ".join(self.diagnostics[-5:])
-
     def _receive(self, timeout_s: float) -> dict[str, object]:
         try:
             reply = self.responses.get(timeout=max(0.1, float(timeout_s)))
@@ -3026,7 +2578,6 @@ class LegacyMFLIBridge:
                 "Legacy LabOne bridge failed: " + detail + self._diagnostic_suffix()
             )
         return reply
-
     def request(
         self, command: str, timeout_s: float = 10.0, **parameters
     ) -> dict[str, object]:
@@ -3046,7 +2597,6 @@ class LegacyMFLIBridge:
                 "Cannot send a command to the legacy LabOne bridge" + self._diagnostic_suffix()
             ) from error
         return self._receive(timeout_s)
-
     def close(self, force: bool = False) -> None:
         process = self.process
         if process is None:
@@ -3076,11 +2626,7 @@ class LegacyMFLIBridge:
             except BaseException:
                 pass
         self.process = None
-
-
 class NonLocalACController:
-    """Own one 6221 plus independently selectable voltage instruments."""
-
     def __init__(self, logger: Callable[[str], None]) -> None:
         self.logger = logger
         self.resource_manager = None
@@ -3109,11 +2655,9 @@ class NonLocalACController:
         self.mfli_low_range_count = 0
         self.mfli_range_cooldown = 0
         self.mfli_initial_autorange_pending = False
-
     @property
     def mfli_connected(self) -> bool:
         return self.mfli_daq is not None or self.mfli_bridge is not None
-
     def _close_manager_if_unused(self) -> None:
         if (
             self.source is not None
@@ -3125,13 +2669,11 @@ class NonLocalACController:
         manager = self.resource_manager
         self.resource_manager = None
         release_shared_visa_manager(manager)
-
     @staticmethod
     def _mfli_reachable_servers(
         timeout_s: float = 1.2,
         candidates=None,
     ) -> tuple[list[tuple[str, int]], list[str]]:
-        """Return reachable LabOne endpoints without entering a 20 s API wait."""
         reachable = []
         diagnostics = []
         for host, port in (NONLOCAL_MFLI_SERVER_CANDIDATES if candidates is None else candidates):
@@ -3142,9 +2684,7 @@ class NonLocalACController:
             except OSError as error:
                 diagnostics.append(f"{host}:{port}=unreachable ({error})")
         return reachable, diagnostics
-
     def connect_mfli(self, device_id: str) -> str:
-        """Prefer the current Python API, with the legacy bridge as fallback."""
         requested = str(device_id).strip().lower()
         if not requested:
             raise ValueError("Please enter the Zurich MFLI API device name, e.g. dev4435")
@@ -3154,17 +2694,11 @@ class NonLocalACController:
             if self.mfli_connected:
                 return self.mfli_identity
             direct_errors: list[str] = []
-            # The Data Servers that can reach the chosen MFLI (see
-            # ZURICH_MFLI_CHOICES); None keeps DEV4435's own search.
             server_override = getattr(self, "mfli_server_candidates", None)
             reachable_servers, tcp_diagnostics = self._mfli_reachable_servers(
                 candidates=server_override
             )
             self.logger("MFLI network pre-check: " + "; ".join(tcp_diagnostics))
-
-            # Do not start Core/Discovery or search for another Python when no
-            # LabOne Data Server is listening.  Neither a pip install nor a
-            # legacy interpreter can repair a disconnected USB/RNDIS link.
             if not reachable_servers:
                 diagnostic_text = "; ".join(tcp_diagnostics)
                 if server_override is not None:
@@ -3194,16 +2728,11 @@ class NonLocalACController:
                     "Only after TcpTestSucceeded=True can the Python API connect.\n\n"
                     + zurich_choice_hint(requested)
                 )
-
             mfli_lease_resource = f"LABONE::{requested}"
             acquire_instrument_lease(
                 mfli_lease_resource, self, "Non-local Zurich MFLI"
             )
             self.mfli_lease_resource = mfli_lease_resource
-
-            # LabOne 18.12 only published a CPython 3.7 wheel.  Prefer the
-            # installer-created, version-exact bridge when it exists; the GUI,
-            # camera, VISA and all other modules remain in the current Python.
             bridge = None
             try:
                 bridge = LegacyMFLIBridge(requested)
@@ -3232,9 +2761,6 @@ class NonLocalACController:
                     "The exactly matching LabOne 18.12 bridge is currently unavailable; continuing to try the current "
                     f"Python's native API: {bridge_error}"
                 )
-
-            # Then try version-matched native APIs installed with LabOne or its
-            # LabVIEW driver. Both adapters run inside this Python process.
             if sys.platform == "win32":
                 native_adapters = (
                     ("LabOne C API", LabOneCAPIAdapter,
@@ -3328,9 +2854,6 @@ class NonLocalACController:
                                 f"The current Python loaded {adapter_label} but connecting to "
                                 f"{server_host}:{server_port} failed: {error}"
                             )
-
-            # Modern Core remains a secondary path, useful after LabOne is
-            # upgraded or when the matching .NET API was not installed.
             if zi_core is not None:
                 for server_host, server_port in reachable_servers:
                     if server_host == NONLOCAL_MFLI_SERVER_HOST:
@@ -3424,10 +2947,6 @@ class NonLocalACController:
                             f"The current Python Core API connection to {server_host}:{server_port} "
                             f"failed: {error}"
                         )
-
-            # Discovery is only worth attempting after a server endpoint has
-            # replied.  Otherwise it adds another long timeout without adding
-            # diagnostic value.
             if zi_core is None and zi_utils is not None and reachable_servers:
                 daq = None
                 try:
@@ -3483,7 +3002,6 @@ class NonLocalACController:
                         "The current Python Discovery failed; trying the legacy environment bridge as a last resort: "
                         f"{error}"
                     )
-
             direct_detail = " | ".join(direct_errors)
             release_instrument_lease(self.mfli_lease_resource, self)
             self.mfli_lease_resource = ""
@@ -3493,10 +3011,8 @@ class NonLocalACController:
                 "This instrument runs LabOne 18.12.59443; first close this program, then run "
                 "INSTALL_MFLI_LABONE_18_12.bat from the same folder, and restart the program after installation."
             )
-
     @staticmethod
     def _mfli_scalar(value, field: str) -> float:
-        """Extract one finite scalar from old/new LabOne sample containers."""
         try:
             candidate = value[field]
         except (KeyError, TypeError) as error:
@@ -3515,12 +3031,9 @@ class NonLocalACController:
         if not math.isfinite(result):
             raise RuntimeError(f"MFLI sample field {field!r} is not a finite value")
         return result
-
     @staticmethod
     def _mfli_phase_degrees(x: float, y: float) -> float:
-        """Return the LabOne demodulator phase from independent X and Y."""
         return math.degrees(math.atan2(float(y), float(x)))
-
     def configure_mfli(
         self,
         coupling: str,
@@ -3532,7 +3045,6 @@ class NonLocalACController:
         input_scaling: float = NONLOCAL_MFLI_INPUT_SCALING,
         timeconstant_s: float = NONLOCAL_LOCKIN_TIME_CONSTANT_S,
     ) -> dict[str, object]:
-        """Route the selected external reference, then configure Demod 1."""
         if not self.mfli_connected:
             raise RuntimeError("Zurich MFLI is not connected")
         coupling = str(coupling).strip().upper()
@@ -3588,9 +3100,6 @@ class NonLocalACController:
             except BaseException:
                 has_demod_2 = False
             self.mfli_props["has_demod_2"] = has_demod_2
-        # MF-MD provides a second demodulator that can act as the external-
-        # reference PLL while Demod 1 measures Signal Input 1. On a base MFLI
-        # the External Reference block performs that routing with Demod 1.
         has_multi_demod = (
             ("MD" in options_text) if options_text else has_demod_2
         )
@@ -3658,24 +3167,15 @@ class NonLocalACController:
             )
             self.mfli_daq.setInt(ext_demod_node, reference_adcselect)
             self.mfli_daq.setInt(ext_osc_node, 0)
-            # With MF-MD, Demod 2 is only the phase detector for the external
-            # reference PLL.  Keep its harmonic at 1 so oscillator 1 locks to
-            # the fundamental.  Demod 1 independently applies the requested
-            # measurement harmonic (for example 2ω).
             if extref_demod != demod:
                 self.mfli_daq.setInt(ext_harmonic_node, 1)
             self.mfli_daq.setInt(ext_demod_enable_node, 1)
             selected_extref_input = int(
                 self.mfli_daq.getInt(ext_demod_node)
             )
-            # With MF-MD, Demod 2 is the PLL phase detector and Demod 1
-            # remains the measurement demodulator. Without MF-MD, extrefs/0
-            # performs the one-demodulator External Reference switch itself.
             try:
                 self.mfli_daq.setInt(extref_demod_node, extref_demod)
             except BaseException:
-                # Some LabOne 18.12 builds expose this node as read-only; the
-                # selected Aux-input demodulator is still detected by extrefs.
                 pass
             try:
                 self.mfli_daq.setInt(extref_auto_node, 4)
@@ -3803,7 +3303,6 @@ class NonLocalACController:
         self.mfli_range_cooldown = 0
         self.mfli_initial_autorange_pending = True
         return dict(self.mfli_config)
-
     def read_mfli(self, expected_frequency_hz: float) -> dict[str, object]:
         if not self.mfli_connected:
             raise RuntimeError("Zurich MFLI is not connected")
@@ -3856,10 +3355,6 @@ class NonLocalACController:
         reported_frequency = math.nan
         try:
             reported_frequency = self._mfli_scalar(sample, "frequency")
-            # LabOne generations differ in whether this sample field is
-            # described as oscillator/reference frequency or effective demod
-            # frequency.  Accept either representation and normalize the CSV
-            # value back to the 6221 fundamental.
             candidates = (reported_frequency, reported_frequency / max(harmonic, 1))
             reference_frequency = min(
                 candidates,
@@ -3883,8 +3378,6 @@ class NonLocalACController:
         except RuntimeError:
             flags = 0
         status_parts = []
-        # Device status bits, NOT demod sample flags or R/input-range estimates.
-        # https://docs.zhinst.com/mfli_user_manual/nodedoc.html
         raw_device_flags = sample.get("device_status_flags")
         try:
             device_flags = int(raw_device_flags) if raw_device_flags is not None else None
@@ -3941,9 +3434,6 @@ class NonLocalACController:
             "extref_locked": extref_locked,
             "lia_status": flags | (0 if reference_valid else 8),
             "status_text": "; ".join(status_parts) if status_parts else "OK",
-            # LabOne sample flags are reported separately.  Reference LOCK is
-            # determined by extrefs/0/locked plus the frequency comparison;
-            # unrelated warning bits must not turn a valid PLL into WARNING.
             "reference_valid": reference_valid,
             "sensitivity_index": "",
             "input_range_v": input_range_v,
@@ -3955,9 +3445,7 @@ class NonLocalACController:
             "input_overload": input_overload,
             "auto_range": "",
         }
-
     def _run_mfli_autorange(self, reason: str) -> str:
-        """Run the MFLI firmware autorange and verify its range readback."""
         if not self.mfli_connected:
             raise RuntimeError("Zurich MFLI is not connected")
         configured_old = float(self.mfli_config.get("input_range_v", math.nan))
@@ -3994,9 +3482,7 @@ class NonLocalACController:
         self.mfli_range_cooldown = 3
         self.mfli_initial_autorange_pending = False
         return f"RANGE {old_range:.6g}->{new_range:.6g} V ({reason})"
-
     def _auto_range_mfli(self, sample: dict[str, object]) -> str:
-        """Continuously adapt Signal Input 1 using raw ADC utilization."""
         utilization = float(sample.get("input_utilization", 0.0))
         if not math.isfinite(utilization):
             return ""
@@ -4013,16 +3499,10 @@ class NonLocalACController:
         else:
             self.mfli_low_range_count = 0
         return ""
-
     def read_stfmr_mfli(
         self, expected_frequency_hz: float, *, auto_range: bool,
         initial: bool = False, attempts: int = 0,
     ) -> dict[str, object]:
-        """Worker-only range control. Caller must discard/settle/re-read on action.
-
-        Raw input extrema, not demodulated R, determine ongoing autoranging.
-        The existing firmware operation supports both native and legacy APIs.
-        """
         sample = self.read_mfli(expected_frequency_hz)
         if not auto_range:
             return sample
@@ -4044,15 +3524,12 @@ class NonLocalACController:
         elif raw_valid:
             action = self._auto_range_mfli(sample)
         else:
-            # Unknown raw extrema must not cause down-ranging based on tiny R.
             action = ""
         if action:
             sample["auto_range"] = action
             sample["input_range_after_v"] = self.mfli_config["input_range_v"]
         return sample
-
     def disconnect_mfli(self) -> None:
-        """Disable streaming and close only the Zurich LabOne session."""
         with self.lock:
             daq = self.mfli_daq
             bridge = self.mfli_bridge
@@ -4110,16 +3587,7 @@ class NonLocalACController:
             release_instrument_lease(mfli_lease_resource, self)
             self._close_manager_if_unused()
             self.logger("Non-local Zurich MFLI disconnected")
-
-
-
 class STFMRScanRecorder:
-    """Append-only, per-run files; called on the GUI acquisition path only.
-
-    A point is flushed and fsynced before advancing current.  These files do
-    not depend on the optional PNG/Pillow export or on a normal scan ending.
-    """
-
     FIELDNAMES = (
         "index", "frequency_index", "loop", "point_in_loop", "elapsed_s",
         "meter", "current_a", "field_g", "x_v", "y_v", "voltage_v",
@@ -4132,7 +3600,6 @@ class STFMRScanRecorder:
         "mfli_auto_range_enabled", "mfli_input_range_v",
         "mfli_input_utilization", "mfli_auto_range_action",
     )
-
     def __init__(self, parent: Path, settings: dict[str, object]) -> None:
         stamp = datetime_module.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         stem = f"STFMR_field_scan_{stamp}"
@@ -4143,7 +3610,6 @@ class STFMRScanRecorder:
         self.log_handle = None
         self.rows_written = 0
         self.closed = False
-        # No exist_ok: a name collision must never overwrite another run.
         self.directory.mkdir()
         try:
             self.log_handle = self.log_path.open("x", encoding="utf-8")
@@ -4153,8 +3619,6 @@ class STFMRScanRecorder:
             self._sync(self.csv_handle)
             self.event("run_prepared", csv_path=str(self.csv_path), settings=settings)
         except BaseException:
-            # Retain any partially created files as evidence, but release all
-            # handles.  The caller must not enable hardware after this failure.
             for handle in (self.csv_handle, self.log_handle):
                 if handle is not None:
                     try:
@@ -4163,12 +3627,10 @@ class STFMRScanRecorder:
                         pass
             self.closed = True
             raise
-
     @staticmethod
     def _sync(handle) -> None:
         handle.flush()
         os.fsync(handle.fileno())
-
     def event(self, name: str, **details) -> None:
         if self.closed:
             raise RuntimeError("STFMR log is closed")
@@ -4179,16 +3641,13 @@ class STFMRScanRecorder:
         }
         self.log_handle.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
         self._sync(self.log_handle)
-
     def append_point(self, row: dict[str, object]) -> None:
         if self.closed:
             raise RuntimeError("STFMR live CSV is closed")
         self.writer.writerow(row)
         self._sync(self.csv_handle)
         self.rows_written += 1
-
     def close(self, outcome: str, **details) -> list[str]:
-        """Best-effort close; a bad log/disk must not skip the other handle."""
         if self.closed:
             return []
         errors = []
@@ -4209,18 +3668,12 @@ class STFMRScanRecorder:
                     except BaseException as error:
                         errors.append(f"Failed to close {name}: {error}")
         return errors
-
-# ---- Fixed-field microwave/modulation grid application ----
 import colorsys
 from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, asdict
 from concurrent.futures import ThreadPoolExecutor
-
 APP_NAME = 'Microwave_Transport_Test_NH_dev'
-
-
 def parse_axis(value: str, limit: int = 10000) -> tuple[float, ...]:
-    """Positive, unique values; comma lists or inclusive start:stop:step."""
     value = value.strip().replace('\uff0c', ',').replace('\uff1b', ',').replace(';', ',')
     try:
         if ':' in value:
@@ -4246,10 +3699,7 @@ def parse_axis(value: str, limit: int = 10000) -> tuple[float, ...]:
     if len(set(out)) != len(out):
         raise ValueError('The frequency list must not contain duplicates')
     return out
-
-
 def prime_axis(start, stop):
-    """Inclusive integer-Hz bounds, bounded sieve; no composite frequencies."""
     try:
         a, b = Decimal(str(start)), Decimal(str(stop))
         if not all(v.is_finite() and v == v.to_integral_value() for v in (a, b)):
@@ -4267,8 +3717,6 @@ def prime_axis(start, stop):
     if not values:raise ValueError('No primes in this range; please adjust the start and stop frequencies')
     if len(values)>10000:raise ValueError('At most 10000 prime modulation frequencies; please narrow the range')
     return values
-
-
 def lockin_indicators(sample):
     locked = sample.get('reference_valid')
     lock = ('green','Locked') if locked is True else ('red','Not locked') if locked is False else ('gray','Unknown')
@@ -4279,8 +3727,6 @@ def lockin_indicators(sample):
     else:overloaded = sample.get('input_overload')
     level = ('red','Overload') if overloaded is True else ('green','Range OK') if overloaded is False else ('gray','Range unknown')
     return lock, level
-
-
 @dataclass(frozen=True)
 class GridSettings:
     microwave_ghz: tuple[float, ...]
@@ -4297,7 +3743,6 @@ class GridSettings:
     sr830_reference: str = 'Sine'
     auto_range: bool = True
     simulation: bool = False
-
     def validate(self):
         for axis in (self.microwave_ghz, self.modulation_hz):
             if not axis or len(set(axis)) != len(axis) or any(not math.isfinite(v) or v <= 0 for v in axis):
@@ -4321,37 +3766,26 @@ class GridSettings:
         if self.mfli_reference not in NONLOCAL_MFLI_REFERENCE_INPUTS or self.sr830_reference not in STFMR_LOCKIN_SR830_REFERENCE_INPUTS:
             raise ValueError('Invalid reference input selection')
         return self
-
-
 def cell_settle_seconds(settings, modulation):
     tau = settings.timeconstant_s if settings.meter == 'MFLI' else 1.0
     return max(settings.point_delay_s, 10*tau, 5/modulation)
-
-
 def estimated_scan_seconds(settings):
-    """Scheduled waits only; hardware latency and range/lock retries are additional."""
     settings.validate()
     return 2*settings.field_settle_s + len(settings.microwave_ghz) * sum(
         cell_settle_seconds(settings, mod) + (settings.samples_per_cell + 1)*settings.point_delay_s
         for mod in settings.modulation_hz)
-
-
 def format_duration(seconds):
     total = math.ceil(seconds)
     hours, rem = divmod(total, 3600)
     minutes, secs = divmod(rem, 60)
     return (f'{hours} h ' if hours else '') + (f'{minutes} min ' if minutes or hours else '') + f'{secs} s'
-
-
 class GridRecorder(STFMRScanRecorder):
     FIELDNAMES = ('index','microwave_index','modulation_index','sample_in_cell','elapsed_s',
                   'meter','microwave_frequency_ghz','modulation_frequency_hz','microwave_power_dbm',
                   'fixed_current_a','field_g','field_after_g','current_a','x_v','y_v','r_v','phase_deg',
                   'reference_frequency_hz','reference_valid','input_overload','input_range_v',
                   'input_utilization','device_status_flags','sensitivity_index','status','timestamp_iso')
-
     def __init__(self, parent, settings):
-        # Same fsync/close semantics as the integrated recorder, separate naming.
         stamp = datetime_module.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         stem = f'{APP_NAME}_{stamp}'
         self.directory=Path(parent)/stem; self.directory.mkdir(parents=True,exist_ok=False)
@@ -4368,51 +3802,37 @@ class GridRecorder(STFMRScanRecorder):
                 if h: h.close()
             self.closed=True
             raise
-
-
 class ScanStopped(Exception):
     pass
-
-
 def component(sample, name):
     keys={'x':('x_v','X'),'y':('y_v','Y'),'r':('r_v','R','voltage')}[name]
     for k in keys:
         if k in sample and math.isfinite(float(sample[k])):return float(sample[k])
     raise RuntimeError(f'Lock-in readback is missing a valid {name.upper()}')
-
-
 class GridEngine:
-    """Worker sequences I/O; the isolated current reapply is acknowledged by Tk."""
     def __init__(self,devices,settings,recorder,stop_event,emit=lambda *a:None,main_thread_call=None):
         self.devices=devices;self.s=settings.validate();self.rec=recorder;self.stop=stop_event
         self.main_thread_call=main_thread_call or (lambda fn:fn())
         self.emit=emit;self.current=settings.fixed_current_a;self.cells={};self.started=time.monotonic()
-
     def check(self):
         if self.stop.is_set():raise ScanStopped()
-
     def wait(self,seconds):
         deadline=time.monotonic()+seconds
         while True:
             remaining=deadline-time.monotonic()
             if remaining<=0:return
             if self.stop.wait(min(.5,remaining)):raise ScanStopped()
-            # Monitoring only: never write current in response to the gauss meter.
             self.emit('field',{'field_g':self.field(),'current_a':self.current})
-
     def event(self,name,**kw):
         self.rec.event(name,**kw)
         self.emit('status',name)
-
     def field(self):
         self.check()
         b=STFMRGauss475Controller.value_in_gauss(self.devices['gauss'].read_field())
         if not math.isfinite(b):raise RuntimeError('LS475 returned an invalid field')
         return b
-
     def settle_seconds(self,modulation):
         return cell_settle_seconds(self.s,modulation)
-
     def sample(self,modulation,initial=False):
         attempts=0
         for read in range(35):
@@ -4439,7 +3859,6 @@ class GridEngine:
             if not math.isfinite(float(sample.get('phase_deg',math.nan))):raise RuntimeError('Invalid lock-in phase')
             return sample
         raise RuntimeError(f'Reference not locked to {modulation:g} Hz; current cell not saved')
-
     def row(self,sample,b,after,mi,fi,k):
         return dict(index=self.rec.rows_written+1,microwave_index=fi,modulation_index=mi,
             sample_in_cell=k,elapsed_s=time.monotonic()-self.started,meter=self.s.meter,
@@ -4452,7 +3871,6 @@ class GridEngine:
             input_utilization=sample.get('input_utilization'),device_status_flags=sample.get('device_status_flags'),
             sensitivity_index=sample.get('sensitivity_index'),status=sample.get('status',sample.get('lia_status')),
             timestamp_iso=datetime_module.datetime.now().astimezone().isoformat(timespec='milliseconds'))
-
     def run(self):
         outcome='completed';error=None;shutdown=[]
         try:
@@ -4463,8 +3881,6 @@ class GridEngine:
             self.wait(self.s.field_settle_s)
             initialized=self.field()
             self.rec.event('kepco_initialized',current_setpoint_a=self.current,field_g=initialized)
-            # Match the integrated scan: a separate setpoint write on the Tk thread.
-            # The worker must await acknowledgment before it may clean up outputs.
             def reapply():
                 self.check()
                 result=self.devices['kepco'].set_scan_current(self.current)
@@ -4488,7 +3904,6 @@ class GridEngine:
             for mi,mod in enumerate(s.modulation_hz):
                 for fi,carrier in enumerate(s.microwave_ghz):
                     self.check()
-                    # Same trace-backed LFO command; no magnet reset between cells.
                     self.devices['smb'].set_frequency(carrier)
                     with self.devices['smb'].lock:
                         self.check()
@@ -4496,7 +3911,6 @@ class GridEngine:
                     self.event('cell_configured',microwave_index=fi,modulation_index=mi,
                                microwave_ghz=carrier,modulation_hz=mod)
                     self.wait(self.settle_seconds(mod))
-                    # At every new coordinate discard two transitional VALID reads, not two grid cells.
                     self.sample(mod,initial=True);self.wait(s.point_delay_s);self.sample(mod)
                     collected=[]
                     while len(collected)<s.samples_per_cell:
@@ -4506,7 +3920,6 @@ class GridEngine:
                         self.rec.append_point(r);collected.append(r)
                     meanx=sum(r['x_v'] for r in collected)/len(collected)
                     meany=sum(r['y_v'] for r in collected)/len(collected)
-                    # Phase of the averaged complex voltage; no arithmetic averaging across ±180°.
                     theta=math.degrees(math.atan2(meany,meanx)) if math.hypot(meanx,meany)>1e-30 else math.nan
                     cell=dict(microwave_index=fi,modulation_index=mi,microwave_frequency_ghz=carrier,
                         modulation_frequency_hz=mod,x_v=meanx,y_v=meany,phase_deg=theta,
@@ -4530,15 +3943,10 @@ class GridEngine:
                         close_errors=close_errors,directory=str(self.rec.directory),completed_cells=len(self.cells))
             self.emit('finished',result)
         return result
-
-
 def grid_values(settings,cells,key):
     return [[cells.get((j,i),{}).get(key,math.nan) for i in range(len(settings.microwave_ghz))]
             for j in range(len(settings.modulation_hz))]
-
-
 def heatmap_scene(width,height,settings,cells,key):
-    """Shared primitives for Tk and PNG: explicit missing cells, discrete parameter axes."""
     values=grid_values(settings,cells,key)
     finite=[v for row in values for v in row if math.isfinite(v)]
     limit=180. if key=='phase_deg' else max([abs(v)*1e6 for v in finite]+[1e-12])
@@ -4572,8 +3980,6 @@ def heatmap_scene(width,height,settings,cells,key):
     color_ticks=(-1,-.5,0,.5,1) if key=='phase_deg' else (-1,0,1)
     for t in color_ticks:txt(x1+28,y1-(t+1)/2*(y1-y0),f'{t*limit:.3g}',8,'w')
     return shapes,(x0,y0,x1,y1)
-
-
 def export_grid(directory,settings,cells):
     directory=Path(directory)
     for key,label in (('x_v','X_V'),('y_v','Y_V'),('phase_deg','Theta_deg')):
@@ -4603,10 +4009,7 @@ def export_grid(directory,settings,cells):
                     else:fonts[size]=ImageFont.load_default()
                 draw.text((x*scale,y*scale),text,font=fonts[size],fill=color,anchor={'center':'mm','e':'rm','w':'lm'}[anchor])
         im.save(directory/f'{label}_heatmap.png',dpi=(900,900))
-
-
 class DemoDevice:
-    """Explicit simulation only; never opens a VISA/LabOne session."""
     def __init__(self,bank,key):self.bank=bank;self.key=key;self.connected=False;self.lock=threading.RLock();self.instrument=self
     @property
     def mfli_connected(self):return self.connected
@@ -4631,8 +4034,6 @@ class DemoDevice:
         return {'X':x,'Y':y,'R':amp,'phase_deg':math.degrees(angle),'reference_valid':True,
                 'reference_frequency_hz':expected,'input_overload':False,'input_range_v':.003}
     def read_stfmr_mfli(self,expected,**kw):return self.read_sample(expected)
-
-
 class MicrowaveTransportApp:
     def __init__(self,root,demo=False):
         self.root=root;self.demo=demo;self.running=False;self.busy=False;self.closing=False
@@ -4640,7 +4041,7 @@ class MicrowaveTransportApp:
         self.cells={};self.settings=None;self.last_directory=None;self.dirty=False;self.idle_field_pending=False;self.last_idle_field_time=0.
         self.root.title(APP_NAME+(' — SIMULATION' if demo else ''));self.root.geometry('1360x860');self.root.minsize(1000,700)
         configure_tk_font_system(root)
-        use_english_tk_dialogs(root)  # Yes/No and Tk's own file dialogs, in English (user, 2026-10-13)
+        use_english_tk_dialogs(root)
         logger=lambda message:self.events.put(('log',str(message)))
         if demo:
             bank={'current':0.,'rf':False};self.devices={k:DemoDevice(bank,k) for k in STFMR_LOCKIN_DEFAULT_RESOURCES}
@@ -4656,11 +4057,8 @@ class MicrowaveTransportApp:
         self.status=tk.StringVar(value='Ready. Connect the instruments, then set the fixed current and the scan grid.')
         self.readback=tk.StringVar(value='B: — G     I: — A     X: — V     Y: — V     Theta: —°')
         self._build();self.root.protocol('WM_DELETE_WINDOW',self.close);self.root.after(80,self.poll)
-
     def _build(self):
         outer=ttk.Frame(self.root,padding=8);outer.pack(fill='both',expand=True)
-        # Connections: one grid in two groups, so the fields, buttons, lamps
-        # and status texts line up straight down the list.
         instruments=ttk.LabelFrame(outer,text='Instrument connections'+(' (simulation)' if self.demo else ''),padding=6)
         instruments.pack(fill='x')
         groups=((('kepco','KEPCO4886'),('gauss','LS475'),('smb','SMB100A')),(('830','SR830'),('mfli','MFLI')))
@@ -4670,8 +4068,6 @@ class MicrowaveTransportApp:
             for row,(key,name) in enumerate(group):
                 ttk.Label(instruments,text=f'{name}:').grid(row=row,column=base,sticky='e',padx=(0,4),pady=2)
                 if key=='mfli':
-                    # Which Zurich: chosen from the lab's two, so the Data
-                    # Server that can reach it is the one tried.
                     field=create_zurich_chooser(instruments,self.resources[key],match_chars=18)
                     field.grid(row=row,column=base+1,sticky='w',padx=(0,4+field.zurich_shortfall),pady=2)
                     self.editable.append((field,'readonly'))
@@ -4685,8 +4081,6 @@ class MicrowaveTransportApp:
                 cell=ttk.Frame(instruments);cell.grid(row=row,column=base+4,sticky='w',padx=(4,0))
                 self.connection_lamps[key]=self.make_lamp(cell,'Not connected',width=13)
                 self.connection_labels[key]=self.connection_lamps[key][2]
-        # Parameters: one aligned table, each label right-aligned against its
-        # field and every field in a column the same width.
         params=ttk.LabelFrame(outer,text='Fixed current \u00b7 microwave frequency \u00d7 modulation frequency',padding=6)
         params.pack(fill='x',pady=5)
         def label(row,column,text):
@@ -4720,8 +4114,6 @@ class MicrowaveTransportApp:
         self.vars['meter'].trace_add('write',lambda *args:self.reset_lock_lamps())
         self.update_prime_info()
         ttk.Label(outer,textvariable=self.readback).pack(fill='x',pady=2)
-        # The status wraps to the window width rather than a fixed 1250 px, so
-        # a saved-folder path is never cut off.
         status=ttk.Label(outer,textvariable=self.status,justify='left');status.pack(fill='x',pady=2)
         status.bind('<Configure>',lambda event:status.configure(wraplength=max(200,event.width-8)))
         plots=ttk.Frame(outer);plots.pack(fill='both',expand=True);self.canvases={}
@@ -4730,29 +4122,22 @@ class MicrowaveTransportApp:
         plots.rowconfigure(0,weight=1)
         ttk.Label(outer,text='Grey cells: not measured yet. X and Y are cell means; Theta is the phase of the mean complex voltage. Click a cell to see its values.').pack(anchor='w')
         self.log_widget=tk.Text(outer,height=4,state='disabled',font=('TkFixedFont',9));self.log_widget.pack(fill='x',pady=(4,0))
-
     def make_lamp(self, parent, label, width=11):
         canvas=tk.Canvas(parent,width=16,height=16,highlightthickness=0)
         canvas.pack(side='left',padx=(4,1))
         dot=canvas.create_oval(3,3,13,13,fill='#9ca3af',outline='')
-        # Wide enough for the longest state text, so a change never shifts
-        # what follows it.
         text=tk.StringVar(value=label);ttk.Label(parent,textvariable=text,width=width).pack(side='left')
         return canvas,dot,text
-
     def set_lamp(self, lamp, color, label):
         canvas,dot,text=lamp
         canvas.itemconfigure(dot,fill={'green':'#16a34a','red':'#dc2626','amber':'#d97706','gray':'#9ca3af'}[color]);text.set(label)
-
     def reset_lock_lamps(self):
         for lamp in (self.lock_lamp,self.range_lamp):self.set_lamp(lamp,'gray','Not read')
-
     def update_prime_info(self):
         try:
             values=prime_axis(self.vars['mod_start'].get(),self.vars['mod_stop'].get())
             self.prime_info.set(f'Modulation: {len(values)} primes, {values[0]:g}\u2013{values[-1]:g} Hz')
         except ValueError as exc:self.prime_info.set(str(exc))
-
     def mark_dirty(self):self.dirty=True
     def connected(self,key):return self.devices[key].mfli_connected if key=='mfli' else self.devices[key].connected
     def emit(self,*event):self.events.put(event)
@@ -4762,32 +4147,26 @@ class MicrowaveTransportApp:
         for w in self.connection_buttons:w.configure(state='disabled' if busy else 'normal')
         self.start_button.configure(state='disabled' if busy else 'normal');self.zero_button.configure(state='disabled' if busy else 'normal')
         self.stop_button.configure(state='normal' if self.running else 'disabled');self.export_button.configure(state='normal' if self.settings and not busy else 'disabled')
-
     def submit(self,fn):
         future=self.executor.submit(fn)
         def done(f):
             try:result=f.result();self.emit('operation_done',result)
             except BaseException as exc:self.emit('operation_error',str(exc))
         future.add_done_callback(done)
-
     def connection(self,key,action):
         if self.busy or self.closing:return
         if action=='connect' and self.connected(key):return
         if action=='disconnect' and not self.connected(key):return
         self.busy_ui(True);device=self.devices[key];resource=self.resources[key].get().strip()
         if key=='mfli' and action=='connect':
-            # Each MFLI has its own Data Server: DEV4435's USB link cannot see
-            # DEV4414, and DEV4414's network server cannot see DEV4435.
             resource,servers=zurich_mfli_choice(resource)
             device.mfli_server_candidates=servers
         method=getattr(device,('connect_mfli' if key=='mfli' else 'connect') if action=='connect' else ('disconnect_mfli' if key=='mfli' else 'disconnect'))
         fn=(lambda:method(resource)) if action=='connect' else method
-        # Preserve the integrated driver's main-thread-only KEPCO session opening.
         if key=='kepco' and action=='connect':
             try:self.emit('operation_done',fn())
             except BaseException as exc:self.emit('operation_error',str(exc))
         else:self.submit(fn)
-
     def inputs(self):
         v=lambda k:float(self.vars[k].get())
         return GridSettings(parse_axis(self.vars['microwave'].get()),prime_axis(self.vars['mod_start'].get(),self.vars['mod_stop'].get()),
@@ -4795,7 +4174,6 @@ class MicrowaveTransportApp:
             power_dbm=v('power'),point_delay_s=v('delay'),field_settle_s=v('fieldsettle'),timeconstant_s=v('tau'),
             samples_per_cell=int(self.vars['samples'].get()),meter=self.vars['meter'].get(),mfli_reference=self.vars['mfli_ref'].get(),
             sr830_reference=self.vars['sr_ref'].get(),auto_range=self.autorange.get(),simulation=self.demo).validate()
-
     def start(self):
         if self.busy or self.closing:return
         try:
@@ -4808,7 +4186,6 @@ class MicrowaveTransportApp:
         if not messagebox.askyesno('Start fixed-current 2D scan',f'Fixed current {settings.fixed_current_a:+g} A (LS475 monitors only, no feedback)\nMicrowave {len(settings.microwave_ghz)} points \u00d7 modulation {len(settings.modulation_hz)} points = {total} cells\nPower {settings.power_dbm:g} dBm; voltage limit {settings.voltage_limit_v:g} V\n{settings.samples_per_cell} samples are saved per cell; the first two transitional readings after each change are discarded.\nEstimated time (from the wait times): {format_duration(estimated_scan_seconds(settings))}\nInstrument communication, configuration, autorange/lock retries and file saving add to this.\nOn completion, stop or error the RF is switched off and the current zeroed.',parent=self.root):return
         parent=filedialog.askdirectory(title='Choose where to save this run',parent=self.root)
         if not parent:return
-        # Two Zurich lock-ins exist, so record which one took the data.
         mfli=self.devices['mfli']
         try:rec=GridRecorder(parent,dict(asdict(settings),resources={k:v.get() for k,v in self.resources.items()},program=APP_NAME,
             mfli_device=zurich_mfli_choice(self.resources['mfli'].get())[0],mfli_identity=str(getattr(mfli,'mfli_identity','') or '')))
@@ -4819,17 +4196,13 @@ class MicrowaveTransportApp:
         try:self.executor.submit(engine.run)
         except BaseException as exc:
             rec.close('error',error=str(exc));self.running=False;self.busy_ui(False);self.status.set(str(exc))
-
     def call_on_main_thread(self, fn):
         if threading.current_thread() is threading.main_thread():return fn()
         done=threading.Event();box={}
         self.emit('main_thread_call',(fn,done,box))
-        # Do not return on stop before the UI acknowledges the queued command:
-        # otherwise a delayed write could run after worker shutdown.
         done.wait()
         if 'error' in box:raise box['error']
         return box['result']
-
     def stop(self):
         if self.running:self.stop_event.set();self.status.set('Stopping: the outputs switch off when the current instrument call ends\u2026')
     def zero(self):
@@ -4843,14 +4216,12 @@ class MicrowaveTransportApp:
             if errors:raise RuntimeError('; '.join(errors))
             return 'RF off, current zeroed'
         self.submit(operation)
-
     def export(self):
         if self.busy or not self.settings:return
         parent=filedialog.askdirectory(title='Export heatmaps',parent=self.root)
         if not parent:return
         out=Path(parent)/(APP_NAME+'_export_'+datetime_module.datetime.now().strftime('%Y%m%d_%H%M%S_%f'));out.mkdir()
         settings=self.settings;cells=dict(self.cells);self.busy_ui(True);self.submit(lambda:export_grid(out,settings,cells))
-
     def draw(self):
         for key,c in self.canvases.items():
             c.delete('all')
@@ -4862,7 +4233,6 @@ class MicrowaveTransportApp:
                 else:
                     _,x,y,t,size,anchor,col=primitive;c.create_text(x,y,text=t,font=('Arial',size),anchor=anchor,fill=col)
         self.dirty=False
-
     def cell_click(self,event,key):
         if self.settings is None:return
         c=self.canvases[key];_,(x0,y0,x1,y1)=heatmap_scene(c.winfo_width(),c.winfo_height(),self.settings,self.cells,key)
@@ -4871,7 +4241,6 @@ class MicrowaveTransportApp:
         cell=self.cells.get((j,i))
         self.status.set(f'{self.settings.microwave_ghz[i]:g} GHz / {self.settings.modulation_hz[j]:g} Hz: '+
             (f"X={cell['x_v']:.6g} V, Y={cell['y_v']:.6g} V, Theta={cell['phase_deg']:.4g}°, B={cell['field_g']:.5g} G, n={cell['samples']}" if cell else 'not measured yet'))
-
     def poll(self):
         for _ in range(250):
             try:kind,data=self.events.get_nowait()
@@ -4935,27 +4304,15 @@ class MicrowaveTransportApp:
                 self.emit('closed','; '.join(errors))
             self.executor.submit(disconnect_all)
         self.root.after(100,self.poll)
-
     def close(self):
         if self.closing:return
         self.closing=True;self.stop();self.status.set('Switching the outputs off and closing the instrument connections\u2026')
-
-
-# The lab's two Zurich MFLI lock-ins, as in Transport_all.py.  DEV4435,
-# the normal Zurich, is reached over its rear-panel USB link (a PC-side
-# LabOne Data Server, then its own server at 192.168.69.78).  DEV4414, the
-# Super Zurich, is on the lab network at 192.168.68.250, where MF Device
-# Finder lists it, with its own Data Server.  Each server sees only its own
-# MFLI.  None keeps DEV4435's own search (NONLOCAL_MFLI_SERVER_CANDIDATES).
 SUPER_ZURICH_MFLI_SERVERS=(('192.168.68.250',NONLOCAL_MFLI_SERVER_PORT),)
 ZURICH_MFLI_CHOICES={
     'DEV4435 (Normal)':('dev4435',None),
     'DEV4414 (Super)':('dev4414',SUPER_ZURICH_MFLI_SERVERS),
 }
-
-
 def zurich_mfli_choice(text):
-    """(device, Data Servers) for a Zurich list entry or a bare device name."""
     text=str(text).strip()
     if text in ZURICH_MFLI_CHOICES:return ZURICH_MFLI_CHOICES[text]
     device=text.lower()
@@ -4963,20 +4320,10 @@ def zurich_mfli_choice(text):
     for known,servers in ZURICH_MFLI_CHOICES.values():
         if device==known:return known,servers
     return device,None
-
-
 def zurich_mfli_label(text):
-    """The Zurich list entry for a device name; unknown names are kept as typed."""
     device,_servers=zurich_mfli_choice(text)
     return next((label for label,(known,_) in ZURICH_MFLI_CHOICES.items() if known==device),str(text).strip())
-
-
 def zurich_choice_hint(device):
-    """Point a failed connection at the lab's other Zurich, by its list entry.
-
-    Only the Super Zurich's address is given: DEV4435's USB address would send
-    someone checking DEV4414 to the wrong cable.
-    """
     device=zurich_mfli_choice(device)[0]
     if device=='dev4414':
         return ('This is the Super Zurich, DEV4414. If MF Device Finder lists DEV4435 '
@@ -4986,15 +4333,7 @@ def zurich_choice_hint(device):
                 'Super Zurich: choose "DEV4414 (Super)" in the MFLI list.')
     return ('The MFLI list offers the lab\'s two Zurich lock-ins: "DEV4435 (Normal)" and '
             '"DEV4414 (Super)", the Super Zurich at 192.168.68.250.')
-
-
 def create_zurich_chooser(parent,variable,*,match_chars=None,width=16):
-    """A selection-only list of the lab's Zurich MFLIs, bound to ``variable``.
-
-    With ``match_chars`` it is as wide on screen as an entry of that many
-    characters, to the pixel, so it lines up with the address fields; the
-    returned list's ``zurich_shortfall`` is any width a theme would not take.
-    """
     variable.set(zurich_mfli_label(variable.get()))
     chooser=ttk.Combobox(parent,textvariable=variable,values=tuple(ZURICH_MFLI_CHOICES),state='readonly',width=match_chars or width)
     chooser.zurich_chooser=True;chooser.zurich_shortfall=0
@@ -5013,10 +4352,6 @@ def create_zurich_chooser(parent,variable,*,match_chars=None,width=16):
     except (tk.TclError,TypeError,ValueError,AttributeError):
         chooser.zurich_shortfall=0
     return chooser
-
-
 def main():
     root=tk.Tk();MicrowaveTransportApp(root,demo='--demo' in sys.argv);root.mainloop()
-
-
 if __name__=='__main__':main()

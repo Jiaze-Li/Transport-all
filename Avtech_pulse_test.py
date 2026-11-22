@@ -48,45 +48,31 @@ import math
 import re
 import sys
 import time
-
 DEFAULT_RESOURCE = "GPIB0::8::INSTR"
 MAX_AMPLITUDE_V = 100.0
 MIN_WIDTH_S = 1e-9
 MAX_WIDTH_S = 5e-6
-OVERLOAD_ERROR = 1001  # "Device-specific error; Overload condition detected!"
-
-
+OVERLOAD_ERROR = 1001
 class PulseError(RuntimeError):
-    """A pulse that failed; ``fired`` says whether the trigger was sent."""
-
     def __init__(self, message, fired=False):
         super().__init__(message)
         self.fired = fired
-
-
 class Avtech:
-    """The generator's commands, printed as they are sent."""
-
     def __init__(self, instrument, echo=print):
         self.instrument = instrument
         self.echo = echo
         self.identity = ""
-
-    # ---- I/O -------------------------------------------------------------
     def write(self, command):
         self.echo(f"> {command}")
         self.instrument.write(command)
-
     def query(self, command):
         self.echo(f"> {command}")
         reply = str(self.instrument.query(command)).strip()
         self.echo(f"< {reply}")
         return reply
-
     def clear(self):
         self.echo("> (device clear)")
         self.instrument.clear()
-
     def number(self, command):
         reply = self.query(command)
         try:
@@ -96,9 +82,7 @@ class Avtech:
         if not math.isfinite(value):
             raise RuntimeError(f"{command} returned {reply!r}")
         return value
-
     def errors(self, found=None):
-        """The error queue, read until empty (at most 32), into ``found``."""
         found = [] if found is None else found
         for _ in range(32):
             reply = self.query("syst:err?")
@@ -111,26 +95,19 @@ class Avtech:
                 break
             found.append((code, reply))
         return found
-
     @property
     def polarities(self):
-        """(1,), (-1,), (1, -1) from the model field of *IDN? (-P, -N, -PN); None if it does not say."""
         fields = self.identity.split(",")
         model = fields[1].strip().upper() if len(fields) > 1 else ""
         match = re.search(r"-(PN|P|N)(?=-|$)", model)
         return None if match is None else {"PN": (1, -1), "P": (1,), "N": (-1,)}[match.group(1)]
-
-    # ---- safe states -----------------------------------------------------
     def off_problem(self):
-        """Hold and output off, read back; None when off, else what went wrong."""
         failures = []
-
         def clear():
             try:
                 self.clear()
-            except BaseException as error:  # Ctrl+C included, as the program's controller
+            except BaseException as error:
                 failures.append(f"device clear: {error!r}")
-
         def send(command):
             try:
                 self.write(command)
@@ -138,7 +115,6 @@ class Avtech:
             except BaseException as error:
                 failures.append(f"{command}: {error!r}")
                 return False
-
         clear()
         for command in ("trigger:source hold", "output off"):
             if not send(command):
@@ -157,10 +133,7 @@ class Avtech:
                 clear()
                 send("output off")
         return "; ".join(failures)
-
-    # ---- one pulse -------------------------------------------------------
     def single_pulse(self, amplitude_v, width_s):
-        """One pulse; returns (amplitude read back, width read back, overload)."""
         sign = 1 if amplitude_v > 0 else -1
         allowed = self.polarities
         if allowed is not None and sign not in allowed:
@@ -199,11 +172,11 @@ class Avtech:
             if self.number("output?") != 1:
                 raise RuntimeError("the output did not switch on")
             fired = True
-            self.write("trigger:source immediate")  # the pulse
+            self.write("trigger:source immediate")
             trigger_sent = True
             self.write("trigger:source hold")
             self.errors(after)
-        except BaseException as error:  # Ctrl+C included: the output still goes off below
+        except BaseException as error:
             failure = error
         problem = self.off_problem()
         try:
@@ -236,18 +209,12 @@ class Avtech:
             error.off_unknown = problem is not None
             raise error from failure
         return amplitude_read, width_read, overload
-
-
 class SimulatedAvtech:
-    """--dry-run: answers as Avtech's manuals describe; a -P unit."""
-
     def __init__(self):
         self.trigger, self.output, self.width, self.amplitude, self.delay = "internal", 0, 1e-8, 10.0, 0.0
         self.errors, self.pulses = [], []
-
     def clear(self):
         pass
-
     def write(self, command):
         word, _, value = command.lower().partition(" ")
         if word == "*cls":
@@ -267,7 +234,6 @@ class SimulatedAvtech:
                 self.amplitude = float(value)
             else:
                 self.errors.append('-222,"Data out of range"')
-
     def query(self, command):
         command = command.lower()
         replies = {"*idn?": "AVTECH ELECTROSYSTEMS,AVR-E3-B-P-W3,SIMULATED,5.07",
@@ -277,11 +243,8 @@ class SimulatedAvtech:
         if command == "syst:err?":
             return self.errors.pop(0) if self.errors else '0,"No error"'
         return replies[command]
-
     def close(self):
         pass
-
-
 def open_generator(resource, dry_run):
     if dry_run:
         print(f"(dry run: a simulated -P generator stands in for {resource})")
@@ -289,7 +252,7 @@ def open_generator(resource, dry_run):
     import pyvisa
     manager = pyvisa.ResourceManager()
     instrument = manager.open_resource(resource)
-    instrument.timeout = 5000  # ms
+    instrument.timeout = 5000
     instrument.write_termination = "\n"
     instrument.read_termination = "\n"
     try:
@@ -297,10 +260,7 @@ def open_generator(resource, dry_run):
     except (AttributeError, ValueError):
         pass
     return Avtech(instrument), manager
-
-
 def read_only(avtech):
-    """Settings and state; nothing is set."""
     for label, command in (("output (1 = on)", "output?"), ("amplitude V", "volt:ampl?"),
                            ("width s", "pulse:width?"), ("delay s", "pulse:delay?"),
                            ("frequency Hz", "freq?"), ("overload tripped", "output:protection:tripped?")):
@@ -313,8 +273,6 @@ def read_only(avtech):
         print("  error queue: " + ("empty" if not errors else "; ".join(text for _c, text in errors)))
     except Exception as error:
         print(f"  error queue: could not be read ({error})")
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("mode", nargs="?", default="info", choices=("info", "off", "pulse"))
@@ -324,7 +282,6 @@ def main(argv=None):
     parser.add_argument("--yes", action="store_true", help="do not ask before the pulse")
     parser.add_argument("--dry-run", action="store_true", help="a simulated generator; nothing is sent")
     args = parser.parse_args(argv)
-
     if args.mode == "pulse":
         if args.amplitude is None or args.width is None:
             parser.error("pulse needs --amplitude (V) and --width (ns)")
@@ -333,7 +290,6 @@ def main(argv=None):
             parser.error(f"--amplitude must be above 0 and at most {MAX_AMPLITUDE_V:g} V")
         if not (math.isfinite(width_s) and MIN_WIDTH_S * 0.999 <= width_s <= MAX_WIDTH_S * 1.001):
             parser.error("--width must be within 1 - 5000 ns")
-
     try:
         avtech, manager = open_generator(args.resource, args.dry_run)
     except Exception as error:
@@ -362,7 +318,6 @@ def main(argv=None):
             print("Trigger on hold, output off (read back)." if problem is None
                   else f"Output state unknown: {problem}. CHECK THE GENERATOR.")
             return 0 if problem is None else 3
-        # pulse: first the trigger on hold and the output off, read back
         problem = avtech.off_problem()
         if problem is not None:
             print(f"Output state unknown: {problem}. CHECK THE GENERATOR.")
@@ -407,7 +362,5 @@ def main(argv=None):
                 manager.close()
             except Exception:
                 pass
-
-
 if __name__ == "__main__":
     sys.exit(main())

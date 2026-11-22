@@ -22,7 +22,6 @@ from pathlib import Path
 import tempfile
 import threading
 import time
-import tokenize
 import types
 import unittest
 from unittest.mock import Mock, patch
@@ -462,17 +461,8 @@ class NewmarkDriverTests(StageBase):
         self.assertEqual(app.NEWMARK_STEPS_PER_DEGREE, 10000)
         self.assertEqual(app.NewmarkNSCA1Controller(lambda _text: None).steps_per_degree, 10000)
         program = Path(app.__file__).read_text(encoding="utf-8").splitlines()
-        index = next(i for i, line in enumerate(program) if line.startswith("NEWMARK_MICROSTEP = "))
-        comment = []
-        while program[index - 1].startswith("#"):
-            index -= 1
-            comment.insert(0, program[index].lstrip("#").strip())
-        comment = " ".join(comment)
-        for text in ("user, 2026-10-17", "QuickMotion screenshot", "Microstepping 250",
-                     "72:1 x 200 full steps / 360 = 40 full steps per degree", "10000 steps/deg",
-                     "0.36 arcsec", "Run Current 2100 mA", "Idle Current 100 mA", "not used", "EDIO=1",
-                     "If the microstep is changed in QuickMotion, change this constant"):
-            self.assertIn(text, comment)
+        # The program's comments and docstrings were removed (user, 2026-11-22: "Minimize the total length of the Python source code"); their reasons live in git history and Other-files/README.md.
+        self.assertTrue(any(line.startswith("NEWMARK_MICROSTEP = 250") for line in program))
 
     def test_absolute_moves_with_speeds_set_and_read_back(self):
         h = self.make()
@@ -2953,20 +2943,10 @@ class ProgramIndependenceTests(unittest.TestCase):
         self.assertGreater(len(strings), 1000)
         named = [(node.lineno, node.value) for node in strings if "motor_test" in node.value.lower()]
         self.assertEqual(named, [])
-        with open(path, "rb") as handle:
-            comments = [token for token in tokenize.tokenize(handle.readline) if token.type == tokenize.COMMENT]
-        mentions = [token for token in comments if "motor_test" in token.string.lower()]
-        self.assertEqual(len(mentions), 1, [token.string for token in mentions])
-        lines = source.splitlines()
-        row = mentions[0].start[0] - 1
-        block = []
-        for index in range(row - 5, row + 6):
-            if lines[index].lstrip().startswith("#"):
-                block.append(lines[index].lstrip("# ").strip())
-        block = " ".join(block)
-        for text in ("needs no other script or module", "separate, optional test tool",
-                     "never imports or calls it", "user, 2026-10-17"):
-            self.assertIn(text, block)
+        # The comment that named the test script went with every comment
+        # (user, 2026-11-22: "Minimize the total length of the Python source
+        # code"); nothing else may name it.
+        self.assertNotIn("motor_test", source.lower())
 
 
 class CloseTests(StageBase):

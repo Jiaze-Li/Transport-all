@@ -178,7 +178,7 @@ class PrimeListTests(NoWindows):
         first_pseudoprime = 318665857834031151167461
         self.assertEqual(399165290221 * 798330580441, first_pseudoprime)
         self.assertLess(app.STFMR_LOCKIN_MAX_PRIME_MODULATION_HZ, first_pseudoprime)
-        self.assertIn("below 3.18e23", app._is_whole_number_prime.__doc__)
+        # The program's comments and docstrings were removed (user, 2026-11-22: "Minimize the total length of the Python source code"); their reasons live in git history and Other-files/README.md.
         # Strong pseudoprimes to the first bases are still found composite.
         for composite in (2047, 1373653, 3215031751, 3825123056546413051):
             self.assertFalse(app._is_whole_number_prime(composite), composite)
