@@ -22356,7 +22356,7 @@ class CombinedControlApp:
                 canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background="white", highlightthickness=0)
                 canvas.ppms_compact_plot = True
                 canvas.grid(row=0, column=0, sticky="nsew")
-                canvas.bind("<Configure>", lambda event: self._redraw_ppms_transport_plot())
+                canvas.bind("<Configure>", lambda event: self._request_plot_redraw())
                 self.ppms_transport_canvases[(key, channel)] = canvas
         self.ppms_transport_canvas = self.ppms_transport_canvases[("830_a", "x")]
         self._update_ppms_control_ui()
@@ -50329,6 +50329,26 @@ class CombinedControlApp:
             colors[key] = '#' + ''.join(f'{v:02x}' for v in values)
         return colors
 
+    def _request_plot_redraw(self) -> None:
+        """One redraw of the scan plots once Tk is idle, for every plot
+        canvas's <Configure> (review, 2026-11-22): a window resize or a new
+        row of plots resized each canvas in turn, and each one redrew every
+        plot from every saved point, nine or ten times for one change."""
+        if self.__dict__.get('ppms_plot_redraw_queued'):
+            return
+        self.ppms_plot_redraw_queued = True
+
+        def run() -> None:
+            self.ppms_plot_redraw_queued = False
+            if any(self.__dict__.get(name) for name in ('closing', 'ppms_closed', 'rte_closed')):
+                return
+            self._redraw_ppms_transport_plot()
+        try:
+            self.root.after_idle(run)
+        except (tk.TclError, AttributeError, RuntimeError):
+            self.ppms_plot_redraw_queued = False
+            self._redraw_ppms_transport_plot()
+
     def _redraw_ppms_transport_plot(self) -> None:
         canvas = getattr(self, "ppms_transport_canvas", None)
         if canvas is None:
@@ -55629,7 +55649,7 @@ class PPMSPanel(CombinedControlApp):
             canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background="white", highlightthickness=0)
             canvas.ppms_compact_plot = True
             canvas.grid(row=0, column=0, sticky="nsew")
-            canvas.bind("<Configure>", lambda event: self._redraw_ppms_transport_plot())
+            canvas.bind("<Configure>", lambda event: self._request_plot_redraw())
             self.zurich_canvases[channel] = canvas
             self.zurich_plot_frames[channel] = frame
         # Harmonic-ordered rows replace the per-instrument frames above; those
@@ -55644,7 +55664,7 @@ class PPMSPanel(CombinedControlApp):
                 canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background="white", highlightthickness=0)
                 canvas.ppms_compact_plot = True
                 canvas.grid(row=0, column=0, sticky="nsew")
-                canvas.bind("<Configure>", lambda event: self._redraw_ppms_transport_plot())
+                canvas.bind("<Configure>", lambda event: self._request_plot_redraw())
                 self.ppms_harmonic_canvases[(order, channel)] = canvas
                 self.ppms_harmonic_plot_frames[(order, channel)] = frame
         self._refresh_ppms2_plot_layout()
@@ -57802,7 +57822,7 @@ class RTEPanel(PPMSPanel):
                            highlightthickness=0)
         canvas.ppms_compact_plot = True
         canvas.grid(row=0, column=0, sticky='nsew')
-        canvas.bind('<Configure>', lambda event: self._redraw_switch_time_plot())
+        canvas.bind('<Configure>', lambda event: self._request_plot_redraw())
         self.rte_time_frame, self.rte_time_canvas, self.rte_time_row_on = frame, canvas, False
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
@@ -60461,7 +60481,7 @@ class RTEPanel(PPMSPanel):
             # Named "Field+Angle" for that mode (review, 2026-11-22), the
             # error cut that much shorter so the line is no wider.
             self.ppms_field_scan_status_var.set(
-                rte_angle_not_started_text(reason, FIELD_ANGLE_SCAN_MODE if field_angle else 'Angle'))
+                rte_angle_not_started_text(reason, mode))
 
         def checked(_mst):
             try:
@@ -60474,8 +60494,8 @@ class RTEPanel(PPMSPanel):
                 return
             if self.ppms_field_scan_stop_event.is_set() or self.rte_stage_stop_event.is_set():
                 pressed = 'Stop stage' if self.rte_stage_stop_event.is_set() else 'an OFF button'
-                self.thread_log(f"{self.ppms_page_name} {FIELD_ANGLE_SCAN_MODE if field_angle else 'Angle'} scan not "
-                                f'started: {pressed} was pressed during the stage check')
+                self.thread_log(f'{self.ppms_page_name} {mode} scan not started: {pressed} was pressed during the '
+                                'stage check')
                 not_started(f'{pressed} was pressed')
                 return
             begin(_mst)
@@ -60694,7 +60714,7 @@ class RTEPanel(PPMSPanel):
                 if (status & 8) or not math.isclose(frequency, frequency_hz, rel_tol=5e-3, abs_tol=0.1):
                     locked = False
             if locked:
-                return
+                break
             if time.monotonic() >= deadline:
                 detail = '; '.join(
                     f'SR830 #{self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name)}: '
@@ -60702,6 +60722,17 @@ class RTEPanel(PPMSPanel):
                 raise RuntimeError('Connected SR830 failed to lock the 6221 external reference within '
                                    f'{PPMS_TRANSPORT_REFERENCE_TIMEOUT_S:g} s after the pulse; {detail}')
             self._rte_wait(0.2)
+        # The read current itself in compliance (review, 2026-11-22: a real
+        # Switch scan ended "6221 hit compliance" at a reading): said here,
+        # with the resistance it means, rather than by the reading's general
+        # check later.  STAT:MEAS:COND? bit 3, as that check reads it.
+        if int(round(self._ppms_query_numbers('6221', 'STAT:MEAS:COND?', 1)[0])) & 8:
+            self.ppms_last_current_trip = True
+            raise RuntimeError(
+                f'The 6221 is in compliance with the read current on ({current_rms_ma:g} mA RMS, '
+                f'{peak_a * 1e3:.3g} mA peak, Compliance V {compliance_v:g} V): the sample and leads are above about '
+                f'{compliance_v / peak_a:.3g} Ω. Lower the read current or raise Compliance V; the scan is stopped and '
+                'the outputs zeroed')
 
     def _rte_switch_resistance(self, row, settings, point_settings):
         """A Switch row's resistance columns: each measured SR830's X over
@@ -60730,7 +60761,7 @@ class RTEPanel(PPMSPanel):
         self._rte_wait(0)
         self._rte_zero_6221_after_scan()
         result = dict(pulse_current_ma=pulse_ma, pulse_width_s=pulse['width_s'], pulse_count=pulse['count'],
-                      pulse_in_compliance='no pulse')
+                      pulse_in_compliance='no pulse', read_in_compliance_before_pulse='')
         if pulse_ma == 0:
             return result
         current_a, width_s, compliance_v, count = Keithley6221Controller._validate(
@@ -60759,7 +60790,9 @@ class RTEPanel(PPMSPanel):
             actual = self._ppms_query_numbers('6221', command, 1)[0]
             if not math.isclose(actual, expected, rel_tol=rel, abs_tol=absolute):
                 raise RuntimeError(f'6221 pulse {label} readback mismatch: requested {expected:g}, read {actual:g}')
-        self._rte_switch_compliance_event()      # clears the latch
+        # Clears the latch; set, it was the read current of the reading
+        # before (review, 2026-11-22), kept in the row.
+        result['read_in_compliance_before_pulse'] = self._rte_switch_compliance_event()
         self._rte_wait(0)
         for command in ('SOUR:WAVE:ARM', 'OUTP ON', 'SOUR:WAVE:INIT'):
             self._ppms_write_6221_checked(command)
@@ -61571,7 +61604,8 @@ class RTEPanel(PPMSPanel):
         # Always logged, so an unconfirmed stop is never only worked out
         # (user, 2026-10-13); finished() also puts it in the error dialog.
         self._rte_log('stage_failure', error=str(error), stage=self.rte_stage_where)
-        self.thread_log(f'{self.ppms_page_name} Angle scan, after the stage failure: {self.rte_stage_where}')
+        mode = self.__dict__.get('ppms_active_scan_mode') or 'Angle'
+        self.thread_log(f'{self.ppms_page_name} {mode} scan, after the stage failure: {self.rte_stage_where}')
 
     def _rte_show_point(self, row, progress):
         if self.rte_closed or self.closing:

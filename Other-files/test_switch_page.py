@@ -32,6 +32,7 @@ class Fake6221:
         self.sine, self.sines = False, []
         self.readback = {}          # a setting's wrong read-back, for a test
         self.compliance_after_train = False
+        self.read_in_compliance = False     # STAT:MEAS:COND? bit 3 with the read current on
 
     def write(self, command):
         self.sent.append(command)
@@ -60,6 +61,8 @@ class Fake6221:
         if command == "STAT:MEAS:EVEN?":
             value, self.event = self.event, 0
             return str(value)
+        if command == "STAT:MEAS:COND?":
+            return "8" if self.read_in_compliance and self.output else "0"
         if command == "OUTP?":
             return str(self.output)
         name = command.rstrip("?")
@@ -311,6 +314,8 @@ class SwitchScanTests(SwitchScan):
                          + [("-50.0", "2", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
         self.assertEqual({(r["module"], r["scan_mode"]) for r in rows}, {("SHHV", "Switch")})
         self.assertEqual([r["pulse_in_compliance"] for r in rows[:5]], ["False", "no pulse", "False", "no pulse", "False"])
+        # The latch before each pulse: the read current of the reading before (review, 2026-11-22).
+        self.assertEqual([r["read_in_compliance_before_pulse"] for r in rows[:5]], ["False", "", "False", "", "False"])
         self.assertEqual({(float(r["pulse_width_s"]), r["pulse_count"]) for r in rows}, {(3e-5, "1")})
         for r in rows:
             self.assertAlmostEqual(float(r["measured_field_g"]), float(r["outer_target_field_g"]), delta=2.0)
@@ -538,6 +543,20 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual([r["pulse_in_compliance"] for r in self.rows(h)], ["True", "True", "True"][:1])
         self.assertTrue([line for line in h.logged if "SHHV: the 6221 reached compliance" in line
                          and "+2 mA pulse" in line], h.logged)
+
+    def test_a_read_current_in_compliance_stops_the_scan_naming_it(self):
+        """Review, 2026-11-22: a real Switch scan ended "6221 hit compliance"
+        at a reading; the read current's own compliance is now named, with
+        the resistance it means, right after the read current is on again."""
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        h.fake.read_in_compliance = True
+        self.start(h)
+        message = h.showerror.call_args.args[1]
+        self.assertIn("The 6221 is in compliance with the read current on (0.5 mA RMS, 0.707 mA peak, "
+                      "Compliance V 100 V): the sample and leads are above about 1.41e+05 Ω.", message)
+        self.assertEqual(self.rows(h), [], "no point read")
+        self.assertEqual(len(h.fake.trains), 1, "the pulse went out first")
+        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
 
     def test_start_refuses_a_pulse_beyond_the_limits_before_anything_is_sent(self):
         for span, width, pulses, message in (
