@@ -173,7 +173,7 @@ class SwitchPageTests(unittest.TestCase):
         self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("50", "1"))
         parts = panel.rte_apply_pulse_parts
         self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
-                         ["6221 pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
+                         ["Pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
         entries = [w for w, _options in parts if "textvariable" in w.options]
         self.assertEqual([w.options["textvariable"] for w in entries],
                          [panel.rte_pulse_current_ma, panel.rte_pulse_width_us, panel.rte_pulse_count])
@@ -403,7 +403,7 @@ class SwitchScanTests(SwitchScan):
     def test_apply_pulse_sends_one_pulse_by_hand(self):
         """User, 2026-11-22: "add another pulse apply below here RMS
         continuous settings": the settings' Apply pulse sends the "6221
-        pulse mA" current once, with the Pulse µs / Pulses boxes and the
+        Pulse mA" current once, with the Pulse µs / Pulses boxes and the
         Compliance V box, as the Switch scan sends each pulse; the 6221 is
         off after it."""
         h = self.make_switch()
@@ -413,7 +413,7 @@ class SwitchScanTests(SwitchScan):
         panel._rte_apply_pulse()
         self.pump(h)
         self.assertEqual(h.showerror.call_args.args[0], "SHHV pulse")
-        self.assertIn('Type the pulse current in the "6221 pulse mA" box', h.showerror.call_args.args[1])
+        self.assertIn('Type the pulse current in the "Pulse mA" box beside Apply pulse', h.showerror.call_args.args[1])
         h.askyesno.assert_not_called()
         self.assertEqual(h.fake.sent, [])
         # +5 mA, 50 µs, once.
@@ -453,7 +453,7 @@ class SwitchScanTests(SwitchScan):
         h = self.make_switch()
         panel = h.panel
         for current, width, pulses, message in (("200", "30", "1", "6221 current exceeds the software limit ±105 mA"),
-                                                ("5", "x", "1", "6221 pulse mA, Pulse µs and Compliance V must be numbers"),
+                                                ("5", "x", "1", "Pulse mA, Pulse µs and Compliance V must be numbers"),
                                                 ("5", "30", "0", "6221 pulse count must be between 1 and")):
             with self.subTest(message=message):
                 panel.rte_pulse_current_ma.set(current)

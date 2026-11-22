@@ -54,7 +54,8 @@ class PanelDefaultTests(unittest.TestCase):
         self.assertEqual(self.app.notebook.tab(self.app.rte_panel_tab, "text"), "SHHV & Switch")
         self.assertEqual(panel.ppms_transport_current_var.get(), "1.5")
         self.assertEqual(panel.ppms_transport_frequency_var.get(), "317.3")
-        self.assertEqual(panel.ppms_transport_compliance_var.get(), "50")
+        # 100 V (user, 2026-11-22: "Change default compliance to 100V"); 50 V before.
+        self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
         # Magnet current A 0.6 (user's figure, 2026-11-17; 5 from 2026-11-16).
         self.assertEqual((panel.rte_drive_target.get(), panel.rte_voltage_limit.get()), ("0.6", "5"))
         self.assertEqual(panel.zurich_expected_frequency, 317.3)

@@ -3667,7 +3667,7 @@ SWITCH_PULSE_DEFAULT_RANGE = ('-20', '20', '1')
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
-# The "6221 pulse mA" box of the settings' Apply pulse at start-up (user,
+# The "Pulse mA" box of the settings' Apply pulse at start-up (user,
 # 2026-11-22: "add another pulse apply below here RMS continuous settings";
 # the user gave no current): 0, which sends nothing until one is typed.
 RTE_APPLY_PULSE_DEFAULT_MA = 0.0
@@ -58134,7 +58134,7 @@ class RTEPanel(PPMSPanel):
         self.rte_pulse_width_us = tk.StringVar(value=f'{SWITCH_DEFAULT_PULSE_WIDTH_US:g}')
         self.rte_pulse_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
         pulse_parts = []
-        for column, (label, variable) in enumerate((('6221 pulse mA', self.rte_pulse_current_ma),
+        for column, (label, variable) in enumerate((('Pulse mA', self.rte_pulse_current_ma),
                                                     ('Pulse µs', self.rte_pulse_width_us),
                                                     ('Pulses', self.rte_pulse_count))):
             text = ttk.Label(body, text=label)
@@ -58526,8 +58526,7 @@ class RTEPanel(PPMSPanel):
                     outer = getattr(controls, '_pair_side_by_side', None)
                     if side is None or outer is None:
                         return
-                    # The pulse row sits under the block there (2026-11-22).
-                    block = 16 + max(stage_box.winfo_reqwidth(), pulse_box.winfo_reqwidth())
+                    block = 16 + stage_box.winfo_reqwidth()
                     if not side:
                         beside = body.winfo_width() >= lockins.winfo_reqwidth() + block
                     elif outer:
@@ -58592,6 +58591,19 @@ class RTEPanel(PPMSPanel):
                 if side is None or stage_place is None:
                     return
                 place = 'params' if side else stage_place
+                if place == 'beside lock-ins':
+                    # Only where the row itself fits beside the lock-ins,
+                    # by what its parts ask for wherever they are (the
+                    # stage block's own decision is not changed by it; CI,
+                    # 2026-11-22: counted into the block's width, the row
+                    # pushed the block under the lock-ins at 1101 px).
+                    try:
+                        need = 16 + sum(widget.winfo_reqwidth() + grid_padx(options)
+                                        for widget, options in pulse_parts)
+                        if body.winfo_width() < lockins.winfo_reqwidth() + need:
+                            place = 'under lock-ins'
+                    except (tk.TclError, ValueError):
+                        return
                 if getattr(pulse_box, '_rte_pulse_place', None) == place:
                     return
                 pulse_box._rte_pulse_place = place
@@ -60456,7 +60468,7 @@ class RTEPanel(PPMSPanel):
     def _rte_apply_pulse(self):
         """The settings' Apply pulse (user, 2026-11-22: "add another pulse
         apply below here RMS continuous settings"): one write by hand, the
-        "6221 pulse mA" box's current with the Pulse µs and Pulses boxes
+        "Pulse mA" box's current with the Pulse µs and Pulses boxes
         and the Compliance V box, sent as the Switch scan sends each of its
         pulses (_rte_switch_pulse: the 6221's output off first, every
         setting read back before the train is armed, the latched compliance
@@ -60474,9 +60486,9 @@ class RTEPanel(PPMSPanel):
                 width_s = float(self.rte_pulse_width_us.get()) / 1e6
                 compliance_v = float(self.ppms_transport_compliance_var.get())
             except (TypeError, ValueError, tk.TclError):
-                raise ValueError('6221 pulse mA, Pulse µs and Compliance V must be numbers') from None
+                raise ValueError('Pulse mA, Pulse µs and Compliance V must be numbers') from None
             if not math.isfinite(current_ma) or current_ma == 0:
-                raise ValueError('Type the pulse current in the "6221 pulse mA" box (0 mA sends no pulse)')
+                raise ValueError('Type the pulse current in the "Pulse mA" box beside Apply pulse (0 mA sends no pulse)')
             _current_a, width_s, compliance_v, count = Keithley6221Controller._validate(
                 current_ma * 1e-3, width_s, compliance_v, self.rte_pulse_count.get())
         except Exception as error:

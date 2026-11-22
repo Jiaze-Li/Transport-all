@@ -200,6 +200,45 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         rows = self.a.rte_panel.rte_start_button.master
         self.assertEqual(rows.master.cget("text"), "Scan")       # user, 2026-11-22
 
+    def test_the_pulse_row_is_under_the_6221_row_or_under_the_stage_block(self):
+        """User, 2026-11-22: "add another pulse apply below here RMS
+        continuous settings": at 2000 px the row is under the 6221's row, in
+        its columns; in the 1101 px window under the stage block, beside
+        the lock-ins, where it costs the plots no height; whatever the
+        resize history."""
+        panel = self.a.rte_panel
+        body, params, lockins, block = rte_stage_parts(self.a)
+        settings = body.master
+        apply_pulse = panel.rte_apply_pulse_button
+        parts = [widget for widget, _options in panel.rte_apply_pulse_parts]
+        set_6221 = next(w for w in params.winfo_children()
+                        if w.winfo_class() == "TButton" and w.cget("text") == "Set 6221")
+        for history in ((1101,), (LAB_WIDE,), (LAB_WIDE, 1101), (1101, LAB_WIDE)):
+            for width in history:
+                self.show(width)
+            with self.subTest(history=history):
+                for widget in parts:
+                    self.assertTrue(widget.winfo_ismapped(), widget)
+                    self.assertGreater(widget.winfo_width(), 1)
+                    self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                         settings.winfo_rootx() + settings.winfo_width(), "inside the settings")
+                xs = [widget.winfo_rootx() for widget in parts]
+                self.assertEqual(xs, sorted(xs), "label, box, label, box, label, box, button")
+                self.assertEqual(len({widget.winfo_rooty() + widget.winfo_height() // 2 for widget in parts
+                                      if widget.winfo_class() == "TEntry"}), 1, "one line")
+                if history[-1] == LAB_WIDE:
+                    # Under Set 6221, in its column.
+                    self.assertEqual(apply_pulse.winfo_rootx(), set_6221.winfo_rootx())
+                    self.assertGreaterEqual(apply_pulse.winfo_rooty(), set_6221.winfo_rooty() + set_6221.winfo_height())
+                    self.assertLess(apply_pulse.winfo_rooty(), set_6221.winfo_rooty() + 2 * set_6221.winfo_height() + 8)
+                else:
+                    # Under the stage block, right of the lock-ins, within their rows.
+                    self.assertEqual(block._rte_stage_place, "beside lock-ins")
+                    self.assertGreater(apply_pulse.winfo_rootx(), lockins.winfo_rootx() + lockins.winfo_width())
+                    self.assertGreaterEqual(apply_pulse.winfo_rooty(), block.winfo_rooty() + block.winfo_height())
+                    self.assertLessEqual(apply_pulse.winfo_rooty() + apply_pulse.winfo_height(),
+                                         lockins.winfo_rooty() + lockins.winfo_height() + 1)
+
     def test_at_2000_px_the_block_is_beside_or_under_the_kepco_rows(self):
         self.show(LAB_WIDE)
         self.numbers("2000 px")
