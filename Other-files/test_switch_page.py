@@ -408,8 +408,11 @@ class SwitchScanTests(SwitchScan):
         off after it."""
         h = self.make_switch()
         panel = h.panel
-        self.assertEqual(panel.rte_pulse_current_ma.get(), "0", "nothing is sent until a current is typed")
+        # 10 mA at start-up (user, 2026-11-22: "default pulse 10 mA pls.").
+        self.assertEqual(panel.rte_pulse_current_ma.get(), "10")
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
+        # 0 mA sends nothing, and says so.
+        panel.rte_pulse_current_ma.set("0")
         panel._rte_apply_pulse()
         self.pump(h)
         self.assertEqual(h.showerror.call_args.args[0], "SHHV pulse")

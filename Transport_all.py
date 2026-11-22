@@ -3668,9 +3668,11 @@ SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
 # The "Pulse mA" box of the settings' Apply pulse at start-up (user,
-# 2026-11-22: "add another pulse apply below here RMS continuous settings";
-# the user gave no current): 0, which sends nothing until one is typed.
-RTE_APPLY_PULSE_DEFAULT_MA = 0.0
+# 2026-11-22: "add another pulse apply below here RMS continuous settings"):
+# 10 mA (user, 2026-11-22: "default pulse 10 mA pls."; it was 0, which sent
+# nothing until a current was typed).  Apply pulse still asks before it
+# sends, naming the current.
+RTE_APPLY_PULSE_DEFAULT_MA = 10.0
 # The page's 6221 compliance at start-up (user, 2026-11-22: "Change default
 # compliance to 100V"; it was the PPMS page's 50 V).  For the read current
 # and for every pulse.

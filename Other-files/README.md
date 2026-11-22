@@ -9,7 +9,7 @@
   (`_rte_apply_pulse` -> `_rte_switch_pulse`): the 6221's output off first (a current set with Set 6221 ends),
   every setting read back before the train is armed, the latched compliance read around it, the output confirmed
   off after it. It needs the safety tick and a Yes to a question naming the current, width, count and compliance.
-  `Pulse mA` starts at 0, which sends nothing (my choice; no current was given). The result, with "REACHED
+  `Pulse mA` starts at 10 (user, 2026-11-22: "default pulse 10 mA pls."; 0 sends nothing). The result, with "REACHED
   COMPLIANCE" if the 6221 latched it, is on the scan's status line and in the log.
 - **Where the row is:** in the params' columns under the 6221's row while the settings are beside the lock-ins
   (the wide window; one line of height); while they are stacked (the 1101 px window) under the stage block, beside
