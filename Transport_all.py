@@ -2493,7 +2493,9 @@ SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
 RTE_APPLY_PULSE_DEFAULT_MA = 10.0
 RTE_TRANSPORT_COMPLIANCE_V = 100.0
-SWITCH_TIME_ROW_TITLE = 'X vs time'
+SWITCH_TIME_ROW_TITLE = 'X and Y vs time'
+SWITCH_TRACE_MOST_DRAWN = 4000
+SWITCH_TRACE_COLUMNS = ("time_s", "quantity", "value", "unit", "point")
 SWITCH_PULSE_DONE_MARGIN_S = 0.2
 SWITCH_READ_SETTLE_TAUS = 5.0
 RTE_OUTER_ROWS = {
@@ -42722,6 +42724,9 @@ class CombinedControlApp:
         count, sums, last = 0, {}, None
         overloaded_samples = 0
         first_reading = True
+        trace = self.__dict__.get('ppms_sample_trace')
+        if trace is not None:
+            trace.clear()
         while True:
             if self.ppms_field_scan_stop_event.is_set() or self.closing:
                 raise PPMSScanCancelled("Acquisition aborted; the unfinished point is not saved")
@@ -42740,6 +42745,8 @@ class CombinedControlApp:
                     raise PPMSScanCancelled("Autorange wait stopped; current point not saved")
                 start = time.monotonic()
                 count, sums, overloaded_samples = 0, {}, 0
+                if trace is not None:
+                    trace.clear()
                 continue
             for name, value in sample.items():
                 if name.endswith("_reference_valid") and not value:
@@ -42753,6 +42760,9 @@ class CombinedControlApp:
                         sums[name] = sums.get(name, 0.) + float(value)
                 count += 1
                 last = dict(sample)
+                if trace is not None:
+                    trace.append((time.monotonic(), {name: float(value) for name, value in sample.items()
+                                                     if name.endswith(("_x_v", "_y_v"))}))
             remaining = duration - (time.monotonic() - start)
             if remaining <= 0:
                 if count == 0:
@@ -46718,13 +46728,16 @@ class RTEPanel(PPMSPanel):
         self._rte_magnet_choice_changed()
         frame = ttk.LabelFrame(self.ppms_plot_frame, text=SWITCH_TIME_ROW_TITLE, padding=2)
         frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background='white',
-                           highlightthickness=0)
-        canvas.ppms_compact_plot = True
-        canvas.grid(row=0, column=0, sticky='nsew')
-        canvas.bind('<Configure>', lambda event: self._request_plot_redraw())
-        self.rte_time_frame, self.rte_time_canvas, self.rte_time_row_on = frame, canvas, False
+        self.rte_time_canvases = {}
+        for column, channel in enumerate(('x', 'y')):
+            frame.columnconfigure(column, weight=1, uniform='rte_time')
+            canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background='white',
+                               highlightthickness=0)
+            canvas.ppms_compact_plot = True
+            canvas.grid(row=0, column=column, sticky='nsew')
+            canvas.bind('<Configure>', lambda event: self._request_plot_redraw())
+            self.rte_time_canvases[channel] = canvas
+        self.rte_time_frame, self.rte_time_row_on = frame, False
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
     def _rte_time_row_shown(self):
@@ -46751,6 +46764,11 @@ class RTEPanel(PPMSPanel):
             frame.grid_remove()
             return
         orders = self._ppms2_measured_orders()
+        frames = self.__dict__.get('ppms_harmonic_plot_frames') or {}
+        for harmonic, harmonic_meters in orders.items():
+            if harmonic_meters and (harmonic, 'theta') in frames:
+                names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in harmonic_meters)
+                frames[(harmonic, 'theta')].configure(text=f'{PPMS_HARMONIC_LABELS[harmonic]} R — {names}')
         row = sum(1 for order in PPMS_HARMONIC_ORDERS if orders.get(order))
         order, meters = self._switch_time_order()
         names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in meters)
@@ -46759,29 +46777,35 @@ class RTEPanel(PPMSPanel):
         self.ppms_plot_frame.rowconfigure(row, weight=1, uniform='ppms_plot_rows')
         self._redraw_switch_time_plot()
     def _redraw_switch_time_plot(self):
-        canvas = self.__dict__.get('rte_time_canvas')
-        if canvas is None or not self._rte_time_row_shown():
+        canvases = self.__dict__.get('rte_time_canvases') or {}
+        if not canvases or not self._rte_time_row_shown():
             return
         order, meters = self._switch_time_order()
-        series, colors, markers = {}, {}, {}
+        traces = self.__dict__.get('rte_switch_traces') or []
+        wanted = []
         for meter in meters:
-            resolve_prefix = self._ppms2_prefix_resolver(meter, order)
-            label = PPMS_SR830_LABELS.get(meter, 'Zurich')
-            for row in self.ppms_field_scan_rows:
-                elapsed, prefix = row.get('elapsed_s'), resolve_prefix(row)
-                if prefix is None or not isinstance(elapsed, (int, float)):
-                    continue
-                value = row.get(prefix + 'x_v')
-                if not isinstance(value, (int, float)) or not math.isfinite(value):
-                    continue
-                name = f"{label} P{row.get('harmonic_pass', 1)}"
-                series.setdefault(name, []).append((elapsed, value))
-                colors[name] = PPMS_METER_COLORS.get(meter, '#666666')
-                if meter == 'zurich':
-                    markers[name] = 'open_circle'
-        self._draw_nonlocal_series(canvas, series, 'Time (s)', 'X voltage', 'Waiting for scan data', markers=True,
-                                   auto_voltage_unit=True, show_legend=False, series_colors=colors,
-                                   series_markers=markers)
+            address = None if meter == 'zurich' else self._ppms2_meter_address(meter)
+            if address is not None:
+                wanted.append((meter, str(address)))
+        total = sum(len(entry['times']) for entry in traces) * max(1, len(wanted))
+        step = max(1, math.ceil(total / SWITCH_TRACE_MOST_DRAWN))
+        for channel, canvas in canvases.items():
+            series, colors = {}, {}
+            for meter, address in wanted:
+                key = f'sr830_{address}_{channel}_v'
+                label = PPMS_SR830_LABELS.get(meter, meter)
+                for entry in traces:
+                    if str(entry['harmonics'].get(address)) != str(order):
+                        continue
+                    points = [(at, values[key]) for at, values in zip(entry['times'], entry['values'])
+                              if key in values][::step]
+                    if points:
+                        name = f"{label} #{entry['index']}"
+                        series[name] = points
+                        colors[name] = PPMS_METER_COLORS.get(meter, '#666666')
+            self._draw_nonlocal_series(canvas, series, 'Time (s)', f'{channel.upper()} voltage', 'Waiting for scan data',
+                                       markers=True, marker_radius=1.5, auto_voltage_unit=True, show_legend=False,
+                                       series_colors=colors)
     def __getattr__(self, name):
         if name.startswith('rte_'):
             raise AttributeError(name)
@@ -48418,6 +48442,7 @@ class RTEPanel(PPMSPanel):
                                           if angle else None)
             self.ppms_plot_addresses = {key: self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name) for key in settings['active_lockins']}
             self.ppms_field_scan_rows = []
+            self.rte_switch_traces, self.rte_switch_trace_path, self.rte_switch_trace_failed = [], None, False
             self.ppms_field_scan_total = per_pass * len(passes)
             self.ppms_field_scan_started_at = time.monotonic()
             self.ppms_field_scan_progress.configure(maximum=self.ppms_field_scan_total, value=0)
@@ -48727,6 +48752,39 @@ class RTEPanel(PPMSPanel):
                 f'{peak_a * 1e3:.3g} mA peak, Compliance V {compliance_v:g} V): the sample and leads are above about '
                 f'{compliance_v / peak_a:.3g} Ω. Lower the read current or raise Compliance V; the scan is stopped and '
                 'the outputs zeroed')
+    def _rte_switch_keep_trace(self, progress, pulse_ma, row, trace):
+        started = self.ppms_field_scan_started_at
+        harmonics = {key[len('sr830_'):-len('_harmonic')]: value for key, value in row.items()
+                     if key.startswith('sr830_') and key.endswith('_harmonic')}
+        entry = dict(index=progress, pulse_ma=pulse_ma, harmonics=harmonics,
+                     times=[at - started for at, _values in trace], values=[values for _at, values in trace])
+        self.rte_switch_traces.append(entry)
+        recorder = self.__dict__.get('rte_recorder')
+        if recorder is None or self.__dict__.get('rte_switch_trace_failed'):
+            return
+        path = recorder.directory / f'{recorder.csv_path.stem}_trace.csv'
+        point = f'#{progress} {pulse_ma:+g} mA'
+
+        def quantity(name, read=''):
+            address, channel = name[len('sr830_'):-len('_x_v')], name[-3].upper()
+            return f'SR830 #{address} {read}{channel}'
+        lines = [(f'{at:.3f}', quantity(name), f'{value:.9g}', 'V', point)
+                 for at, values in zip(entry['times'], entry['values']) for name, value in sorted(values.items())]
+        lines += [(f'{float(row.get("elapsed_s") or 0.0):.3f}', quantity(name, 'mean '), f'{row[name]:.9g}', 'V', point)
+                  for name in sorted(row) if name.startswith('sr830_') and name.endswith(('_x_v', '_y_v'))
+                  and isinstance(row[name], (int, float))]
+        try:
+            new = not path.exists()
+            with path.open('a', newline='', encoding='utf-8') as handle:
+                writer = csv.writer(handle)
+                if new:
+                    writer.writerow(SWITCH_TRACE_COLUMNS)
+                writer.writerows(lines)
+            self.rte_switch_trace_path = path
+        except OSError as error:
+            self.rte_switch_trace_failed = True
+            self.thread_log(f'{self.ppms_page_name}: the trace CSV {path.name} could not be written ({error}); the '
+                            'plots keep the readings')
     def _rte_switch_resistance(self, row, settings, point_settings):
         current_a = float(point_settings['current_rms_ma']) * 1e-3
         columns = {}
@@ -49243,11 +49301,15 @@ class RTEPanel(PPMSPanel):
                 except Exception:
                     field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, SWITCH_SCAN_MODE)
                     raise
-                if index == 1 or (mode == 'Angle+Current' and new_step):
-                    sample, windows = self._acquire_ppms_first_point(settings['frequency_hz'], settings['active_lockins'], duration)
-                else:
-                    sample = self._average_ppms_transport_sample(settings['frequency_hz'], settings['active_lockins'], duration)
-                    windows = 1
+                self.ppms_sample_trace = [] if switch else None
+                try:
+                    if index == 1 or (mode == 'Angle+Current' and new_step):
+                        sample, windows = self._acquire_ppms_first_point(settings['frequency_hz'], settings['active_lockins'], duration)
+                    else:
+                        sample = self._average_ppms_transport_sample(settings['frequency_hz'], settings['active_lockins'], duration)
+                        windows = 1
+                finally:
+                    trace, self.ppms_sample_trace = self.__dict__.get('ppms_sample_trace'), None
                 self._rte_wait(0)
                 try:
                     measured = self._rte_read_field()
@@ -49299,6 +49361,8 @@ class RTEPanel(PPMSPanel):
                                                     else '')
                 if self.ppms_field_scan_rows:
                     row = dict.fromkeys(self.ppms_field_scan_rows[0], '') | row
+                if switch and trace is not None:
+                    self._rte_switch_keep_trace(progress, target, row, trace)
                 self._append_ppms_live_csv(row)
                 self.ppms_field_scan_rows.append(row)
                 self.post_ui(lambda data=dict(row), progress=progress: self._rte_show_point(data, progress))
@@ -49389,8 +49453,9 @@ class RTEPanel(PPMSPanel):
         by_order = {}
         for (order, channel), canvas in canvases.items():
             by_order.setdefault(order, []).append((channel, canvas))
+        pulse_axis = axis == 'pulse'
         for order, targets in by_order.items():
-            columns = tuple((channel, 'theta_deg' if channel == 'theta' else f'{channel}_v')
+            columns = tuple((channel, ('r_v' if pulse_axis else 'theta_deg') if channel == 'theta' else f'{channel}_v')
                             for channel, _ in targets)
             series = {channel: {} for channel, _ in targets}
             colors = {channel: {} for channel, _ in targets}
@@ -49417,11 +49482,6 @@ class RTEPanel(PPMSPanel):
                         value = row.get(prefix + suffix)
                         if not isinstance(value, (int, float)) or not math.isfinite(value):
                             continue
-                        if axis == 'pulse' and channel != 'theta':
-                            read_ma = row.get('6221_current_rms_ma')
-                            if not isinstance(read_ma, (int, float)) or not read_ma > 0:
-                                continue
-                            value = value / (read_ma * 1e-3)
                         series[channel].setdefault(name, []).append((x_value, value))
                         colors[channel][name] = color
                         if step is not None:
@@ -49436,10 +49496,10 @@ class RTEPanel(PPMSPanel):
                             colors[channel][name] = shaded[name]
             for channel, canvas in targets:
                 self._draw_nonlocal_series(canvas, series[channel], x_label,
-                    'Phase (degrees)' if channel == 'theta'
-                    else f'{channel.upper()} / I (Ω)' if axis == 'pulse' else channel.upper() + ' voltage',
+                    ('R voltage' if pulse_axis else 'Phase (degrees)') if channel == 'theta'
+                    else channel.upper() + ' voltage',
                     'Waiting for scan data', markers=True,
-                    auto_voltage_unit=channel != 'theta' and axis != 'pulse',
+                    auto_voltage_unit=channel != 'theta' or pulse_axis,
                     show_legend=False, series_colors=colors[channel], series_markers=markers[channel],
                     angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     **({'series_labels': labels[channel]} if labels[channel] else {}))

@@ -1,5 +1,27 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Switch scan plots: volts, R, and X / Y against time over each reading (user, 2026-11-22)
+
+- **Request:** "after the 10mA 6221 current pulse, the 6221 is set to 1.5mA continuous and the SR830 read the
+  voltage at the period of acquire time 10s, then you calculate the 10s mean value to put it on the X,Y,R vs
+  current pulse. also add Y vs time. at the X,Y vs time plot, it should show the voltage in the period not a
+  single point. always use voltage in the X,Y vs current pulse plot pls." ("you can refer to the MS-fourstate
+  program").
+- **The sequence was already so:** each point: read current off, the pulse, the read current (6221 mA RMS box) on
+  again and the lock-in locked, 5 x the slowest time constant + Settle s, then the SR830 read for Acquire s and the
+  readings averaged; that mean is the point. The scan's first point (and only it) is read in windows of Acquire s
+  until two agree, as every SHHV scan's first point.
+- **Pulse plots:** X, Y and R of that mean, in volts (`auto_voltage_unit`), no longer divided by the read current;
+  R in the third column, where the phase is in the other modes. `sr830_<addr>_x_over_i_ohm` stays in the CSV.
+- **X and Y vs time:** two plots side by side under them, every SR830 reading of each Acquire s window (one segment
+  per point, at the scan's elapsed time), as MS-fourState's timeline shows its read samples. The averaging loop
+  keeps them when asked (`ppms_sample_trace`): the counted readings only (not overloaded ones, and a range change
+  starts the window again). Thinned to at most `SWITCH_TRACE_MOST_DRAWN` dots drawn; the file has all.
+- **Trace CSV:** `<name>_trace.csv` in the run folder, MS-fourState's layout `time_s, quantity, value, unit,
+  point`: each reading as "SR830 #8 X" / "SR830 #8 Y" and each point's mean as "SR830 #8 mean X" / "mean Y", in V,
+  `point` "#3 +10 mA". A write failure is logged once and the scan goes on.
+- Not run on the instruments.
+
 ## The program files without comments, docstrings or blank lines (user, 2026-11-22)
 
 - **Request:** "check and optimize the whole code, then update the exe", then "Minimize the total length of the

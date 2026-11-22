@@ -11,6 +11,7 @@ a real one-thread worker, a KEPCO and an LS475 whose field follows its
 current, and here a 6221 that records every command of the write pulse.  No
 VISA session, no window."""
 import threading
+import types
 import unittest
 from unittest.mock import patch
 
@@ -100,6 +101,18 @@ class SwitchScan(ete.EndToEnd):
         patcher.start()
         self.addCleanup(patcher.stop)
         h.fake = Fake6221()
+        real_first, real_average = panel._acquire_ppms_first_point, panel._average_ppms_transport_sample
+
+        def traced(result):
+            trace = panel.__dict__.get("ppms_sample_trace")
+            if trace is not None:
+                trace.clear()
+                now = app.time.monotonic()
+                for offset, x in ((0.0, 1e-6), (1.0, 2e-6), (2.0, 3e-6)):
+                    trace.append((now + offset, {"sr830_8_x_v": x, "sr830_8_y_v": -x}))
+            return result
+        panel._acquire_ppms_first_point = lambda *args: traced(real_first(*args))
+        panel._average_ppms_transport_sample = lambda *args: traced(real_average(*args))
         source = panel.ppms_instrument_controllers["6221"]
         source.lock, source.instrument = threading.RLock(), h.fake
 
@@ -213,21 +226,24 @@ class SwitchPageTests(unittest.TestCase):
         self.assertEqual({w.grid_options["in_"] for w in lines}, {rack})
         self.assertEqual({w.parent for w in lines}, {rack.parent})
 
-    def test_the_plots_have_a_row_of_x_against_time(self):
+    def test_the_plots_have_a_row_of_x_and_y_against_time(self):
         """User, 2026-11-21: "add a row to show the SR830 x signal vs time
-        pls": one plot across the three columns, in the row under the X / I,
-        Y / I and phase plots, with an equal share of the height; it moves
-        down when a second harmonic is measured."""
+        pls"; 2026-11-22: "also add Y vs time": X and Y side by side, in the
+        row under the X, Y and R plots, with an equal share of the height;
+        it moves down when a second harmonic is measured.  The third pulse
+        plot is R in volts (user, 2026-11-22: "X,Y,R vs current pulse")."""
         panel = self.switch_page()
-        frame, canvas = panel.rte_time_frame, panel.rte_time_canvas
+        frame, canvases = panel.rte_time_frame, panel.rte_time_canvases
+        self.assertEqual(sorted(canvases), ["x", "y"])
         self.assertIs(frame.parent, panel.ppms_plot_frame)
-        self.assertIs(canvas.parent, frame)
+        self.assertEqual({canvas.parent for canvas in canvases.values()}, {frame})
+        self.assertEqual([canvases[c].grid_options["column"] for c in ("x", "y")], [0, 1])
         self.assertEqual(frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
         self.assertFalse(frame.grid_removed)
         # SR830-1 is at the second harmonic at the page's start-up.
-        self.assertEqual(frame.options["text"], "X vs time — 2nd harmonic, SR830-1")
-        self.assertIs(canvas.ppms_compact_plot, True)
-        # The pulse plots keep their own x labels: the time row has another axis.
+        self.assertEqual(frame.options["text"], "X and Y vs time — 2nd harmonic, SR830-1")
+        self.assertEqual(panel.ppms_harmonic_plot_frames[(2, "theta")].options["text"], "2nd harmonic R — SR830-1")
+        self.assertIs(canvases["x"].ppms_compact_plot, True)
         self.assertFalse(panel.ppms_harmonic_canvases[(2, "x")].ppms_hide_x_labels)
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
             panel.ppms_transport_harmonic_a_var.set("1")
@@ -235,8 +251,15 @@ class SwitchPageTests(unittest.TestCase):
             panel.zurich_harmonic.set("2")
             panel._refresh_ppms2_plot_layout()
             self.assertEqual(frame.grid_options["row"], 2)
-            self.assertEqual(frame.options["text"], "X vs time — 1st harmonic, SR830-1")
-            self.assertEqual(draw.call_args.args[2:5], ("Time (s)", "X voltage", "Waiting for scan data"))
+            self.assertEqual(frame.options["text"], "X and Y vs time — 1st harmonic, SR830-1")
+            self.assertEqual([call.args[2:5] for call in draw.call_args_list[-2:]],
+                             [("Time (s)", "X voltage", "Waiting for scan data"),
+                              ("Time (s)", "Y voltage", "Waiting for scan data")])
+        # Another mode: the third plot is the phase again.
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Angle+Field")
+            panel._rte_mode_changed()
+        self.assertEqual(panel.ppms_harmonic_plot_frames[(1, "theta")].options["text"], "1st harmonic θ — SR830-1")
 
     def test_the_shhv_page_has_switch_as_its_last_mode(self):
         """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
@@ -290,6 +313,51 @@ class SwitchPageTests(unittest.TestCase):
         self.assertEqual([value for _loop, _point, value in plan], [-2.0, 0.0, 2.0, 0.0, -2.0])
         with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
             app.rte_scan_plan("Switch", "0", "106", "106", 1, False)
+
+
+class AveragingTraceTests(unittest.TestCase):
+    """The real averaging loop keeps each counted reading when the page asks
+    (ppms_sample_trace, the Switch scan's X and Y vs time, user,
+    2026-11-22), the mean is the mean of those readings, an overloaded one
+    is neither kept nor averaged, and a range change starts the window and
+    its trace again.  Without the request nothing is kept."""
+
+    def page(self, readings):
+        page = types.SimpleNamespace()
+        page.ppms_field_scan_stop_event = threading.Event()
+        page.closing = False
+        values = iter(readings)
+        page._read_ppms_transport_sample = lambda frequency, lockins, allow: dict(next(values))
+        return page
+
+    @staticmethod
+    def reading(x, **extra):
+        return dict({"sr830_8_x_v": x, "sr830_8_y_v": -x, "sr830_8_frequency_hz": 317.3,
+                     "sr830_8_reference_valid": True, "sr830_8_overload": False}, **extra)
+
+    def average(self, page, duration=0.12):
+        return app.CombinedControlApp._average_ppms_transport_sample(page, 317.3, ("830_a",), duration)
+
+    def test_the_trace_holds_the_counted_readings_of_the_window(self):
+        page = self.page([self.reading(1e-6, range_settle_s=0.01), self.reading(2e-6),
+                          self.reading(9e-6, sr830_8_overload=True)] + [self.reading(4e-6)] * 50)
+        page.ppms_sample_trace = [("stale", {})]
+        result = self.average(page)
+        trace = page.ppms_sample_trace
+        self.assertNotIn(("stale", {}), trace)
+        xs = [values["sr830_8_x_v"] for _at, values in trace]
+        self.assertEqual(xs[0], 2e-6, "the reading before the range change is not kept")
+        self.assertNotIn(9e-6, xs, "the overloaded reading is not kept")
+        self.assertEqual(result["sample_count"], len(trace))
+        self.assertAlmostEqual(result["sr830_8_x_v"], sum(xs) / len(xs))
+        self.assertEqual(sorted(trace[0][1]), ["sr830_8_x_v", "sr830_8_y_v"])
+        times = [at for at, _values in trace]
+        self.assertEqual(times, sorted(times))
+
+    def test_without_the_request_nothing_is_kept(self):
+        page = self.page([self.reading(1e-6)] * 50)
+        self.average(page, 0.05)
+        self.assertNotIn("ppms_sample_trace", page.__dict__)
 
 
 class SwitchScanTests(SwitchScan):
@@ -387,23 +455,47 @@ class SwitchScanTests(SwitchScan):
                          [(1, v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)] + [(2, v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
         self.assertEqual([e["target_field_g"] for e in events if e["event"] == "field_programmed"], [100.0, -50.0])
         self.assertEqual(events[-1]["event"], "run_finished")
-        # The plot: X / I in ohm against the pulse current, a curve per field.
-        # Under them the row of X against time (user, 2026-11-21: "add a row
-        # to show the SR830 x signal vs time pls").
-        x_label = {call.args[2] for call in h.draw.call_args_list}
-        self.assertEqual(x_label, {"6221 pulse current (mA)", "Time (s)"})
-        self.assertIn("X / I (Ω)", {call.args[3] for call in h.draw.call_args_list})
-        timed = [call for call in h.draw.call_args_list if call.args[2] == "Time (s)"][-1]
-        self.assertIs(timed.args[0], h.panel.rte_time_canvas)
-        self.assertEqual((timed.args[3], timed.kwargs["auto_voltage_unit"]), ("X voltage", True))
-        # Every saved point, in the order measured: its elapsed_s and its X
-        # in volts (not over the read current), one curve for the scan.
+        # The pulse plots in volts (user, 2026-11-22: "always use voltage in
+        # the X,Y vs current pulse plot"), X, Y and R; each point the mean of
+        # the Acquire s reading.
+        pulse_calls = [call for call in h.draw.call_args_list if call.args[2] == "6221 pulse current (mA)"]
+        self.assertEqual({call.args[3] for call in pulse_calls}, {"X voltage", "Y voltage", "R voltage"})
+        self.assertEqual({call.kwargs["auto_voltage_unit"] for call in pulse_calls}, {True})
+        canvases = h.panel.ppms_harmonic_canvases
+        last_x = [call for call in pulse_calls if call.args[0] is canvases[(1, "x")]][-1]
         saved = h.panel.ppms_field_scan_rows
-        address = app.PPMSPanel._ppms_sr830_address(h.panel.ppms_instrument_controllers["830_a"].resource_name)
-        self.assertEqual(timed.args[1], {"SR830-1 P1": [(r["elapsed_s"], r[f"sr830_{address}_x_v"]) for r in saved]})
+        self.assertEqual(sorted(v for points in last_x.args[1].values() for _x, v in points),
+                         sorted(r["sr830_8_x_v"] for r in saved))
+        last_r = [call for call in pulse_calls if call.args[0] is canvases[(1, "theta")]][-1]
+        self.assertEqual(last_r.args[3], "R voltage")
+        self.assertEqual(sorted(v for points in last_r.args[1].values() for _x, v in points),
+                         sorted(r["sr830_8_r_v"] for r in saved))
+        # X and Y against time: every sample of each reading, a segment per
+        # reading (user, 2026-11-22: "it should show the voltage in the
+        # period not a single point"), on the time of the scan.
         self.assertEqual(len(saved), 10)
-        times = [x for x, _y in timed.args[1]["SR830-1 P1"]]
-        self.assertEqual(times, sorted(times))
+        for channel, sign in (("x", 1), ("y", -1)):
+            timed = [call for call in h.draw.call_args_list if call.args[0] is h.panel.rte_time_canvases[channel]][-1]
+            self.assertEqual(timed.args[2:4], ("Time (s)", f"{channel.upper()} voltage"))
+            series = timed.args[1]
+            self.assertEqual(sorted(series), sorted(f"SR830-1 #{index}" for index in range(1, 11)))
+            for points in series.values():
+                self.assertEqual([v for _t, v in points], [sign * 1e-6, sign * 2e-6, sign * 3e-6])
+                self.assertEqual([round(t - points[0][0], 6) for t, _v in points], [0.0, 1.0, 2.0])
+            starts = [series[f"SR830-1 #{index}"][0][0] for index in range(1, 11)]
+            self.assertEqual(starts, sorted(starts))
+        # And in the run folder's trace CSV, with each reading's means.
+        trace = h.panel.rte_switch_trace_path
+        self.assertEqual(trace.name, h.panel.rte_recorder.csv_path.stem + "_trace.csv") if h.panel.__dict__.get(
+            "rte_recorder") else self.assertTrue(trace.name.endswith("_trace.csv"))
+        with trace.open(encoding="utf-8", newline="") as handle:
+            lines = list(app.csv.reader(handle))
+        self.assertEqual(lines[0], ["time_s", "quantity", "value", "unit", "point"])
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 X"), 30)
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 Y"), 30)
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 mean X"), 10)
+        self.assertEqual({line[3] for line in lines[1:]}, {"V"})
+        self.assertEqual(lines[1][4], "#1 -2 mA")
 
     def test_apply_pulse_sends_one_pulse_by_hand(self):
         """User, 2026-11-22: "add another pulse apply below here RMS
