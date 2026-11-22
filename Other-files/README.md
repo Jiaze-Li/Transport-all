@@ -1,5 +1,30 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: Field+Angle mode, Angle+Field2 renamed Angle+Field, field-sweep defaults (user, 2026-11-22)
+
+- **Requests:** "add a Field+Angle scan mode in the SHHV & Switch, like Angle+Field but the Angle is the outer loop
+  and text input."; [a figure of the Field scan's boxes] "default setting as the fig"; "delete the old Angle+Field,
+  change Angle+Field2 to Angle+Field."
+- **The modes** are now Field, Current, Angle, Angle+Field, Angle+Current, Field+Angle, Switch (`RTE_SCAN_MODES`).
+- **Angle+Field** is the former Angle+Field2: the outer fields typed in G, each reached as Set field reaches it.
+  The first Angle+Field (outer supply currents as Start / End / Step in A) is removed. Rows saved from 2026-11-17
+  to 2026-11-22 say `scan_mode` "Angle+Field2" for the typed fields and "Angle+Field" for the currents; from this
+  version "Angle+Field" means the typed fields. The PPMS page's own Angle+Field is another program path, unchanged.
+- **Field+Angle** (`FIELD_ANGLE_SCAN_MODE`): the outer box is a list of stage angles in degrees, in the order
+  typed (repeats allowed, each within +/-360 deg of the stage zero, `rte_outer_angle_list_plan`; start-up
+  `0, 45, 90`, my choice). At each angle the stage turns there first (the supply staying at the current the sweep
+  before ended on), then the main row's Field sweep runs: the supply's currents in A, settled on the LS475 and
+  read, exactly as the Field mode's points. Start runs the stage's checks first, as an Angle scan. Rows have the
+  Field scan's columns plus `stage_target_deg`, `stage_angle_deg`, `stage_position_steps`,
+  `stage_steps_per_degree` and `outer_angle_index`; the plots are against the measured field, a curve per angle
+  ("#2 +45°"). The end zeroes the 6221 and the supply; the stage stays where the scan left it.
+- **A field sweep's start-up boxes** (Field and Field+Angle, `RTE_FIELD_DEFAULT_RANGE`,
+  `RTE_FIELD_ACQUISITION_S`): Start -1, End 1, Step 0.02 A, Round trip on, Acquire s 2 (it was -3 to 3 A in 0.05 A,
+  Acquire s as left). Choosing a mode now also sets Acquire s: 2 for those two, 5 (`RTE_ACQUISITION_S`) for every
+  other, as it already set Start / End / Step and Round trip. Loops 1 and Settle s 0.5 are the page's start-up
+  values and are not changed by a mode.
+- Not run on the instruments.
+
 ## "SHHV & Switch": one page, Switch a scan mode, connections in two columns (user, 2026-11-22)
 
 - **Requests:** "I think there're many the same between SHHV and Switch module. Can you change the name of SHHV scan

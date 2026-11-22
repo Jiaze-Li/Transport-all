@@ -125,7 +125,7 @@ class Gauss:
 
 class FollowingGauss(Gauss):
     """An LS475 that reads 100 G per A of the stand-in KEPCO's current
-    (Angle+Field2's field setting, 2026-11-17)."""
+    (Angle+Field's field setting, 2026-11-17)."""
 
     def __init__(self, log, kepco):
         super().__init__(log)
@@ -323,6 +323,15 @@ class EndToEnd(unittest.TestCase):
         panel._rte_connect("newmark")
         self.pump(h)
         self.assertTrue(stage.connected, h.showerror.call_args)
+        # A mode change puts the mode's own Acquire s in the box since
+        # 2026-11-22 (5 s, or 2 s for a field sweep; test_rte_angle_scan's
+        # test_mode_change_defaults); the harness keeps its short one.
+        real_mode_changed = panel._rte_mode_changed
+
+        def mode_changed(*args):
+            real_mode_changed(*args)
+            panel.ppms_acquisition_time_var.set("0.01")
+        panel._rte_mode_changed = mode_changed
         panel.ppms_simple_mode.set("Angle")
         panel._rte_mode_changed()
         for variable, value in zip(panel.ppms_simple_range, span):
@@ -507,10 +516,10 @@ class AngleScanTests(EndToEnd):
 
     def test_the_mode_change_sets_the_angle_boxes(self):
         panel = build_page()
-        # The page starts on the user's Angle+Field2 scan (2026-11-17; Angle
+        # The page starts on the user's Angle+Field scan (2026-11-17; Angle
         # from 2026-11-16, Angle+Field from 2026-10-19).
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
-        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field2: Stage °; outer: field G")
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
+        self.assertEqual(panel.rte_scan_note.get(), "Angle+Field: Stage °; outer: field G")
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
             panel.ppms_simple_mode.set("Field")
             panel._rte_mode_changed()
@@ -1143,71 +1152,11 @@ class OuterScanTests(RunLogBase):
         return [("stage", "move", angle), ("stage", "at", angle), ("gauss", "read"),
                 ("lockins", "first" if first else "read"), ("gauss", "read")]
 
-    def test_angle_field_steps_the_field_outside_the_angle_sweep(self):
-        h = self.make_outer("Angle+Field", ("0", "2", "1"))
-        self.start(h)
-        panel = h.panel
-        h.showerror.assert_not_called()
-        title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHHV Angle+Field scan")
-        self.assertIn("3 field steps x 2 angles x 1 harmonic pass(es) = 6 points.", question)
-        self.assertIn("6 stage moves (2 of them back to 0°), 50° of turning in all", question)
-        # Per field: the KEPCO (set_output for the first, set_scan_current
-        # after), the LS475 settle, then the sweep from the first angle.
-        settle = [("gauss", "read")] * app.STFMR_FIELD_SETTLE_REQUIRED_SAMPLES
-        expected = [("6221", "on", panel_current(panel)), ("kepco", "set_output", "CURR")] + settle
-        expected += self.point(0.0, first=True) + self.point(10.0)
-        for value in (1.0, 2.0):
-            expected += [("kepco", "set_scan_current", value)] + settle + self.point(0.0) + self.point(10.0)
-        self.assertEqual(self.sequence(h), expected + ZEROED)
-        self.assertEqual([e[2:5] for e in h.log if e[:2] == ("kepco", "set_output")], [("CURR", 0.0, 5.0)])
-        self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
-        self.assertEqual({thread for _name, thread in h.dll.calls}, {h.worker})
-        # The rows: Angle's columns, the outer step's number last.
-        rows = self.rows(h)
-        self.assertEqual([(float(r["kepco_programmed_current_a"]), float(r["stage_angle_deg"]), r["outer_field_index"])
-                          for r in rows],
-                         [(0., 0., "1"), (0., 10., "1"), (1., 0., "2"), (1., 10., "2"), (2., 0., "3"), (2., 10., "3")])
-        # The magnet supply's two columns after them since 2026-10-21 (user).
-        self.assertEqual(list(rows[0])[-4:], ["field_drift_g", "outer_field_index", "magnet_supply",
-                                              "magnet_measured_current_a"])
-        self.assertEqual({(r["scan_mode"], r["kepco_voltage_limit_v"]) for r in rows}, {("Angle+Field", "5.0")})
-        self.assertEqual([r["point"] for r in rows], ["1", "2"] * 3)
-        self.assertEqual([r["first_point_windows"] for r in rows], ["2", "1", "1", "1", "1", "1"])
-        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; KEPCO and 6221 zeroed; stage at +10.000°")
-        # The log: an event per field step, the settle with its number.
-        events = self.events(h)
-        expected_events = ["run_prepared", "scan_started", "harmonic_pass"]
-        for _field in range(3):
-            expected_events += ["field_programmed", "field_settled", "stage_move", "point_saved", "stage_move",
-                                "point_saved"]
-        self.assertEqual(self.without_notes(events),
-                         expected_events + ["outputs_zeroed", "plot_snapshots", "run_finished"])
-        self.assertEqual([(e["step_index"], e["steps"], e["current_a"]) for e in events
-                          if e["event"] == "field_programmed"], [(1, 3, 0.0), (2, 3, 1.0), (3, 3, 2.0)])
-        self.assertEqual([e["step_index"] for e in events if e["event"] == "field_settled"], [1, 2, 3])
-        self.assertEqual([e["step_index"] for e in events if e["event"] == "point_saved"], [1, 1, 2, 2, 3, 3])
-        prepared = events[0]
-        self.assertEqual(prepared["mode"], "Angle+Field")
-        self.assertEqual((prepared["outer"]["values"], prepared["outer"]["unit"], prepared["outer"]["steps"]),
-                         ([0.0, 1.0, 2.0], "A (KEPCO)", 3))
-        self.assertEqual(prepared["kepco"], {"current_a": "the outer loop", "voltage_limit_v": 5.0})
-        self.assertEqual((prepared["plan"]["points"], prepared["plan"]["total_points"]), (2, 6))
-        self.assertEqual(events[0]["stage_at_start"]["stage_check_mst"], 0, "the stage check at Start")
-        self.assertEqual(events[-1]["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
-        self.assert_closed(h)
-        # The plot: against the angle, a curve per field, named by its current.
-        drawn = next(c for c in reversed(h.draw.call_args_list) if c.args[1])
-        self.assertEqual(drawn.args[2], "Sample angle (°)")
-        self.assertEqual({name.split(" ")[1] for name in drawn.args[1]}, {"+0", "+1", "+2"})
-        for name, points in drawn.args[1].items():
-            self.assertEqual([x for x, _y in points], [0.0, 10.0], name)
-
-    def make_field2(self, typed, gauss_class=None, **kwargs):
-        """An Angle+Field2 scan whose LS475 reads 100 G per A of the KEPCO's
+    def make_field_list(self, typed, gauss_class=None, **kwargs):
+        """An Angle+Field scan whose LS475 reads 100 G per A of the KEPCO's
         current (FollowingGauss), with the field setting's waits made tiny
         (not 0: read_settled_magnet_field divides its timeout by them)."""
-        h = self.make_outer("Angle+Field2", (typed,), **kwargs)
+        h = self.make_outer("Angle+Field", (typed,), **kwargs)
         h.gauss = (gauss_class or FollowingGauss)(h.log, h.kepco)
         h.panel.rte_controllers["gauss"] = h.gauss
         for name, value in (("MAGNET_FIELD_SET_SETTLE_S", 0.0), ("MAGNET_FIELD_SET_READ_INTERVAL_S", 1e-4),
@@ -1217,17 +1166,17 @@ class OuterScanTests(RunLogBase):
             self.addCleanup(patcher.stop)
         return h
 
-    def test_angle_field2_reaches_the_typed_fields_in_order(self):
-        """Angle+Field2 (user, 2026-11-17: "I type the field directly and it
+    def test_angle_field_reaches_the_typed_fields_in_order(self):
+        """Angle+Field (user, 2026-11-17: "I type the field directly and it
         auto reach the current"): each typed field, a repeated one included,
         reached as Set field reaches it; the current then left for the whole
         angle sweep."""
-        h = self.make_field2("100, 20 100")
+        h = self.make_field_list("100, 20 100")
         self.start(h)
         panel = h.panel
         h.showerror.assert_not_called()
         title, question = h.askyesno.call_args.args[:2]
-        self.assertEqual(title, "SHHV Angle+Field2 scan")
+        self.assertEqual(title, "SHHV Angle+Field scan")
         self.assertIn("Field, the OUTER loop: 3 fields in the order typed: +100, +20, +100 G, each within ±2 G on "
                       "the LS475 (Set field's Tol. box).", question)
         self.assertIn("never beyond ±10 A", question)
@@ -1246,7 +1195,7 @@ class OuterScanTests(RunLogBase):
         # The current is not touched during a field's sweep: the two points of a step have one current.
         for first, second in zip(rows[::2], rows[1::2]):
             self.assertEqual(first["kepco_programmed_current_a"], second["kepco_programmed_current_a"])
-        self.assertEqual({r["scan_mode"] for r in rows}, {"Angle+Field2"})
+        self.assertEqual({r["scan_mode"] for r in rows}, {"Angle+Field"})
         self.assertEqual(list(rows[0])[-5:], ["field_drift_g", "outer_target_field_g", "outer_field_index",
                                               "magnet_supply", "magnet_measured_current_a"])
         self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; KEPCO and 6221 zeroed; stage at +10.000°")
@@ -1257,7 +1206,7 @@ class OuterScanTests(RunLogBase):
         for e in programmed:
             self.assertAlmostEqual(e["field_g"], e["target_field_g"], delta=2.0)
         prepared = events[0]
-        self.assertEqual(prepared["mode"], "Angle+Field2")
+        self.assertEqual(prepared["mode"], "Angle+Field")
         self.assertEqual({k: prepared["outer"][k] for k in ("typed", "unit", "tolerance_g", "steps", "values")},
                          {"typed": "100, 20 100", "unit": "G (LS475 target)", "tolerance_g": 2.0, "steps": 3,
                           "values": [100.0, 20.0, 100.0]})
@@ -1269,27 +1218,27 @@ class OuterScanTests(RunLogBase):
         self.assertEqual({" ".join(name.split(" ")[1:3]) for name in drawn.args[1]},
                          {"#1 +100", "#2 +20", "#3 +100"})
 
-    def test_angle_field2_refuses_a_bad_list_before_anything_moves(self):
+    def test_angle_field_refuses_a_bad_list_before_anything_moves(self):
         for typed, message in (("", "Outer field G: type the fields in G in the order to scan"),
                                ("100, 7400", "fields must stay within +/-7300 G (7300 Oe); 7400 G is outside"),
                                ("100, a", 'Outer field G: "a" is not a number')):
             with self.subTest(typed=typed):
-                h = self.make_field2(typed)
+                h = self.make_field_list(typed)
                 self.start(h)
                 h.askyesno.assert_not_called()
                 self.assertIn(message, h.showerror.call_args.args[1])
                 self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
-        h = self.make_field2("100")
+        h = self.make_field_list("100")
         h.panel.rte_field_tolerance.set("0")
         self.start(h)
         h.askyesno.assert_not_called()
         self.assertIn("The field tolerance must be above 0 G", h.showerror.call_args.args[1])
 
-    def test_angle_field2_refuses_a_kepco_already_on(self):
+    def test_angle_field_refuses_a_kepco_already_on(self):
         """Review, 2026-11-17: an output left on (Apply, Set field, a stopped
         scan) would keep its old voltage limit; the scan asks for Zero / OFF
         first and sends nothing."""
-        h = self.make_field2("100")
+        h = self.make_field_list("100")
         h.kepco.output_owned, h.kepco.cached_current_a, h.kepco.active_mode = True, 0.7, "CURR"
         self.start(h)
         h.askyesno.assert_not_called()
@@ -1297,8 +1246,8 @@ class OuterScanTests(RunLogBase):
         self.assertIn("press KEPCO Zero / OFF first", h.showerror.call_args.args[1])
         self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
 
-    def test_angle_field2_a_field_that_does_not_follow_fails_and_zeroes(self):
-        h = self.make_field2("100", gauss_class=StuckGauss)
+    def test_angle_field_a_field_that_does_not_follow_fails_and_zeroes(self):
+        h = self.make_field_list("100", gauss_class=StuckGauss)
         self.start(h)
         panel = h.panel
         self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Failed:"),
@@ -1311,8 +1260,8 @@ class OuterScanTests(RunLogBase):
         self.assertIn("gaussmeter", h.showerror.call_args.args[1] if h.showerror.called
                       else panel.ppms_field_scan_status_var.get())
 
-    def test_angle_field2_stop_while_the_field_is_found(self):
-        h = self.make_field2("100")
+    def test_angle_field_stop_while_the_field_is_found(self):
+        h = self.make_field_list("100")
         reads = []
 
         class StopsGauss(FollowingGauss):
@@ -1330,101 +1279,6 @@ class OuterScanTests(RunLogBase):
         self.assertEqual(self.rows(h), [])
         self.assertFalse([e for e in h.log if e[:2] == ("stage", "move")])
         self.assertIn(("kepco", "force_off"), [e[:2] for e in h.log])
-
-    def test_angle_field_harmonic_passes_run_the_whole_scan_each(self):
-        h = self.make_outer("Angle+Field", ("0", "1", "1"), meter="sr830")
-        self.start(h)
-        h.showerror.assert_not_called()
-        rows = self.rows(h)
-        self.assertEqual([(r["harmonic_pass"], r["outer_field_index"], float(r["stage_angle_deg"])) for r in rows],
-                         [(p, f, a) for p in "123" for f in "12" for a in (0.0, 10.0)])
-        # The output switched on once; each later pass steps back to the first field.
-        self.assertEqual([e[1:3] for e in h.log if e[0] == "kepco" and e[1] in ("set_output", "set_scan_current")],
-                         [("set_output", "CURR"), ("set_scan_current", 1.0), ("set_scan_current", 0.0),
-                          ("set_scan_current", 1.0), ("set_scan_current", 0.0), ("set_scan_current", 1.0)])
-        self.assertEqual(len([e for e in h.log if e[:2] == ("6221", "on")]), 1)
-        self.assertEqual([e[1] for e in h.log if e[0] == "sr830"], ["HARM 2", "HARM 3"])
-        self.assertEqual(h.panel.ppms_field_scan_total, 12)
-        self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
-
-    def test_stop_while_a_field_settles(self):
-        h = self.make_outer("Angle+Field", ("0", "2", "1"))
-        panel, real_read = h.panel, h.gauss.read_field
-        stepped, stopped = [], []
-        real_step = h.kepco.set_scan_current
-        h.kepco.set_scan_current = lambda value: (stepped.append(value), real_step(value))
-
-        def read():
-            reading = real_read()
-            if stepped and not stopped:
-                stopped.append(True)
-                panel.stop_ppms_field_scan()      # at the first read of field 2's settle
-            return reading
-        h.gauss.read_field = read
-        self.start(h)
-        h.showerror.assert_not_called()
-        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Stopped; KEPCO and 6221 zeroed; stage at +10.000°")
-        self.assertEqual(stepped, [1.0], "no further field")
-        moves = [e[2] for e in h.log if e[:2] == ("stage", "move")]
-        self.assertEqual(moves, [0.0, 10.0], "no move after the Stop: the stage stays at 10°")
-        self.assertEqual(len(self.rows(h)), 2)
-        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
-        events = self.without_notes(self.events(h))
-        self.assertEqual(events.count("field_programmed"), 2)
-        self.assertEqual(events.count("field_settled"), 1, "field 2 never settled")
-        self.assertEqual(events[-4:], ["stop_requested", "outputs_zeroed", "plot_snapshots", "run_finished"])
-        self.assertEqual(self.events(h)[-1]["outcome"], "stopped")
-        self.assert_closed(h)
-
-    def test_stop_during_the_return_to_the_first_angle(self):
-        h = self.make_outer("Angle+Field", ("0", "1", "1"), span=("0", "90", "90"))
-        panel = h.panel
-        real_step = h.kepco.set_scan_current
-
-        def step(value):
-            real_step(value)
-            # The next move is the return to 0°: Stop 3 s into it.
-            h.move_hooks[0.0] = lambda: h.clock.hooks.append((h.clock.t + 3.0, panel.stop_ppms_field_scan))
-        h.kepco.set_scan_current = step
-        self.start(h)
-        h.showerror.assert_not_called()
-        self.assertIn("STOP", h.sim.received[h.sim.received.index("X900000"):])
-        status = panel.ppms_field_scan_status_var.get()
-        self.assertTrue(status.startswith("Stopped; KEPCO and 6221 zeroed; stage stopped at +"), status)
-        where = float(status.rsplit(" ", 1)[1].rstrip("°"))
-        self.assertTrue(0 < where < 90, where)
-        self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0, 90.0, 0.0])
-        self.assertEqual(len(self.rows(h)), 2, "field 2 saved nothing")
-        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
-        self.assertFalse(h.stage.motion_may_run)
-
-    def test_a_stage_failure_in_the_first_sweep(self):
-        h = self.make_outer("Angle+Field", ("0", "1", "1"), sim=EndsShort())
-        self.start(h)
-        panel = h.panel
-        h.showerror.assert_called_once()
-        message = h.showerror.call_args.args[1]
-        self.assertIn("not at the target", message)
-        self.assertIn("Stage stopped at +9.999°", message)
-        self.assertIn("At the end: 6221 zeroed; KEPCO zeroed", message)
-        self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Failed: "))
-        self.assertEqual(self.names(h, "kepco", "6221"),
-                         [("6221", "on"), ("kepco", "set_output"), ("6221", "off")] + ZEROED,
-                         "the 6221 off at once, no next field, then both zeroed; the stage not moved again")
-        self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0, 10.0])
-        events = self.without_notes(self.events(h))
-        self.assertEqual(events[-4:], ["stage_failure", "outputs_zeroed", "plot_snapshots", "run_finished"])
-        self.assert_closed(h)
-
-    def test_a_field_that_cannot_be_set_switches_the_kepco_off_and_zeroes_both(self):
-        h = self.make_outer("Angle+Field", ("0", "1", "1"))
-        h.kepco.set_scan_current = Mock(side_effect=RuntimeError("KEPCO 4886 'CURR 1.000000' VI_ERROR_TMO"))
-        self.start(h)
-        self.assertEqual(self.names(h, "kepco", "6221"),
-                         [("6221", "on"), ("kepco", "set_output"), ("6221", "off"), ("kepco", "off")] + ZEROED)
-        self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0, 10.0], "no return move")
-        self.assertTrue(h.panel.ppms_field_scan_status_var.get().startswith("Failed: KEPCO 4886"))
-        self.assertEqual(self.events(h)[-1]["outcome"], "error")
 
     def test_angle_current_steps_the_6221_outside_the_angle_sweep(self):
         h = self.make_outer("Angle+Current", ("0.5", "1.5", "0.5"))
@@ -1495,9 +1349,132 @@ class OuterScanTests(RunLogBase):
         self.assertEqual([e[2] for e in h.log if e[:2] == ("stage", "move")], [0.0, 10.0])
         self.assertEqual(self.events(h)[-1]["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
 
+    def make_field_angle(self, typed, span=("-1", "1", "1"), trip=False, **kwargs):
+        """A Field+Angle scan (user, 2026-11-22): the typed stage angles
+        outside, the KEPCO's currents of ``span`` at each, with an LS475
+        that reads 100 G per A of the KEPCO's current."""
+        h = self.make(span=span, round_trip=False, **kwargs)
+        panel = h.panel
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Field+Angle")
+            panel._rte_mode_changed()
+        self.assertIs(panel.rte_round_trip.get(), True, "a field sweep goes and comes back by default")
+        panel.rte_round_trip.set(trip)
+        for variable, value in zip(panel.ppms_simple_range, span):
+            variable.set(value)
+        panel.rte_outer_ranges["Field+Angle"][0].set(typed)
+        h.gauss = FollowingGauss(h.log, h.kepco)
+        panel.rte_controllers["gauss"] = h.gauss
+        h.configured = []
+
+        def configure(settings):
+            h.configured.append(dict(settings))
+            h.log.append(("6221", "on", settings["current_rms_ma"], settings["frequency_hz"], threading.get_ident()))
+        panel._configure_ppms_transport_scan = configure
+        h.log.clear()
+        return h
+
+    def test_field_angle_sweeps_the_field_at_each_typed_angle(self):
+        """User, 2026-11-22: "add a Field+Angle scan mode ..., like
+        Angle+Field but the Angle is the outer loop and text input": the
+        stage turns to each typed angle, then the Field scan's sweep runs
+        there; the rows are plotted against the measured field, a curve per
+        angle."""
+        h = self.make_field_angle("0, 10")
+        self.start(h)
+        panel = h.panel
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV Field+Angle scan")
+        for text in ("Stage angle, the OUTER loop: 2 angles in the order typed: +0, +10°.",
+                     "KEPCO current at each angle, the INNER loop: from -1 A to +1 A (step 1 A), 3 currents a loop, "
+                     "1 loop(s) (voltage limit 5 V",
+                     "2 angles x 3 currents x 1 harmonic pass(es) = 6 points.",
+                     "2 stage moves, 10° of turning in all after the first.",
+                     "the 6221 and then the KEPCO are zeroed; the stage stays where the scan left it",
+                     "SAMPLE HOLDER with its wires attached", "Can the wires follow?"):
+            self.assertIn(text, question)
+        # The stage first, then that angle's sweep; the output switched on
+        # once, with the voltage limit, at the sweep's first current.
+        calls = [e[:3] for e in h.log if e[:2] in (("stage", "move"), ("kepco", "set_output"),
+                                                    ("kepco", "set_scan_current"))]
+        self.assertEqual(calls, [("stage", "move", 0.0), ("kepco", "set_output", "CURR"),
+                                 ("kepco", "set_scan_current", 0.0), ("kepco", "set_scan_current", 1.0),
+                                 ("stage", "move", 10.0), ("kepco", "set_scan_current", -1.0),
+                                 ("kepco", "set_scan_current", 0.0), ("kepco", "set_scan_current", 1.0)])
+        self.assertEqual([e[2:5] for e in h.log if e[:2] == ("kepco", "set_output")], [("CURR", -1.0, 5.0)])
+        self.assertEqual(len([e for e in h.log if e[:2] == ("6221", "on")]), 1)
+        rows = self.rows(h)
+        self.assertEqual([(r["scan_mode"], r["outer_angle_index"], float(r["stage_target_deg"]),
+                           float(r["stage_angle_deg"]), float(r["kepco_programmed_current_a"])) for r in rows],
+                         [("Field+Angle", index, angle, angle, current)
+                          for index, angle in (("1", 0.0), ("2", 10.0)) for current in (-1.0, 0.0, 1.0)])
+        for r in rows:
+            self.assertAlmostEqual(float(r["measured_field_g"]), 100.0 * float(r["kepco_programmed_current_a"]))
+            self.assertEqual(r["kepco_voltage_limit_v"], "5.0")
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; KEPCO and 6221 zeroed; stage at +10.000°")
+        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
+        events = self.events(h)
+        self.assertEqual([(e["step_index"], e["steps"], e["target_deg"]) for e in events if e["event"] == "stage_move"],
+                         [(1, 2, 0.0), (2, 2, 10.0)])
+        self.assertEqual([e["x_column"] for e in events if e["event"] == "point_saved"], ["measured_field_g"] * 6)
+        prepared = events[0]
+        self.assertEqual((prepared["mode"], prepared["plan"]["unit"], prepared["plan"]["points"]),
+                         ("Field+Angle", "A (KEPCO)", 3))
+        self.assertEqual(prepared["outer"], {"typed": "0, 10", "unit": "deg (stage)", "steps": 2, "values": [0.0, 10.0],
+                                             "order": "outer first, in the order typed; the field sweep inner"})
+        self.assertEqual(prepared["kepco"], {"current_a": "the plan", "voltage_limit_v": 5.0})
+        self.assertIn("stage_at_start", prepared)
+        self.assertEqual(events[-1]["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
+        self.assertEqual(events[-1]["stage"], "stage at +10.000°")
+        self.assertEqual({entry[-1] for entry in h.log}, {h.worker}, "all on the worker")
+        self.assert_closed(h)
+        # The plots: against the measured field, a curve per typed angle.
+        self.assertEqual(panel.ppms_plot_axis, "field")
+        drawn = next(c for c in reversed(h.draw.call_args_list) if c.args[1])
+        self.assertEqual(drawn.args[2], "Measured magnetic field (G)")
+        self.assertEqual({" ".join(name.split(" ")[1:3]) for name in drawn.args[1]}, {"#1 +0°", "#2 +10°"})
+        self.assertEqual({len(points) for points in drawn.args[1].values()}, {3})
+
+    def test_field_angle_refuses_a_bad_list_before_anything_moves(self):
+        for typed, message in (("", "Outer stage °: type the stage angles in degrees in the order to scan"),
+                               ("0, 400", "stage angles must stay within +/-360° of the stage zero (the sample wires); "
+                                          "400° is outside"),
+                               ("0, a", 'Outer stage °: "a" is not a number')):
+            with self.subTest(typed=typed):
+                h = self.make_field_angle(typed)
+                self.start(h)
+                h.askyesno.assert_not_called()
+                self.assertEqual(h.showerror.call_args.args[0], "SHHV scan parameters")
+                self.assertIn(message, h.showerror.call_args.args[1])
+                self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
+        # A sweep current beyond the supply's limit, as a Field scan's.
+        h = self.make_field_angle("0", span=("-11", "1", "1"))
+        self.start(h)
+        self.assertIn("KEPCO sweep current must stay within +/-10 A", h.showerror.call_args.args[1])
+        self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
+
+    def test_field_angle_stop_during_the_turn_to_the_second_angle(self):
+        h = self.make_field_angle("0, 90")
+        panel = h.panel
+        # Stop 3 s into the move to 90°.
+        h.move_hooks[90.0] = lambda: h.clock.hooks.append((h.clock.t + 3.0, panel.stop_ppms_field_scan))
+        self.start(h)
+        h.showerror.assert_not_called()
+        status = panel.ppms_field_scan_status_var.get()
+        self.assertTrue(status.startswith("Stopped; KEPCO and 6221 zeroed; stage stopped at +"), status)
+        where = float(status.rsplit(" ", 1)[1].rstrip("°"))
+        self.assertTrue(0 < where < 90, where)
+        self.assertEqual(len(self.rows(h)), 3, "the first angle's sweep saved, nothing at the second")
+        self.assertEqual([e[2] for e in h.log if e[:2] == ("kepco", "set_scan_current")], [0.0, 1.0],
+                         "no current after the Stop")
+        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
+        self.assertEqual(self.events(h)[-1]["outcome"], "stopped")
+        self.assertFalse(h.stage.motion_may_run)
+
     def test_the_other_modes_are_unchanged_by_the_outer_row(self):
-        # An Angle scan after an Angle+Field one: no outer column, one held field.
-        h = self.make_outer("Angle+Field", ("0", "1", "1"))
+        # An Angle scan after an Angle+Current one: no outer column, one held field.
+        h = self.make_outer("Angle+Current", ("0.5", "1", "0.5"))
         self.start(h)
         panel = h.panel
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):

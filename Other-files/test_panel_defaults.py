@@ -61,16 +61,19 @@ class PanelDefaultTests(unittest.TestCase):
         # The PPMS page keeps its own excitation.
         self.assertEqual(self.app.ppms_panel.ppms_transport_frequency_var.get(), "317.3")
         # The start-up scan (user's figures, 2026-10-18, 2026-11-16 and
-        # 2026-11-17): Angle+Field2, the stage 0 to -360 deg in 5 deg steps,
+        # 2026-11-17): Angle+Field, the stage 0 to -360 deg in 5 deg steps,
         # Settle s 0.5, Acquire s 5, Loops 1, outer fields 200 to 1000 G
         # (user, 2026-11-20: "default field to this"; to 1100 G before);
         # round trip off since 2026-10-18 (user: "default not click Round
         # trip").  Angle+Field (from 2026-10-19 to 2026-11-16 the start-up
         # mode) keeps its outer KEPCO 3 to 9 A in 1 A steps.
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
-        self.assertEqual(panel.rte_outer_ranges["Angle+Field2"][0].get(),
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
+        self.assertEqual(panel.rte_outer_ranges["Angle+Field"][0].get(),
                          "200, 300, 400, 500, 600, 700, 800, 900, 1000")
-        self.assertEqual([v.get() for v in panel.rte_outer_ranges["Angle+Field"]], ["3", "9", "1"])
+        # The first Angle+Field (a range of supply currents) is gone and
+        # Angle+Field has its name (user, 2026-11-22).
+        self.assertEqual(len(panel.rte_outer_ranges["Angle+Field"]), 1)
+        self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2")])
         self.assertEqual([v.get() for v in panel.ppms_simple_range], ["0", "-360", "5"])
         self.assertIs(panel.rte_round_trip.get(), False)
         self.assertEqual((panel.ppms_field_scan_stable_var.get(), panel.ppms_acquisition_time_var.get(),

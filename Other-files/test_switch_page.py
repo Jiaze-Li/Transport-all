@@ -208,13 +208,13 @@ class SwitchPageTests(unittest.TestCase):
         """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
         the switch scan to the selection like angle + field2 scan".  The box
         is "Scan"; Switch is the last choice; the page still starts on
-        Angle+Field2, where the pulse row and the time row are off screen."""
+        Angle+Field, where the pulse row and the time row are off screen."""
         panel = ete.build_page(kepco=False)
         self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))
-        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Angle+Current", "Switch"))
+        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Field+Angle", "Switch"))
         self.assertEqual(panel.rte_start_button.parent.parent.options["text"], "Scan")
-        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
-        self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
+        self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field"][0])
         pulse_row = panel.rte_pulse_widgets
         self.assertEqual([w.options.get("text") for w in pulse_row[:2] + pulse_row[3:4]],
                          ["6221 write", "Pulse µs", "Pulses"])
@@ -244,7 +244,7 @@ class SwitchPageTests(unittest.TestCase):
                              before)
             # Another mode: both rows go again.
             draw.reset_mock()
-            panel.ppms_simple_mode.set("Angle+Field2")
+            panel.ppms_simple_mode.set("Angle+Field")
             panel._rte_mode_changed()
             self.assertEqual({w.grid_removed for w in pulse_row}, {True})
             self.assertTrue(panel.rte_time_frame.grid_removed)

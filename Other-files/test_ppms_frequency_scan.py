@@ -994,10 +994,10 @@ class SHVUnchangedTests(unittest.TestCase):
         # The page's own list, RTE_SCAN_MODES.
         self.assertIn("values=self.rte_scan_modes", source)
         self.assertIs(app.RTEPanel.rte_scan_modes, app.RTE_SCAN_MODES)
-        # Angle+Field2 is SHHV's own (user, 2026-11-17); Switch is the last
+        # Angle+Field is SHHV's own (user, 2026-11-17); Switch is the last
         # choice since 2026-11-22 (user); no frequency mode.
         self.assertEqual(app.RTE_SCAN_MODES,
-                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Field2", "Angle+Current", "Switch"))
+                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Current", "Field+Angle", "Switch"))
         for name in ("Frequency", "PPMS_SCAN_MODES", "_ppms_frequency_scan_block", "_ppms_set_up_frequency",
                      "_ppms_wait_zurich_reference", "reference_timeout_s", "frequency_settle_s"):
             self.assertNotIn(name, source.replace("RTE_TRANSPORT_FREQUENCY_HZ", "").replace("Frequency Hz", ""))

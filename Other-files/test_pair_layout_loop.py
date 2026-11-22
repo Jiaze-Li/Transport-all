@@ -389,7 +389,9 @@ class RTEStageBlockTests(Built, unittest.TestCase):
 
         try:
             heights = {}
-            for mode in ("Angle", "Angle+Field", "Angle+Current"):
+            # Angle+Current's range row, the only one since 2026-11-22 (the
+            # first Angle+Field, with its range of supply currents, is gone).
+            for mode in ("Angle", "Angle+Current"):
                 choose(mode, 1101, CI_SHOT_HEIGHT)
                 heights[mode] = scan.winfo_height()
                 if mode == "Angle":
@@ -414,9 +416,8 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                     self.assertLessEqual(font.measure(panel.rte_outer_label.get()), outer[0].winfo_width(),
                                          "the label shows in full")
             print(f"SHHV scan box at 1101x{CI_SHOT_HEIGHT} px: {heights} px tall")
-            self.assertEqual(heights["Angle+Field"], heights["Angle"], "no height in the 1101 px window")
-            self.assertEqual(heights["Angle+Current"], heights["Angle"])
-            for mode in ("Angle+Field", "Angle+Current"):
+            self.assertEqual(heights["Angle+Current"], heights["Angle"], "no height in the 1101 px window")
+            for mode in ("Angle+Current",):
                 choose(mode, LAB_WIDE, self.height)
                 with self.subTest(mode=mode, width=LAB_WIDE):
                     self.assertEqual(panel.rte_outer_place, "under")
@@ -427,10 +428,10 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                                          (theirs.winfo_rootx(), theirs.winfo_width()))
                     self.assertGreater(outer[0].winfo_rooty(), rows.grid_slaves(row=2, column=0)[0].winfo_rooty())
         finally:
-            choose("Angle+Field", LAB_WIDE, self.height)
+            choose("Angle", LAB_WIDE, self.height)
 
-    def test_angle_field2_list_row_fits_and_costs_no_height(self):
-        """Angle+Field2's list row (user, 2026-11-17: the outer fields
+    def test_angle_field_list_row_fits_and_costs_no_height(self):
+        """Angle+Field's list row (user, 2026-11-17: the outer fields
         typed in any order): beside the main row in the 1101 px window, so
         the scan box is as tall as an Angle scan's, under it at 2000 px; its
         box shows in full inside the scan box in both."""
@@ -450,15 +451,15 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         try:
             heights = {}
             for width, height in ((1101, CI_SHOT_HEIGHT), (LAB_WIDE, self.height)):
-                for mode in ("Angle", "Angle+Field2"):
+                for mode in ("Angle", "Angle+Field"):
                     choose(mode, width, height)
                     heights[(mode, width)] = scan.winfo_height()
-                series = panel.rte_outer_ranges["Angle+Field2"][0].get()
+                series = panel.rte_outer_ranges["Angle+Field"][0].get()
                 text_font = tkinter.font.nametofont("TkTextFont")
-                print(f"SHHV Angle+Field2 at {width} px: list row {panel.rte_outer_place}, "
+                print(f"SHHV Angle+Field at {width} px: list row {panel.rte_outer_place}, "
                       f"{getattr(panel, 'rte_outer_numbers', None)}, box {entry.winfo_width()} px "
                       f"(asks {entry.winfo_reqwidth()} px, {panel.rte_outer_list_chars} chars; the series "
-                      f"{text_font.measure(series)} px), scan box {heights[('Angle+Field2', width)]} px tall")
+                      f"{text_font.measure(series)} px), scan box {heights[('Angle+Field', width)]} px tall")
                 with self.subTest(width=width):
                     self.assertTrue(label.winfo_ismapped() and entry.winfo_ismapped())
                     self.assertFalse(any(w.winfo_ismapped() for w in outer), "the range row hidden")
@@ -477,7 +478,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                     font = tkinter.font.nametofont("TkDefaultFont")
                     self.assertLessEqual(font.measure(panel.rte_outer_label.get()), label.winfo_width(),
                                          "the label shows in full")
-            self.assertEqual(heights[("Angle+Field2", 1101)], heights[("Angle", 1101)],
+            self.assertEqual(heights[("Angle+Field", 1101)], heights[("Angle", 1101)],
                              "no height in the 1101 px window")
         finally:
             choose("Angle", LAB_WIDE, self.height)

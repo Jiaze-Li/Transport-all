@@ -266,7 +266,8 @@ class RTE(unittest.TestCase):
         panel.ppms_simple_mode.set('Field')
         panel._rte_mode_changed()
         self.assertTrue(panel.rte_round_trip.get())
-        self.assertEqual([v.get() for v in panel.ppms_simple_range], ['-3', '3', '0.05'])
+        # The user's figure, 2026-11-22 ("default setting as the fig"); -3 to 3 A in 0.05 A before.
+        self.assertEqual([v.get() for v in panel.ppms_simple_range], ['-1', '1', '0.02'])
         panel.ppms_simple_mode.set('Current')
         panel._rte_mode_changed()
         self.assertFalse(panel.rte_round_trip.get())
@@ -444,11 +445,11 @@ class RTE(unittest.TestCase):
             stack.enter_context(patch.object(app.CombinedControlApp, '_set_connection_indicator', Mock()))
             stack.enter_context(patch.object(app.CombinedControlApp, '_draw_nonlocal_series', Mock()))
             panel = app.RTEPanel(parent, Widget())
-            # The start-up scan is the user's Angle+Field2 scan (2026-11-17;
+            # The start-up scan is the user's Angle+Field scan (2026-11-17;
             # Angle from 2026-11-16, Angle+Field from 2026-10-19);
             # Angle+Field keeps its outer range.
-            self.assertEqual(panel.ppms_simple_mode.get(), 'Angle+Field2')
-            self.assertEqual([v.get() for v in panel.rte_outer_ranges['Angle+Field']], ['3', '9', '1'])
+            self.assertEqual(panel.ppms_simple_mode.get(), 'Angle+Field')
+            self.assertEqual(len(panel.rte_outer_ranges['Angle+Field']), 1)
             # Round trip off (user, 2026-10-18: "default not click Round trip").
             self.assertFalse(panel.rte_round_trip.get())
             self.assertEqual([v.get() for v in panel.ppms_simple_range], ['0', '-360', '5'])
