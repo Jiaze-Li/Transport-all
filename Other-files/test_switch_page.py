@@ -449,6 +449,37 @@ class SwitchScanTests(SwitchScan):
                          "Pulse -5 mA x 1 (50 µs) sent; the 6221 REACHED COMPLIANCE (100 V); 6221 off")
         self.assertEqual(h.fake.trains[-1]["SOUR:WAVE:OFFS"], -2.5e-3)
 
+    def test_apply_pulse_that_fails_after_the_start_says_the_pulse_went_out(self):
+        """Review, 2026-11-22: an error after SOUR:WAVE:INIT was shown as a
+        plain failure, though the pulse had been delivered."""
+        h = self.make_switch()
+        panel = h.panel
+        panel.rte_pulse_current_ma.set("5")
+        real_query = panel._ppms_query_numbers
+
+        def query(key, command, count):
+            if key == "6221" and command == "OUTP?" and h.fake.trains and not h.fake.sent[-1].startswith("OUTP OFF"):
+                raise RuntimeError("VI_ERROR_TMO")
+            return real_query(key, command, count)
+        panel._ppms_query_numbers = query
+        panel._rte_apply_pulse()
+        self.pump(h)
+        message = h.showerror.call_args.args[1]
+        self.assertIn("The +5 mA pulse was started and has most likely been delivered, but its end was not "
+                      "confirmed: VI_ERROR_TMO. The 6221 has been switched off.", message)
+        self.assertEqual(len(h.fake.trains), 1)
+        self.assertEqual(h.fake.output, 0)
+        self.assertIs(panel.ppms_environment_busy, False)
+        # A failure before the start is the plain one.
+        h2 = self.make_switch()
+        h2.panel.rte_pulse_current_ma.set("5")
+        h2.fake.readback["SOUR:WAVE:AMPL"] = 9e-3
+        h2.panel._rte_apply_pulse()
+        self.pump(h2)
+        self.assertIn("6221 pulse amplitude readback mismatch", h2.showerror.call_args.args[1])
+        self.assertNotIn("most likely been delivered", h2.showerror.call_args.args[1])
+        self.assertEqual(h2.fake.trains, [])
+
     def test_apply_pulse_is_refused_as_a_scan_pulse_is(self):
         h = self.make_switch()
         panel = h.panel

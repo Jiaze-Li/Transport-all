@@ -58143,7 +58143,7 @@ class RTEPanel(PPMSPanel):
                             (entry, dict(row=3, column=2 * column + 1, padx=3, sticky='ew'))]
             self.rte_edit_widgets.append((entry, 'normal'))
         self.rte_apply_pulse_button = ttk.Button(body, text='Apply pulse', command=self._rte_apply_pulse, width=11)
-        pulse_parts.append((self.rte_apply_pulse_button, dict(row=3, column=6, padx=4)))
+        pulse_parts.append((self.rte_apply_pulse_button, dict(row=3, column=6, padx=4, sticky='')))
         self.rte_edit_widgets.append((self.rte_apply_pulse_button, 'normal'))
         self.rte_apply_pulse_parts = pulse_parts
         for widget, options in pulse_parts:
@@ -58604,13 +58604,22 @@ class RTEPanel(PPMSPanel):
                             place = 'under lock-ins'
                     except (tk.TclError, ValueError):
                         return
+                try:
+                    # Each time, not only when the place changes (review,
+                    # 2026-11-22): the stage block grows when its line wraps.
+                    # The cell is at least as tall as the block and the row
+                    # under it, by what the row's parts ask for.
+                    lockins_line.rowconfigure(0, minsize=(
+                        stage_box.winfo_reqheight() + 4 + max(widget.winfo_reqheight() for widget, _options
+                                                              in pulse_parts)) if place == 'beside lock-ins' else 0)
+                except tk.TclError:
+                    return
                 if getattr(pulse_box, '_rte_pulse_place', None) == place:
                     return
                 pulse_box._rte_pulse_place = place
                 try:
                     if place == 'params':
                         pulse_box.grid_remove()
-                        lockins_line.rowconfigure(0, minsize=0)
                         for widget, options in pulse_parts:
                             widget.grid(in_=params, columnspan=1, pady=0, **options)
                             self._stfmr_lockin_raise(widget, params)
@@ -58619,15 +58628,14 @@ class RTEPanel(PPMSPanel):
                         widget.grid(in_=pulse_box, row=0, column=column, columnspan=1, pady=0,
                                     padx=options.get('padx', 0), sticky='w')
                     if place == 'beside lock-ins':
-                        # In the lock-ins' rows, at the cell's foot; the cell
-                        # is at least as tall as the block and the row.
-                        lockins_line.rowconfigure(0, minsize=stage_box.winfo_reqheight() + 4
-                                                  + pulse_box.winfo_reqheight())
+                        # In the lock-ins' rows, at the cell's foot.
                         pulse_box.grid(in_=lockins_line, row=0, column=1, columnspan=1, sticky='sw',
                                        padx=(16, 0), pady=0)
                     else:
-                        lockins_line.rowconfigure(0, minsize=0)
-                        pulse_box.grid(in_=lockins_line, row=2, column=0, columnspan=1, sticky='nw',
+                        # Under the lock-ins (and the block, if it is under
+                        # them too), across both columns so that a row wider
+                        # than the lock-ins moves nothing.
+                        pulse_box.grid(in_=lockins_line, row=2, column=0, columnspan=2, sticky='nw',
                                        padx=0, pady=(4, 0))
                     pulse_box.lift()
                     for widget, _options in pulse_parts:
@@ -58640,6 +58648,9 @@ class RTEPanel(PPMSPanel):
             controls.bind('<Configure>', arrange_stage_block, add='+')
             controls.bind('<Configure>', arrange_pulse_row, add='+')
             body.bind('<Configure>', arrange_stage_block, add='+')
+            # The row's own fit is judged on the body's width, so on the
+            # body's <Configure> too (review, 2026-11-22).
+            body.bind('<Configure>', arrange_pulse_row, add='+')
             arrange_stage_block()
 
             def arrange_outer_row(_event=None):
@@ -60481,6 +60492,10 @@ class RTEPanel(PPMSPanel):
             self._require_ppms_control_ready()
             if not self.ppms_instrument_controllers['6221'].connected:
                 raise RuntimeError('Connect the Keithley 6221 first')
+            if self.__dict__.get('rte_lakeshore_zero_pending', 0) > 0:
+                # As Set field (review, 2026-11-22): a pulse confirmed now
+                # would wait behind the ramp and fire when it ends.
+                raise RuntimeError(f'The {self._rte_supply_label()} is ramping to 0 A: wait for it, then Apply pulse')
             try:
                 current_ma = float(self.rte_pulse_current_ma.get())
                 width_s = float(self.rte_pulse_width_us.get()) / 1e6
@@ -60507,11 +60522,18 @@ class RTEPanel(PPMSPanel):
         self.rte_switch_compliance_readable = True
 
         def operation():
+            self.rte_switch_pulse_started = False
             try:
                 return self._rte_switch_pulse(current_ma, pulse)
-            except BaseException:
+            except BaseException as error:
                 # A failed or stopped pulse leaves the 6221 off.
                 self._stop_ppms_transport_source()
+                if self.rte_switch_pulse_started and isinstance(error, Exception):
+                    # After INIT (review, 2026-11-22): a 50 µs pulse is over
+                    # long before anything here can fail or be stopped.
+                    raise RuntimeError(
+                        f'The {current_ma:+g} mA pulse was started and has most likely been delivered, but its '
+                        f'end was not confirmed: {error}. The 6221 has been switched off.') from error
                 raise
 
         def done(result):
@@ -60735,6 +60757,9 @@ class RTEPanel(PPMSPanel):
         self._rte_wait(0)
         for command in ('SOUR:WAVE:ARM', 'OUTP ON', 'SOUR:WAVE:INIT'):
             self._ppms_write_6221_checked(command)
+        # From here the train has been started: Apply pulse says so when
+        # what follows fails (review, 2026-11-22).
+        self.rte_switch_pulse_started = True
         self._rte_wait(2.0 * width_s * count + SWITCH_PULSE_DONE_MARGIN_S)
         still_on = self._ppms_query_numbers('6221', 'OUTP?', 1)[0] != 0
         in_compliance = self._rte_switch_compliance_event()
