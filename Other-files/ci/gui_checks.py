@@ -354,6 +354,17 @@ def main():
                     page = f"{name}_{sub}" if sub else name
                     shot = args.shots / f"{page}_{root.winfo_width()}px.png"
                     print(f"       screenshot: {screenshot(root, tab, shot)}")
+                    if name == "SHHV":
+                        # SHHV with its Switch mode chosen (user, 2026-11-22),
+                        # then back on the mode it had.
+                        panel, was = app.rte_panel, app.rte_panel.ppms_simple_mode.get()
+                        panel.ppms_simple_mode.set("Switch")
+                        panel._rte_mode_changed()
+                        shot = args.shots / f"SHHV_Switch-mode_{root.winfo_width()}px.png"
+                        print(f"       screenshot: {screenshot(root, tab, shot)}")
+                        panel.ppms_simple_mode.set(was)
+                        panel._rte_mode_changed()
+                        root.update()
         finally:
             app.closing = True
             app.safe_close_hardware()

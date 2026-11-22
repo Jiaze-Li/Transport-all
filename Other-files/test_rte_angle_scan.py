@@ -1917,7 +1917,7 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual((block.grid_options["row"], block.grid_options["column"]), (1, 0))
         rows = panel.rte_start_button.parent
         scan = rows.parent
-        self.assertEqual(scan.options.get("text"), "SHHV scan")
+        self.assertEqual(scan.options.get("text"), "Scan")       # user, 2026-11-22
         self.assertFalse([w for w in Recorder.made if w.parent is scan and w is not rows
                           and "row" in w.grid_options and w.grid_options["row"] == 0], "only the scan rows on top")
         # Three scan rows (mode/Start/End/Step; units/Loops/Settle s/Acquire
@@ -1929,8 +1929,11 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
                           if w.parent is rows and "row" in w.grid_options and not w.grid_removed}, {0, 1, 2, 3})
         self.assertEqual({w.grid_options["row"] for w, _options in panel.rte_outer_list_widgets}, {3})
+        # Hidden: the range row of the other outer modes (row 3) and the
+        # Switch mode's pulse row (row 4; user, 2026-11-22).
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
-                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {3})
+                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {3, 4})
+        self.assertEqual({w.grid_options["row"] for w in panel.rte_pulse_widgets}, {4})
         labels = {w.options["text"]: w for w in Recorder.made
                   if w.parent is block and "text" in w.options and "command" not in w.options}
         buttons = {w.options.get("text"): w for w in Recorder.made if "command" in w.options}
@@ -1969,9 +1972,10 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHHV")
         self.assertIsNone(panel.rte_controllers["newmark"].dll, "no DLL is loaded before Connect")
         combo = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_simple_mode)
-        # Angle+Field2 after Angle+Field (user, 2026-11-17).
+        # Angle+Field2 after Angle+Field (user, 2026-11-17); Switch last
+        # (user, 2026-11-22).
         self.assertEqual(combo.options["values"],
-                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Field2", "Angle+Current"))
+                         ("Field", "Current", "Angle", "Angle+Field", "Angle+Field2", "Angle+Current", "Switch"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3093,10 +3097,11 @@ class OuterListTests(unittest.TestCase):
     def test_the_mode_and_its_row(self):
         self.assertIn("Angle+Field2", app.RTE_SCAN_MODES)
         self.assertIn("Angle+Field2", app.RTE_ANGLE_MODES)
-        # The Switch page's scan steps the magnet too (user, 2026-11-21); it
-        # is not one of the SHHV page's modes.
+        # The Switch scan steps the magnet too (user, 2026-11-21); it is the
+        # SHHV page's last mode since 2026-11-22 and turns no stage.
         self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Angle+Field2", "Switch"))
-        self.assertNotIn("Switch", app.RTE_SCAN_MODES)
+        self.assertEqual(app.RTE_SCAN_MODES[-1], "Switch")
+        self.assertNotIn("Switch", app.RTE_ANGLE_MODES)
         row = app.RTE_OUTER_ROWS["Angle+Field2"]
         self.assertEqual((row["label"], row["index_column"], row.get("listed")),
                          ("Outer field G:", "outer_field_index", True))

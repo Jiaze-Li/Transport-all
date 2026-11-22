@@ -3604,7 +3604,10 @@ RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 # field is reached as Set field reaches it (run_magnet_field_set against the
 # LS475, within Set field's tolerance box), and the current is then left
 # there for that field's whole angle sweep.
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current')
+# Switch, the Switch page's scan, is the last choice here too (user,
+# 2026-11-22: "add the switch scan to the selection like angle + field2
+# scan").
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current', 'Switch')
 # The modes that turn the stage (the stage check at Start, the stage columns).
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Field2', 'Angle+Current')
 # The Switch page's one scan (user, 2026-11-21: "add a Switch module containing
@@ -57585,6 +57588,9 @@ class RTEPanel(PPMSPanel):
     # page (SwitchPanel) has its own.
     rte_scan_modes = RTE_SCAN_MODES
     rte_default_scan_mode = RTE_DEFAULT_SCAN_MODE
+    # The scan box's title (user, 2026-11-22: "change the name of SHHV scan
+    # to Scan"); the dialogs still name the page.
+    rte_scan_box_title = 'Scan'
     # The SR830s whose connection row and harmonic row the page shows: all
     # three on SHHV; the Switch page shows SR830-1 only (user, 2026-11-21:
     # "hide the SR830-2, SR830-3 rows in Switch").  A hidden lock-in keeps
@@ -57714,8 +57720,95 @@ class RTEPanel(PPMSPanel):
         self._rte_magnet_choice_changed()
         # Setting the variables does not fire the checkbutton commands, so the
         # harmonic plot rows have to be rebuilt for the new selection.
+        # First the row for the lock-in's X against time (user, 2026-11-21:
+        # "add a row to show the SR830 x signal vs time pls"), one plot
+        # across the three columns, under the harmonic rows; on screen while
+        # the plots show a Switch scan (_rte_time_row_shown).
+        frame = ttk.LabelFrame(self.ppms_plot_frame, text=SWITCH_TIME_ROW_TITLE, padding=2)
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background='white',
+                           highlightthickness=0)
+        canvas.ppms_compact_plot = True
+        canvas.grid(row=0, column=0, sticky='nsew')
+        canvas.bind('<Configure>', lambda event: self._redraw_switch_time_plot())
+        self.rte_time_frame, self.rte_time_canvas, self.rte_time_row_on = frame, canvas, False
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
+
+    def _rte_time_row_shown(self):
+        """The time row is on screen while the plots are a Switch scan's:
+        the Switch mode chosen with no other scan's points shown, or the
+        points of a Switch scan (the plots' axis is then the pulse current)."""
+        return self.__dict__.get('ppms_plot_axis') == 'pulse'
+
+    def _rte_plot_axis_changed(self):
+        """After the plots' axis is set (a mode chosen, a scan started):
+        the time row comes or goes with the pulse axis, and the plots are
+        drawn again."""
+        if (self.__dict__.get('rte_time_frame') is not None
+                and self._rte_time_row_shown() != self.__dict__.get('rte_time_row_on', False)):
+            self._refresh_ppms2_plot_layout()       # draws the plots too
+        else:
+            self._redraw_ppms_transport_plot()
+
+    def _switch_time_order(self):
+        """The harmonic order the time row shows and its lock-ins: the
+        lowest one measured, the page's first row of plots."""
+        orders = self._ppms2_measured_orders()
+        for order in PPMS_HARMONIC_ORDERS:
+            if orders.get(order):
+                return order, orders[order]
+        return None, []
+
+    def _refresh_ppms2_plot_layout(self):
+        """The harmonic rows, then for a Switch scan the time row under
+        the last of them with an equal share of the height."""
+        super()._refresh_ppms2_plot_layout()
+        frame = self.__dict__.get('rte_time_frame')
+        if frame is None:
+            return      # the rack's own construction, before the row is made
+        self.rte_time_row_on = self._rte_time_row_shown()
+        if not self.rte_time_row_on:
+            frame.grid_remove()
+            return
+        orders = self._ppms2_measured_orders()
+        row = sum(1 for order in PPMS_HARMONIC_ORDERS if orders.get(order))
+        order, meters = self._switch_time_order()
+        names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in meters)
+        frame.configure(text=SWITCH_TIME_ROW_TITLE + (f' — {PPMS_HARMONIC_LABELS[order]}, {names}' if meters else ''))
+        frame.grid(row=row, column=0, columnspan=3, sticky='nsew')
+        self.ppms_plot_frame.rowconfigure(row, weight=1, uniform='ppms_plot_rows')
+        self._redraw_switch_time_plot()
+
+    def _redraw_switch_time_plot(self):
+        """The time row: each saved point's X (the reading averaged over
+        Acquire s, in volts) against the scan's elapsed time, its
+        ``elapsed_s`` column, one curve per lock-in and harmonic pass in the
+        lock-in's colour.  Nothing is read for it."""
+        canvas = self.__dict__.get('rte_time_canvas')
+        if canvas is None or not self._rte_time_row_shown():
+            return
+        order, meters = self._switch_time_order()
+        series, colors, markers = {}, {}, {}
+        for meter in meters:
+            resolve_prefix = self._ppms2_prefix_resolver(meter, order)
+            label = PPMS_SR830_LABELS.get(meter, 'Zurich')
+            for row in self.ppms_field_scan_rows:
+                elapsed, prefix = row.get('elapsed_s'), resolve_prefix(row)
+                if prefix is None or not isinstance(elapsed, (int, float)):
+                    continue
+                value = row.get(prefix + 'x_v')
+                if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    continue
+                name = f"{label} P{row.get('harmonic_pass', 1)}"
+                series.setdefault(name, []).append((elapsed, value))
+                colors[name] = PPMS_METER_COLORS.get(meter, '#666666')
+                if meter == 'zurich':
+                    markers[name] = 'open_circle'
+        self._draw_nonlocal_series(canvas, series, 'Time (s)', 'X voltage', 'Waiting for scan data', markers=True,
+                                   auto_voltage_unit=True, show_legend=False, series_colors=colors,
+                                   series_markers=markers)
 
     def __getattr__(self, name):
         if name.startswith('rte_'):
@@ -58087,7 +58180,7 @@ class RTEPanel(PPMSPanel):
         if laid_out:
             live.configure(wraplength=32 * tkfont.nametofont('TkDefaultFont', root=live).measure('0'))
 
-        scan = ttk.LabelFrame(controls, text=f'{self.ppms_page_name} scan', padding=4)
+        scan = ttk.LabelFrame(controls, text=self.rte_scan_box_title, padding=4)
         scan.grid(row=0, column=1, sticky='nsew', padx=(6, 0))
         scan.columnconfigure(0, weight=1)
         # The scan rows keep their own width; the spare width is right of
@@ -58133,21 +58226,27 @@ class RTEPanel(PPMSPanel):
         # three variables, so a value is never read in the other's unit.
         self.rte_outer_ranges = {mode: [tk.StringVar(value=v) for v in row['defaults']]
                                  for mode, row in RTE_OUTER_ROWS.items()}
-        if SWITCH_SCAN_MODE in self.rte_scan_modes:
-            # The Switch page's write pulse (user, 2026-11-21), a row of its
-            # own under the scan's rows: the width of each pulse and how many
-            # make one write.  The pulse currents are the scan's Start / End /
-            # Step; the compliance is the rack's 6221 box, for the pulse and
-            # the read.  Only this page has the row, so SHHV's box is as before.
-            self.rte_pulse_width_us = tk.StringVar(value=f'{SWITCH_DEFAULT_PULSE_WIDTH_US:g}')
-            self.rte_pulse_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
-            ttk.Label(scan_rows, text='6221 write').grid(row=4, column=0)
-            for i, (label, variable) in enumerate((('Pulse µs', self.rte_pulse_width_us),
-                                                   ('Pulses', self.rte_pulse_count))):
-                ttk.Label(scan_rows, text=label).grid(row=4, column=1 + 2*i, sticky='e', padx=(4, 0))
-                entry = ttk.Entry(scan_rows, textvariable=variable, width=6)
-                entry.grid(row=4, column=2 + 2*i, padx=2, sticky='ew')
-                self.rte_edit_widgets.append((entry, 'normal'))
+        # The Switch scan's write pulse (user, 2026-11-21), a row of its own
+        # under the scan's rows: the width of each pulse and how many make
+        # one write.  The pulse currents are the scan's Start / End / Step;
+        # the compliance is the rack's 6221 box, for the pulse and the read.
+        # On SHHV too since Switch is one of its modes (user, 2026-11-22);
+        # shown only while the mode is Switch (_rte_show_pulse_row), so every
+        # other mode's box is as before.
+        self.rte_pulse_width_us = tk.StringVar(value=f'{SWITCH_DEFAULT_PULSE_WIDTH_US:g}')
+        self.rte_pulse_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
+        self.rte_pulse_widgets = [ttk.Label(scan_rows, text='6221 write')]
+        self.rte_pulse_widgets[0].grid(row=4, column=0)
+        for i, (label, variable) in enumerate((('Pulse µs', self.rte_pulse_width_us),
+                                               ('Pulses', self.rte_pulse_count))):
+            name = ttk.Label(scan_rows, text=label)
+            name.grid(row=4, column=1 + 2*i, sticky='e', padx=(4, 0))
+            entry = ttk.Entry(scan_rows, textvariable=variable, width=6)
+            entry.grid(row=4, column=2 + 2*i, padx=2, sticky='ew')
+            self.rte_edit_widgets.append((entry, 'normal'))
+            self.rte_pulse_widgets += [name, entry]
+        for widget in self.rte_pulse_widgets:
+            widget.grid_remove()
         self.rte_outer_label = tk.StringVar(value=RTE_OUTER_ROWS['Angle+Field']['label'])
         self.rte_outer_widgets, self.rte_outer_entries = [], []
         outer_label = ttk.Label(scan_rows, textvariable=self.rte_outer_label)
@@ -58541,10 +58640,20 @@ class RTEPanel(PPMSPanel):
         for variable, value in zip(self.ppms_simple_range, defaults):
             variable.set(value)
         self._rte_show_scan_units(mode)
+        self._rte_show_pulse_row(mode)
         self._rte_show_outer_row(mode)
         if not self.ppms_field_scan_rows:
             self.ppms_plot_axis = 'current' if current else 'angle' if angle else 'pulse' if switch else 'field'
-            self._redraw_ppms_transport_plot()
+            self._rte_plot_axis_changed()
+
+    def _rte_show_pulse_row(self, mode):
+        """The write pulse's row (6221 write, Pulse µs, Pulses): on screen
+        while the mode is Switch, removed (grid_remove) in every other."""
+        for widget in self.__dict__.get('rte_pulse_widgets') or ():
+            if mode == SWITCH_SCAN_MODE:
+                widget.grid()
+            else:
+                widget.grid_remove()
 
     def _rte_show_scan_units(self, mode):
         """The scan box's units and note for ``mode``, naming the chosen
@@ -60008,7 +60117,7 @@ class RTEPanel(PPMSPanel):
                 self.ppms_field_scan_status_var.set(
                     f'{self.ppms_page_name} {mode}: {len(outer)} {steps} x {len(plan)} angles; {self.ppms_field_scan_total} points')
             self._update_ppms_control_ui()
-            self._redraw_ppms_transport_plot()
+            self._rte_plot_axis_changed()
             self.thread_log(f'{self.ppms_page_name} {mode} scan; run folder: {recorder.directory} ({path.name} and '
                             f'{recorder.log_path.name}); {per_pass} points x {len(passes)} harmonic pass(es)'
                             + (f'; stage {first:g}° to {last:g}°, {supply.label} {field_current:+g} A held'
@@ -61232,6 +61341,7 @@ class RTEPanel(PPMSPanel):
                     show_legend=False, series_colors=colors[channel], series_markers=markers[channel],
                     angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     **({'series_labels': labels[channel]} if labels[channel] else {}))
+        self._redraw_switch_time_plot()
 
     def save_ppms_field_scan_csv(self):
         if not self.ppms_field_scan_rows or self.ppms_field_scan_running:
@@ -61332,6 +61442,7 @@ class SwitchPanel(RTEPanel):
     ppms_page_name = 'Switch'
     rte_scan_modes = SWITCH_SCAN_MODES
     rte_default_scan_mode = SWITCH_SCAN_MODE
+    rte_scan_box_title = 'Switch scan'
     # SR830-1 only (user, 2026-11-21: "hide the SR830-2, SR830-3 rows in
     # Switch"); the two others stay unmeasured and off screen.
     rte_shown_sr830_keys = ('830_a',)
@@ -61350,78 +61461,8 @@ class SwitchPanel(RTEPanel):
         self.ppms_transport_harmonic_a_var.set('1')
         self.ppms_plot_frame.configure(
             text='Switch: X / I, Y / I and phase vs 6221 pulse current; X vs time')
-        # A row under them for the lock-in's X against time (user,
-        # 2026-11-21: "add a row to show the SR830 x signal vs time pls"),
-        # one plot across the three columns.
-        frame = ttk.LabelFrame(self.ppms_plot_frame, text=SWITCH_TIME_ROW_TITLE, padding=2)
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        canvas = tk.Canvas(frame, height=PPMS_PLOT_ROW_MIN_HEIGHT_PX, width=300, background='white',
-                           highlightthickness=0)
-        canvas.ppms_compact_plot = True
-        canvas.grid(row=0, column=0, sticky='nsew')
-        canvas.bind('<Configure>', lambda event: self._redraw_switch_time_plot())
-        self.switch_time_frame, self.switch_time_canvas = frame, canvas
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
-
-    def _switch_time_order(self):
-        """The harmonic order the time row shows and its lock-ins: the
-        lowest one measured, the page's first row of plots."""
-        orders = self._ppms2_measured_orders()
-        for order in PPMS_HARMONIC_ORDERS:
-            if orders.get(order):
-                return order, orders[order]
-        return None, []
-
-    def _refresh_ppms2_plot_layout(self):
-        """The harmonic rows as SHHV's, then the time row under the last
-        of them with an equal share of the height."""
-        super()._refresh_ppms2_plot_layout()
-        frame = self.__dict__.get('switch_time_frame')
-        if frame is None:
-            return      # the rack's own construction, before the row is made
-        orders = self._ppms2_measured_orders()
-        row = sum(1 for order in PPMS_HARMONIC_ORDERS if orders.get(order))
-        order, meters = self._switch_time_order()
-        names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in meters)
-        frame.configure(text=SWITCH_TIME_ROW_TITLE + (f' — {PPMS_HARMONIC_LABELS[order]}, {names}' if meters else ''))
-        frame.grid(row=row, column=0, columnspan=3, sticky='nsew')
-        self.ppms_plot_frame.rowconfigure(row, weight=1, uniform='ppms_plot_rows')
-        self._redraw_switch_time_plot()
-
-    def _redraw_ppms_transport_plot(self):
-        super()._redraw_ppms_transport_plot()
-        self._redraw_switch_time_plot()
-
-    def _redraw_switch_time_plot(self):
-        """The time row: each saved point's X (the reading averaged over
-        Acquire s, in volts) against the scan's elapsed time, its
-        ``elapsed_s`` column, one curve per lock-in and harmonic pass in the
-        lock-in's colour.  Nothing is read for it."""
-        canvas = self.__dict__.get('switch_time_canvas')
-        if canvas is None:
-            return
-        order, meters = self._switch_time_order()
-        series, colors, markers = {}, {}, {}
-        for meter in meters:
-            resolve_prefix = self._ppms2_prefix_resolver(meter, order)
-            label = PPMS_SR830_LABELS.get(meter, 'Zurich')
-            for row in self.ppms_field_scan_rows:
-                elapsed, prefix = row.get('elapsed_s'), resolve_prefix(row)
-                if prefix is None or not isinstance(elapsed, (int, float)):
-                    continue
-                value = row.get(prefix + 'x_v')
-                if not isinstance(value, (int, float)) or not math.isfinite(value):
-                    continue
-                name = f"{label} P{row.get('harmonic_pass', 1)}"
-                series.setdefault(name, []).append((elapsed, value))
-                colors[name] = PPMS_METER_COLORS.get(meter, '#666666')
-                if meter == 'zurich':
-                    markers[name] = 'open_circle'
-        self._draw_nonlocal_series(canvas, series, 'Time (s)', 'X voltage', 'Waiting for scan data', markers=True,
-                                   auto_voltage_unit=True, show_legend=False, series_colors=colors,
-                                   series_markers=markers)
 
 
 PPMS2Panel = PPMSPanel  # Former name of the PPMS page; kept for existing tests/scripts.

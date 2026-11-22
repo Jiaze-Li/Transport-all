@@ -1,5 +1,21 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV: the scan box is "Scan", and Switch is one of its modes (user, 2026-11-22)
+
+- **Request:** "I think there're many the same between SHHV and Switch module. Can you change the name of SHHV scan
+  to Scan, and add the switch scan to the selection like angle + field2 scan?"
+- **The box** is titled "Scan" on SHHV (`rte_scan_box_title`); the dialogs still say "SHHV scan". The Switch page's
+  box is still "Switch scan".
+- **Switch is SHHV's last mode** (`RTE_SCAN_MODES`): the Switch page's scan, the same code, on SHHV's instruments.
+  Choosing it sets the pulse loop (-20 to 20 mA in 1 mA, Round trip on), shows the Outer field G list (40, 20, 0,
+  -20) and the `6221 write` row (Pulse µs, Pulses; `_rte_show_pulse_row`), and adds the X-vs-time row under the
+  plots (`_rte_time_row_shown`: while the plots' axis is the pulse current). Every other mode's box and plots are
+  as before; SHHV still starts on Angle+Field2.
+- **Not changed by choosing the mode:** the 6221 mA RMS box (the read current; 1.5 mA at SHHV's start-up, 0.5 mA on
+  the Switch page) and the lock-ins' harmonics (SR830-1 starts at 2 on SHHV, at 1 on the Switch page). Set them
+  before a Switch scan on SHHV; the Yes/No before the scan shows the read current.
+- The Switch page itself is unchanged. Not run on the instruments.
+
 ## Switch page: 6221 pulse write, lock-in read, loops at several fields (user, 2026-11-21)
 
 - **Request:** "add a Switch module containing 6221, 830, magnet like SHHV has LS643, Kepco4886, LS475, the motor.

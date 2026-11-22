@@ -91,14 +91,15 @@ class Fake6221:
 
 
 class SwitchScan(ete.EndToEnd):
-    def make_switch(self, fields="100, -50", span=("-2", "2", "2"), width="30", pulses="1"):
+    def make_switch(self, fields="100, -50", span=("-2", "2", "2"), width="30", pulses="1", shhv=False):
         """The Switch page ready for its scan: SR830-1 alone at the first
         harmonic, the KEPCO and an LS475 that reads 100 G per A of it, the
-        fake 6221, and the field setting's waits made tiny."""
-        with patch.object(ete, "build_page", build_switch_page):
+        fake 6221, and the field setting's waits made tiny.  ``shhv``: the
+        SHHV page instead, its Switch mode chosen (user, 2026-11-22)."""
+        with patch.object(ete, "build_page", ete.build_page if shhv else build_switch_page):
             h = self.make(meter="sr830")
         panel = h.panel
-        self.assertIsInstance(panel, app.SwitchPanel)
+        self.assertIs(type(panel), app.RTEPanel if shhv else app.SwitchPanel)
         panel.ppms_transport_harmonic_a_var.set("1")
         h.harmonic["830_a"] = 1
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
@@ -191,7 +192,7 @@ class SwitchPageTests(unittest.TestCase):
         Y / I and phase plots, with an equal share of the height; it moves
         down when a second harmonic is measured."""
         panel = build_switch_page(kepco=False)
-        frame, canvas = panel.switch_time_frame, panel.switch_time_canvas
+        frame, canvas = panel.rte_time_frame, panel.rte_time_canvas
         self.assertIs(frame.parent, panel.ppms_plot_frame)
         self.assertIs(canvas.parent, frame)
         self.assertEqual(frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
@@ -264,13 +265,52 @@ class SwitchPageTests(unittest.TestCase):
         self.assertEqual(shhv.rte_shown_sr830_keys, app.PPMS_SR830_KEYS)
         self.assertEqual(set(self.rows_shown(shhv).values()), {(True, True)})
 
-    def test_the_shhv_page_is_as_before(self):
+    def test_the_shhv_page_has_switch_as_its_last_mode(self):
+        """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
+        the switch scan to the selection like angle + field2 scan".  The box
+        is "Scan"; Switch is the last choice; the page still starts on
+        Angle+Field2, where the pulse row and the time row are off screen."""
         panel = ete.build_page(kepco=False)
         self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))
-        self.assertNotIn("Switch", app.RTE_SCAN_MODES)
-        self.assertFalse(hasattr(panel, "rte_pulse_width_us"), "no pulse row on SHHV")
+        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Angle+Current", "Switch"))
+        self.assertEqual(panel.rte_start_button.parent.parent.options["text"], "Scan")
         self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field2")
         self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field2"][0])
+        pulse_row = panel.rte_pulse_widgets
+        self.assertEqual([w.options.get("text") for w in pulse_row[:2] + pulse_row[3:4]],
+                         ["6221 write", "Pulse µs", "Pulses"])
+        self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+        self.assertTrue(panel.rte_time_frame.grid_removed or not panel.rte_time_frame.grid_options)
+        self.assertIs(panel.rte_time_row_on, False)
+        before = (panel.ppms_transport_current_var.get(), panel.ppms_transport_harmonic_a_var.get())
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
+            # Switch chosen: its range, round trip, fields, the pulse row and
+            # the time row; the 6221 and lock-in boxes are not touched.
+            panel.ppms_simple_mode.set("Switch")
+            panel._rte_mode_changed()
+            self.assertEqual([v.get() for v in panel.ppms_simple_range], ["-20", "20", "1"])
+            self.assertIs(panel.rte_round_trip.get(), True)
+            self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
+            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "40, 20, 0, -20")
+            self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
+                             ("Pulse mA", "Switch: 6221 pulse mA; outer: field G"))
+            self.assertEqual({w.grid_removed for w in pulse_row}, {False})
+            self.assertEqual({w.grid_options["row"] for w in pulse_row}, {4})
+            self.assertEqual(panel.ppms_plot_axis, "pulse")
+            self.assertIs(panel.rte_time_row_on, True)
+            self.assertFalse(panel.rte_time_frame.grid_removed)
+            self.assertEqual(panel.rte_time_frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
+            self.assertIn("Time (s)", {call.args[2] for call in draw.call_args_list})
+            self.assertEqual((panel.ppms_transport_current_var.get(), panel.ppms_transport_harmonic_a_var.get()),
+                             before)
+            # Another mode: both rows go again.
+            draw.reset_mock()
+            panel.ppms_simple_mode.set("Angle+Field2")
+            panel._rte_mode_changed()
+            self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+            self.assertTrue(panel.rte_time_frame.grid_removed)
+            self.assertIs(panel.rte_time_row_on, False)
+            self.assertNotIn("Time (s)", {call.args[2] for call in draw.call_args_list})
 
     def test_the_plan_is_the_pulse_loop(self):
         plan = app.rte_scan_plan("Switch", "-2", "2", "2", 1, True)
@@ -394,7 +434,7 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual(x_label, {"6221 pulse current (mA)", "Time (s)"})
         self.assertIn("X / I (Ω)", {call.args[3] for call in h.draw.call_args_list})
         timed = [call for call in h.draw.call_args_list if call.args[2] == "Time (s)"][-1]
-        self.assertIs(timed.args[0], h.panel.switch_time_canvas)
+        self.assertIs(timed.args[0], h.panel.rte_time_canvas)
         self.assertEqual((timed.args[3], timed.kwargs["auto_voltage_unit"]), ("X voltage", True))
         # Every saved point, in the order measured: its elapsed_s and its X
         # in volts (not over the read current), one curve for the scan.
@@ -404,6 +444,27 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual(len(saved), 10)
         times = [x for x, _y in timed.args[1]["SR830-1 P1"]]
         self.assertEqual(times, sorted(times))
+
+    def test_the_switch_scan_runs_on_the_shhv_page(self):
+        """User, 2026-11-22: the Switch scan chosen on SHHV is the Switch
+        page's scan: the same pulses, read current and rows, under SHHV's
+        name; the time row shows its points."""
+        h = self.make_switch(fields="100", span=("-2", "2", "2"), shhv=True)
+        self.start(h)
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV scan")
+        self.assertTrue(question.startswith("Switch scan."), question)
+        rows = self.rows(h)
+        self.assertEqual([(r["module"], r["scan_mode"], float(r["pulse_current_ma"])) for r in rows],
+                         [("SHHV", "Switch", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
+        self.assertEqual([t["SOUR:WAVE:OFFS"] for t in h.fake.trains], [-1e-3, 1e-3, -1e-3])
+        self.assertEqual(len(h.fake.sines), 5)
+        self.assertEqual(h.fake.sent.count("FULL SET-UP"), 1)
+        self.assertIs(h.panel.rte_time_row_on, True)
+        timed = [call for call in h.draw.call_args_list if call.args[2] == "Time (s)"][-1]
+        self.assertEqual([len(points) for points in timed.args[1].values()], [5])
+        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
 
     def test_a_setting_that_does_not_read_back_arms_nothing(self):
         h = self.make_switch(fields="100", span=("2", "2", "1"))

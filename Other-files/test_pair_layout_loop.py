@@ -198,7 +198,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
         self.assertLessEqual(block.winfo_rootx() + block.winfo_width(), settings.winfo_rootx() + settings.winfo_width())
         # The scan box keeps only the scan rows, its status and notes.
         rows = self.a.rte_panel.rte_start_button.master
-        self.assertEqual(rows.master.cget("text"), "SHHV scan")
+        self.assertEqual(rows.master.cget("text"), "Scan")       # user, 2026-11-22
 
     def test_at_2000_px_the_block_is_beside_or_under_the_kepco_rows(self):
         self.show(LAB_WIDE)
