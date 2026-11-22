@@ -11,8 +11,10 @@
   again and the lock-in locked, 5 x the slowest time constant + Settle s, then the SR830 read for Acquire s and the
   readings averaged; that mean is the point. The scan's first point (and only it) is read in windows of Acquire s
   until two agree, as every SHHV scan's first point.
-- **Pulse plots:** X, Y and R of that mean, in volts (`auto_voltage_unit`), no longer divided by the read current;
-  R in the third column, where the phase is in the other modes. `sr830_<addr>_x_over_i_ohm` stays in the CSV.
+- **Pulse plots:** X and Y of that mean, in volts (`auto_voltage_unit`), no longer divided by the read current; the
+  third column (the phase in the other modes) is not shown in Switch and X and Y take the width (user, 2026-11-22:
+  "delete R voltage against the pulse current"; R was shown there for one release). R, the phase and
+  `sr830_<addr>_x_over_i_ohm` stay in the CSV.
 - **X and Y vs time:** two plots side by side under them, every SR830 reading of each Acquire s window (one segment
   per point, at the scan's elapsed time), as MS-fourState's timeline shows its read samples. The averaging loop
   keeps them when asked (`ppms_sample_trace`): the counted readings only (not overloaded ones, and a range change

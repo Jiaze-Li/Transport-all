@@ -46765,10 +46765,10 @@ class RTEPanel(PPMSPanel):
             return
         orders = self._ppms2_measured_orders()
         frames = self.__dict__.get('ppms_harmonic_plot_frames') or {}
-        for harmonic, harmonic_meters in orders.items():
-            if harmonic_meters and (harmonic, 'theta') in frames:
-                names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in harmonic_meters)
-                frames[(harmonic, 'theta')].configure(text=f'{PPMS_HARMONIC_LABELS[harmonic]} R — {names}')
+        for (harmonic, channel), harmonic_frame in frames.items():
+            if channel == 'theta':
+                harmonic_frame.grid_remove()
+        self.ppms_plot_frame.columnconfigure(2, weight=0, minsize=0, uniform='')
         row = sum(1 for order in PPMS_HARMONIC_ORDERS if orders.get(order))
         order, meters = self._switch_time_order()
         names = ', '.join(PPMS_SR830_LABELS.get(key, 'Zurich') for key in meters)
@@ -49450,12 +49450,13 @@ class RTEPanel(PPMSPanel):
                           'angle': ('stage_angle_deg', 'Sample angle (°)'),
                           'pulse': ('pulse_current_ma', '6221 pulse current (mA)')}.get(
                               axis, ('6221_current_rms_ma', 'Applied AC current (mA RMS)'))
+        pulse_axis = axis == 'pulse'
         by_order = {}
         for (order, channel), canvas in canvases.items():
-            by_order.setdefault(order, []).append((channel, canvas))
-        pulse_axis = axis == 'pulse'
+            if not (pulse_axis and channel == 'theta'):
+                by_order.setdefault(order, []).append((channel, canvas))
         for order, targets in by_order.items():
-            columns = tuple((channel, ('r_v' if pulse_axis else 'theta_deg') if channel == 'theta' else f'{channel}_v')
+            columns = tuple((channel, 'theta_deg' if channel == 'theta' else f'{channel}_v')
                             for channel, _ in targets)
             series = {channel: {} for channel, _ in targets}
             colors = {channel: {} for channel, _ in targets}
@@ -49496,10 +49497,10 @@ class RTEPanel(PPMSPanel):
                             colors[channel][name] = shaded[name]
             for channel, canvas in targets:
                 self._draw_nonlocal_series(canvas, series[channel], x_label,
-                    ('R voltage' if pulse_axis else 'Phase (degrees)') if channel == 'theta'
+                    'Phase (degrees)' if channel == 'theta'
                     else channel.upper() + ' voltage',
                     'Waiting for scan data', markers=True,
-                    auto_voltage_unit=channel != 'theta' or pulse_axis,
+                    auto_voltage_unit=channel != 'theta',
                     show_legend=False, series_colors=colors[channel], series_markers=markers[channel],
                     angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     **({'series_labels': labels[channel]} if labels[channel] else {}))

@@ -229,9 +229,10 @@ class SwitchPageTests(unittest.TestCase):
     def test_the_plots_have_a_row_of_x_and_y_against_time(self):
         """User, 2026-11-21: "add a row to show the SR830 x signal vs time
         pls"; 2026-11-22: "also add Y vs time": X and Y side by side, in the
-        row under the X, Y and R plots, with an equal share of the height;
-        it moves down when a second harmonic is measured.  The third pulse
-        plot is R in volts (user, 2026-11-22: "X,Y,R vs current pulse")."""
+        row under the X and Y plots, with an equal share of the height; it
+        moves down when a second harmonic is measured.  No third pulse plot
+        (user, 2026-11-22: "delete R voltage against the pulse current"): X
+        and Y take the row's width; another mode has its phase plot again."""
         panel = self.switch_page()
         frame, canvases = panel.rte_time_frame, panel.rte_time_canvases
         self.assertEqual(sorted(canvases), ["x", "y"])
@@ -242,7 +243,8 @@ class SwitchPageTests(unittest.TestCase):
         self.assertFalse(frame.grid_removed)
         # SR830-1 is at the second harmonic at the page's start-up.
         self.assertEqual(frame.options["text"], "X and Y vs time — 2nd harmonic, SR830-1")
-        self.assertEqual(panel.ppms_harmonic_plot_frames[(2, "theta")].options["text"], "2nd harmonic R — SR830-1")
+        self.assertIs(panel.ppms_harmonic_plot_frames[(2, "theta")].grid_removed, True)
+        self.assertIs(panel.ppms_harmonic_plot_frames[(2, "x")].grid_removed, False)
         self.assertIs(canvases["x"].ppms_compact_plot, True)
         self.assertFalse(panel.ppms_harmonic_canvases[(2, "x")].ppms_hide_x_labels)
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
@@ -260,6 +262,7 @@ class SwitchPageTests(unittest.TestCase):
             panel.ppms_simple_mode.set("Angle+Field")
             panel._rte_mode_changed()
         self.assertEqual(panel.ppms_harmonic_plot_frames[(1, "theta")].options["text"], "1st harmonic θ — SR830-1")
+        self.assertIs(panel.ppms_harmonic_plot_frames[(1, "theta")].grid_removed, False)
 
     def test_the_shhv_page_has_switch_as_its_last_mode(self):
         """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
@@ -456,20 +459,18 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual([e["target_field_g"] for e in events if e["event"] == "field_programmed"], [100.0, -50.0])
         self.assertEqual(events[-1]["event"], "run_finished")
         # The pulse plots in volts (user, 2026-11-22: "always use voltage in
-        # the X,Y vs current pulse plot"), X, Y and R; each point the mean of
-        # the Acquire s reading.
+        # the X,Y vs current pulse plot"), X and Y only ("delete R voltage
+        # against the pulse current"); each point the mean of the Acquire s
+        # reading.
         pulse_calls = [call for call in h.draw.call_args_list if call.args[2] == "6221 pulse current (mA)"]
-        self.assertEqual({call.args[3] for call in pulse_calls}, {"X voltage", "Y voltage", "R voltage"})
+        self.assertEqual({call.args[3] for call in pulse_calls}, {"X voltage", "Y voltage"})
         self.assertEqual({call.kwargs["auto_voltage_unit"] for call in pulse_calls}, {True})
         canvases = h.panel.ppms_harmonic_canvases
         last_x = [call for call in pulse_calls if call.args[0] is canvases[(1, "x")]][-1]
         saved = h.panel.ppms_field_scan_rows
         self.assertEqual(sorted(v for points in last_x.args[1].values() for _x, v in points),
                          sorted(r["sr830_8_x_v"] for r in saved))
-        last_r = [call for call in pulse_calls if call.args[0] is canvases[(1, "theta")]][-1]
-        self.assertEqual(last_r.args[3], "R voltage")
-        self.assertEqual(sorted(v for points in last_r.args[1].values() for _x, v in points),
-                         sorted(r["sr830_8_r_v"] for r in saved))
+        self.assertFalse([call for call in pulse_calls if call.args[0] is canvases[(1, "theta")]])
         # X and Y against time: every sample of each reading, a segment per
         # reading (user, 2026-11-22: "it should show the voltage in the
         # period not a single point"), on the time of the scan.
