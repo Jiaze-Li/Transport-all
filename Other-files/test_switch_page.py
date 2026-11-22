@@ -162,6 +162,34 @@ class SwitchPageTests(unittest.TestCase):
         for key in app.PPMS_SR830_KEYS:
             self.assertFalse(panel.ppms_device_resource_widgets[key].parent.grid_removed, key)
 
+    def test_the_settings_have_a_pulse_row_and_100_v_compliance(self):
+        """User, 2026-11-22: "add another pulse apply below here RMS
+        continuous settings. Change default compliance to 100V"."""
+        panel = ete.build_page(kepco=False)
+        self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
+        self.assertEqual(app.RTE_TRANSPORT_COMPLIANCE_V, 100.0)
+        parts = panel.rte_apply_pulse_parts
+        self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
+                         ["6221 pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
+        entries = [w for w, _options in parts if "textvariable" in w.options]
+        self.assertEqual([w.options["textvariable"] for w in entries],
+                         [panel.rte_pulse_current_ma, panel.rte_pulse_width_us, panel.rte_pulse_count])
+        # Under the 6221's row, in its columns; the 6221's line and its OFF button one line down.
+        rms = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_transport_current_var)
+        params = rms.parent
+        self.assertEqual(rms.grid_options["row"], 2)
+        self.assertEqual({w.grid_options["in_"] for w, _options in parts}, {params})
+        self.assertEqual([(w.grid_options["row"], w.grid_options["column"]) for w, _options in parts],
+                         [(3, column) for column in range(7)])
+        live = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_current_live_var)
+        self.assertEqual((live.grid_options["row"], live.grid_options["column"]), (4, 0))
+        # The scan's own Pulse µs / Pulses boxes are the same two variables.
+        scan_entries = [w for w in panel.rte_pulse_widgets if "textvariable" in w.options]
+        self.assertEqual([w.options["textvariable"] for w in scan_entries],
+                         [panel.rte_pulse_width_us, panel.rte_pulse_count])
+        self.assertIs(parts[-1][0], panel.rte_apply_pulse_button)
+        self.assertEqual(parts[-1][0].options["command"], panel._rte_apply_pulse)
+
     def test_the_connections_can_go_in_two_columns(self):
         """User, 2026-11-22: "also two columns for the instruments connection
         panel".  The supply's line, the LS475's reading and the field setting
@@ -368,6 +396,88 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual(len(saved), 10)
         times = [x for x, _y in timed.args[1]["SR830-1 P1"]]
         self.assertEqual(times, sorted(times))
+
+    def test_apply_pulse_sends_one_pulse_by_hand(self):
+        """User, 2026-11-22: "add another pulse apply below here RMS
+        continuous settings": the settings' Apply pulse sends the "6221
+        pulse mA" current once, with the Pulse µs / Pulses boxes and the
+        Compliance V box, as the Switch scan sends each pulse; the 6221 is
+        off after it."""
+        h = self.make_switch()
+        panel = h.panel
+        self.assertEqual(panel.rte_pulse_current_ma.get(), "0", "nothing is sent until a current is typed")
+        self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV pulse")
+        self.assertIn('Type the pulse current in the "6221 pulse mA" box', h.showerror.call_args.args[1])
+        h.askyesno.assert_not_called()
+        self.assertEqual(h.fake.sent, [])
+        # +5 mA, 50 µs, once.
+        h.showerror.reset_mock()
+        panel.rte_pulse_current_ma.set("5")
+        panel.rte_pulse_width_us.set("50")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV pulse")
+        self.assertIn("Send 1 pulse(s) of +5 mA, 50 µs each, from the 6221 now (compliance 100 V)?", question)
+        self.assertIn("a current set with Set 6221 ends", question)
+        self.assertEqual(len(h.fake.trains), 1)
+        train = h.fake.trains[0]
+        self.assertEqual((train["SOUR:WAVE:AMPL"], train["SOUR:WAVE:OFFS"], train["SOUR:WAVE:FREQ"],
+                          train["CURR:COMP"], train["SOUR:WAVE:DUR:CYCL"]), (2.5e-3, 2.5e-3, 1e4, 100.0, 1.0))
+        arm = h.fake.sent.index("SOUR:WAVE:ARM")
+        self.assertEqual(h.fake.sent[arm:arm + 3], ["SOUR:WAVE:ARM", "OUTP ON", "SOUR:WAVE:INIT"])
+        self.assertNotIn("SOUR:WAVE:FUNC SIN", h.fake.sent, "no read current after it")
+        self.assertNotIn("*RST", h.fake.sent)
+        self.assertEqual(h.fake.output, 0)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Pulse +5 mA x 1 (50 µs) sent; 6221 off")
+        self.assertIn("SHHV: Pulse +5 mA x 1 (50 µs) sent; 6221 off", h.logged)
+        self.assertIs(panel.ppms_environment_busy, False)
+        self.assertEqual(self.names(h, "6221")[-2:], [("6221", "off"), ("6221", "OUTP?")], "off, read back")
+        # A pulse that reaches the compliance says so.
+        h.fake.compliance_after_train = True
+        panel.rte_pulse_current_ma.set("-5")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(),
+                         "Pulse -5 mA x 1 (50 µs) sent; the 6221 REACHED COMPLIANCE (100 V); 6221 off")
+        self.assertEqual(h.fake.trains[-1]["SOUR:WAVE:OFFS"], -2.5e-3)
+
+    def test_apply_pulse_is_refused_as_a_scan_pulse_is(self):
+        h = self.make_switch()
+        panel = h.panel
+        for current, width, pulses, message in (("200", "30", "1", "6221 current exceeds the software limit ±105 mA"),
+                                                ("5", "x", "1", "6221 pulse mA, Pulse µs and Compliance V must be numbers"),
+                                                ("5", "30", "0", "6221 pulse count must be between 1 and")):
+            with self.subTest(message=message):
+                panel.rte_pulse_current_ma.set(current)
+                panel.rte_pulse_width_us.set(width)
+                panel.rte_pulse_count.set(pulses)
+                panel._rte_apply_pulse()
+                self.pump(h)
+                self.assertIn(message, h.showerror.call_args.args[1])
+        # No to the question, the safety tick off, the 6221 not connected: nothing sent.
+        panel.rte_pulse_current_ma.set("5")
+        panel.rte_pulse_width_us.set("30")
+        panel.rte_pulse_count.set("1")
+        h.askyesno.return_value = False
+        panel._rte_apply_pulse()
+        self.pump(h)
+        h.askyesno.return_value = True
+        panel.ppms_control_safety_var.set(False)
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertIn("Tick the SHHV rack safety confirmation first", h.showerror.call_args.args[1])
+        panel.ppms_control_safety_var.set(True)
+        panel.ppms_instrument_controllers["6221"].connected = False
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertIn("Connect the Keithley 6221 first", h.showerror.call_args.args[1])
+        self.assertEqual(h.fake.sent, [])
+        self.assertEqual(h.fake.trains, [])
 
     def test_a_setting_that_does_not_read_back_arms_nothing(self):
         h = self.make_switch(fields="100", span=("2", "2", "1"))

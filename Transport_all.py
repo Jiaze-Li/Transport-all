@@ -3666,6 +3666,14 @@ SWITCH_PULSE_DEFAULT_RANGE = ('-20', '20', '1')
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 30.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
+# The "6221 pulse mA" box of the settings' Apply pulse at start-up (user,
+# 2026-11-22: "add another pulse apply below here RMS continuous settings";
+# the user gave no current): 0, which sends nothing until one is typed.
+RTE_APPLY_PULSE_DEFAULT_MA = 0.0
+# The page's 6221 compliance at start-up (user, 2026-11-22: "Change default
+# compliance to 100V"; it was the PPMS page's 50 V).  For the read current
+# and for every pulse.
+RTE_TRANSPORT_COMPLIANCE_V = 100.0
 # The Switch scan's row of X against time (user, 2026-11-21).
 SWITCH_TIME_ROW_TITLE = 'X vs time'
 # Waited beyond the pulse train's own length before OUTP? is read (as
@@ -57745,6 +57753,7 @@ class RTEPanel(PPMSPanel):
         # further setup.
         self.ppms_transport_current_var.set(f'{RTE_TRANSPORT_CURRENT_RMS_MA:g}')
         self.ppms_transport_frequency_var.set(f'{RTE_TRANSPORT_FREQUENCY_HZ:g}')
+        self.ppms_transport_compliance_var.set(f'{RTE_TRANSPORT_COMPLIANCE_V:g}')
         self.zurich_expected_frequency = RTE_TRANSPORT_FREQUENCY_HZ
         # The lock-ins at start-up (user's figure, 2026-11-16): SR830-1 at
         # harmonic 2 measured; SR830-2 at 2, SR830-3 at 3 and the Zurich at
@@ -58073,6 +58082,7 @@ class RTEPanel(PPMSPanel):
         for section in (params, lockins):
             for section_row in range(4):
                 section.rowconfigure(section_row, weight=1)
+        params.rowconfigure(4, weight=1)       # the pulse row's line (user, 2026-11-22)
         self.rte_edit_widgets = []
         self.ppms_lockin_choice_widgets = []
         safety = ttk.Checkbutton(params,
@@ -58109,9 +58119,37 @@ class RTEPanel(PPMSPanel):
             self.rte_edit_widgets.append((button, 'normal'))
             if callback == self._rte_apply_drive:
                 self.rte_apply_button = button
+        # A write pulse by hand, under the continuous current's row (user,
+        # 2026-11-22: "add another pulse apply below here RMS continuous
+        # settings"): its current, the pulse's width and count (the Switch
+        # scan's own boxes, the same variables) and Apply pulse, which sends
+        # it once as the Switch scan sends each of its pulses
+        # (_rte_apply_pulse).  The compliance is the row above's.  The parts
+        # are the body's children, shown in the params' columns (grid's in_)
+        # or, while the settings are stacked (the 1101 px window), under the
+        # stage block beside the lock-ins, where they cost the plots no
+        # height (arrange_pulse_row).
+        self.rte_pulse_current_ma = tk.StringVar(value=f'{RTE_APPLY_PULSE_DEFAULT_MA:g}')
+        self.rte_pulse_width_us = tk.StringVar(value=f'{SWITCH_DEFAULT_PULSE_WIDTH_US:g}')
+        self.rte_pulse_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
+        pulse_parts = []
+        for column, (label, variable) in enumerate((('6221 pulse mA', self.rte_pulse_current_ma),
+                                                    ('Pulse µs', self.rte_pulse_width_us),
+                                                    ('Pulses', self.rte_pulse_count))):
+            text = ttk.Label(body, text=label)
+            entry = ttk.Entry(body, textvariable=variable, width=5)
+            pulse_parts += [(text, dict(row=3, column=2 * column, sticky='e')),
+                            (entry, dict(row=3, column=2 * column + 1, padx=3, sticky='ew'))]
+            self.rte_edit_widgets.append((entry, 'normal'))
+        self.rte_apply_pulse_button = ttk.Button(body, text='Apply pulse', command=self._rte_apply_pulse, width=11)
+        pulse_parts.append((self.rte_apply_pulse_button, dict(row=3, column=6, padx=4)))
+        self.rte_edit_widgets.append((self.rte_apply_pulse_button, 'normal'))
+        self.rte_apply_pulse_parts = pulse_parts
+        for widget, options in pulse_parts:
+            widget.grid(in_=params, **options)
         kepco_off = ttk.Button(params, text='KEPCO Zero / OFF', command=self._rte_zero, width=15)
         sources_off = ttk.Button(params, text='6221 / 2400 OFF', command=self.ppms_sources_off, width=15)
-        off_grids = (dict(row=1, column=6), dict(row=3, column=4, columnspan=3, sticky='e'))
+        off_grids = (dict(row=1, column=6), dict(row=4, column=4, columnspan=3, sticky='e'))
         if laid_out:
             # Red, as Set stage 0° (user, 2026-10-18: "make SHV's KEPCO Zero
             # / OFF and 6221 / 2400 OFF red, the same way"): each a tk.Button
@@ -58130,7 +58168,7 @@ class RTEPanel(PPMSPanel):
         # A compliance warning is long: it wraps within its four columns
         # instead of widening the settings.
         current_live = ttk.Label(params, textvariable=self.ppms_current_live_var, width=1, wraplength=0)
-        current_live.grid(row=3, column=0, columnspan=4, sticky='ew')
+        current_live.grid(row=4, column=0, columnspan=4, sticky='ew')
         current_live.bind('<Configure>', lambda event: event.widget.configure(wraplength=max(100, event.width - 8)), add='+')
         for grid_row, key in enumerate(PPMS_SR830_KEYS):
             # Share the safety row on the right to save one row of height.
@@ -58164,6 +58202,8 @@ class RTEPanel(PPMSPanel):
         # follows the settings' own layout (arrange_stage_block below).
         stage_box = ttk.Frame(body)
         stage_box.grid(row=1, column=0, sticky='nw', pady=(4, 0))
+        # Holds the pulse row while the settings are stacked (arrange_pulse_row).
+        pulse_box = ttk.Frame(lockins_line)
         # The live line spans the button columns and an empty column 4: what
         # it needs beyond the buttons goes there, not into the buttons.
         stage_box.columnconfigure(4, weight=1)
@@ -58283,8 +58323,7 @@ class RTEPanel(PPMSPanel):
         # On SHHV too since Switch is one of its modes (user, 2026-11-22);
         # shown only while the mode is Switch (_rte_show_pulse_row), so every
         # other mode's box is as before.
-        self.rte_pulse_width_us = tk.StringVar(value=f'{SWITCH_DEFAULT_PULSE_WIDTH_US:g}')
-        self.rte_pulse_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
+        # The two variables are the settings' pulse row's (2026-11-22).
         self.rte_pulse_widgets = [ttk.Label(scan_rows, text='6221 write')]
         self.rte_pulse_widgets[0].grid(row=4, column=0)
         for i, (label, variable) in enumerate((('Pulse µs', self.rte_pulse_width_us),
@@ -58486,7 +58525,8 @@ class RTEPanel(PPMSPanel):
                     outer = getattr(controls, '_pair_side_by_side', None)
                     if side is None or outer is None:
                         return
-                    block = 16 + stage_box.winfo_reqwidth()
+                    # The pulse row sits under the block there (2026-11-22).
+                    block = 16 + max(stage_box.winfo_reqwidth(), pulse_box.winfo_reqwidth())
                     if not side:
                         beside = body.winfo_width() >= lockins.winfo_reqwidth() + block
                     elif outer:
@@ -58517,6 +58557,7 @@ class RTEPanel(PPMSPanel):
                 else:
                     stage_box.grid_configure(in_=lockins_line, row=1, column=0, columnspan=1, sticky='nw',
                                              padx=0, pady=(4, 0))
+                arrange_pulse_row()
                 # The settings column's floor follows the block's new place
                 # once the requests are updated (keep_settings_room).
                 controls.after_idle(keep_settings_room)
@@ -58537,9 +58578,54 @@ class RTEPanel(PPMSPanel):
                     room = self._pair_natural_width(settings) + controls_gap
                     room = max(room, min(room + 4, controls.winfo_width() - scan_stacked_width()))
                 controls.columnconfigure(0, minsize=room)
+            def arrange_pulse_row(_event=None):
+                # The pulse row (user, 2026-11-22): under the 6221's row in
+                # the params' columns while the params are beside the
+                # lock-ins (the wide window); while they are stacked (the
+                # 1101 px window) under the stage block, beside the lock-ins
+                # in the rows those already take, or under it in a window too
+                # narrow for that.  Decided by the params/lock-ins pair and
+                # the stage block's place, never by where the row is.
+                side = getattr(body, '_pair_side_by_side', None)
+                stage_place = getattr(stage_box, '_rte_stage_place', None)
+                if side is None or stage_place is None:
+                    return
+                place = 'params' if side else stage_place
+                if getattr(pulse_box, '_rte_pulse_place', None) == place:
+                    return
+                pulse_box._rte_pulse_place = place
+                try:
+                    if place == 'params':
+                        pulse_box.grid_remove()
+                        lockins_line.rowconfigure(0, minsize=0)
+                        for widget, options in pulse_parts:
+                            widget.grid(in_=params, columnspan=1, pady=0, **options)
+                            self._stfmr_lockin_raise(widget, params)
+                        return
+                    for column, (widget, options) in enumerate(pulse_parts):
+                        widget.grid(in_=pulse_box, row=0, column=column, columnspan=1, pady=0,
+                                    padx=options.get('padx', 0), sticky='w')
+                    if place == 'beside lock-ins':
+                        # In the lock-ins' rows, at the cell's foot; the cell
+                        # is at least as tall as the block and the row.
+                        lockins_line.rowconfigure(0, minsize=stage_box.winfo_reqheight() + 4
+                                                  + pulse_box.winfo_reqheight())
+                        pulse_box.grid(in_=lockins_line, row=0, column=1, columnspan=1, sticky='sw',
+                                       padx=(16, 0), pady=0)
+                    else:
+                        lockins_line.rowconfigure(0, minsize=0)
+                        pulse_box.grid(in_=lockins_line, row=2, column=0, columnspan=1, sticky='nw',
+                                       padx=0, pady=(4, 0))
+                    pulse_box.lift()
+                    for widget, _options in pulse_parts:
+                        self._stfmr_lockin_raise(widget, pulse_box)
+                except tk.TclError:
+                    pass        # the window is closing
+
             controls.bind('<Configure>', keep_settings_room, add='+')
             # After both pairs, on both their <Configure> events.
             controls.bind('<Configure>', arrange_stage_block, add='+')
+            controls.bind('<Configure>', arrange_pulse_row, add='+')
             body.bind('<Configure>', arrange_stage_block, add='+')
             arrange_stage_block()
 
@@ -60366,6 +60452,67 @@ class RTEPanel(PPMSPanel):
         self._rte_stage_job(stage.check_ready, then=checked, failed=not_started)
 
     # ---- the Switch scan (user, 2026-11-21) ---------------------------------------
+    def _rte_apply_pulse(self):
+        """The settings' Apply pulse (user, 2026-11-22: "add another pulse
+        apply below here RMS continuous settings"): one write by hand, the
+        "6221 pulse mA" box's current with the Pulse µs and Pulses boxes
+        and the Compliance V box, sent as the Switch scan sends each of its
+        pulses (_rte_switch_pulse: the 6221's output off first, every
+        setting read back before the train is armed, the latched compliance
+        read around it, the output confirmed off after it).  Checked as the
+        scan's pulses are (Keithley6221Controller._validate), and asked
+        first.  The 6221 is off afterwards: a current set with Set 6221 ends
+        with the pulse."""
+        title = f'{self.ppms_page_name} pulse'
+        try:
+            self._require_ppms_control_ready()
+            if not self.ppms_instrument_controllers['6221'].connected:
+                raise RuntimeError('Connect the Keithley 6221 first')
+            try:
+                current_ma = float(self.rte_pulse_current_ma.get())
+                width_s = float(self.rte_pulse_width_us.get()) / 1e6
+                compliance_v = float(self.ppms_transport_compliance_var.get())
+            except (TypeError, ValueError, tk.TclError):
+                raise ValueError('6221 pulse mA, Pulse µs and Compliance V must be numbers') from None
+            if not math.isfinite(current_ma) or current_ma == 0:
+                raise ValueError('Type the pulse current in the "6221 pulse mA" box (0 mA sends no pulse)')
+            _current_a, width_s, compliance_v, count = Keithley6221Controller._validate(
+                current_ma * 1e-3, width_s, compliance_v, self.rte_pulse_count.get())
+        except Exception as error:
+            messagebox.showerror(title, str(error), parent=self.root)
+            return
+        pulse = dict(width_s=width_s, compliance_v=compliance_v, count=count)
+        if not messagebox.askyesno(
+                title,
+                f'Send {count} pulse(s) of {current_ma:+g} mA, {width_s * 1e6:g} µs each, from the 6221 now '
+                f'(compliance {compliance_v:g} V)?\n\n'
+                'The 6221 output is switched off first, so a current set with Set 6221 ends, and it is off after '
+                'the pulse.\n\nThe pulse has not been checked on an oscilloscope by this program.',
+                parent=self.root):
+            return
+        self.ppms_field_scan_stop_event.clear()
+        self.rte_switch_compliance_readable = True
+
+        def operation():
+            try:
+                return self._rte_switch_pulse(current_ma, pulse)
+            except BaseException:
+                # A failed or stopped pulse leaves the 6221 off.
+                self._stop_ppms_transport_source()
+                raise
+
+        def done(result):
+            reached = result.get('pulse_in_compliance')
+            note = (f'; the 6221 REACHED COMPLIANCE ({compliance_v:g} V)' if reached is True
+                    else '; compliance not readable' if reached == 'unknown' else '')
+            text = (f'Pulse {current_ma:+g} mA x {count} ({width_s * 1e6:g} µs) sent{note}; 6221 off')
+            # The scan's status line keeps it (the 6221's own line is the
+            # idle read's, refreshed every second).
+            self.ppms_field_scan_status_var.set(text)
+            self.ppms_current_live_var.set('6221: OFF / 0 mA')
+            self.thread_log(f'{self.ppms_page_name}: {text}')
+        self._rte_submit(operation, done)
+
     def _rte_switch_pulse_settings(self, plan, settings):
         """Start's check of the Switch scan's write pulse, on the Tk thread:
         the Pulse µs and Pulses boxes with the rack's 6221 compliance, and
