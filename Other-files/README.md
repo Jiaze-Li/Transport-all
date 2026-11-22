@@ -14,6 +14,7 @@
 - **Where the row is:** in the params' columns under the 6221's row while the settings are beside the lock-ins
   (the wide window; one line of height); while they are stacked (the 1101 px window) under the stage block, beside
   the lock-ins, where it costs the plots nothing (`arrange_pulse_row`).
+- **Pulse µs** starts at 50 (user, 2026-11-22: "Pulse µs to start at 50 instead of 30"; `SWITCH_DEFAULT_PULSE_WIDTH_US`).
 - **Compliance V** starts at 100 V on this page (`RTE_TRANSPORT_COMPLIANCE_V`; 50 V before, the PPMS page's value,
   which is unchanged). It is the limit for the read current and for every pulse.
 - Not run on the instruments.

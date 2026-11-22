@@ -168,6 +168,9 @@ class SwitchPageTests(unittest.TestCase):
         panel = ete.build_page(kepco=False)
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
         self.assertEqual(app.RTE_TRANSPORT_COMPLIANCE_V, 100.0)
+        # Pulse µs starts at 50 (user, 2026-11-22: "Pulse µs to start at 50
+        # instead of 30"), one pulse per write.
+        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("50", "1"))
         parts = panel.rte_apply_pulse_parts
         self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
                          ["6221 pulse mA", "Pulse µs", "Pulses", "Apply pulse"])

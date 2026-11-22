@@ -3659,12 +3659,13 @@ RTE_FIELD_LIST_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
 # The Switch mode's start-up values.  The pulse loop -20 to +20 mA in 1 mA
 # steps and back (Round trip), one loop; the fields of the user's figure,
 # +40, +20, 0 and -20 Oe; the pulse and the read current as MS-fourState's
-# (30 us, one pulse per write).  All are boxes on the page.  The read
+# (one pulse per write; 50 us since 2026-11-22, user: "Pulse µs to start at
+# 50 instead of 30").  All are boxes on the page.  The read
 # current and the lock-ins' harmonics are the page's own boxes, not changed
 # by choosing the mode.
 SWITCH_PULSE_DEFAULT_RANGE = ('-20', '20', '1')
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
-SWITCH_DEFAULT_PULSE_WIDTH_US = 30.0
+SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
 # The "6221 pulse mA" box of the settings' Apply pulse at start-up (user,
 # 2026-11-22: "add another pulse apply below here RMS continuous settings";
