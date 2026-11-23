@@ -1,5 +1,20 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Wrapped statements joined, two unused definitions removed (user, 2026-11-23)
+
+- **Request:** "can you try to optimize the whole script to make its length as short as possible but not affect
+  the whole function?"
+- Every statement or block header (if / for / while / with / def / class) that was wrapped over several lines is one
+  line when that line is at most 200 characters (the longest line before was 237). `Transport_all.py` 49,675 ->
+  39,938 lines (2.44 -> 2.29 MB); `MS-fourState.py` 5,075 -> 4,582; `Test_Microwave_NH_dev.py` 4,357 -> 3,725;
+  `Avtech_pulse_test.py` 366 -> 358. Each file's syntax tree was checked equal to the one before, so the program is
+  the same statement for statement (the joined lines are written by Python's own `ast.unparse`, so their strings use
+  single quotes). Removed, referenced nowhere: `format_voltage` and `CombinedControlApp._nonlocal_iv6221_measured_orders`.
+- Not done, and why: one statement per line without any limit would give about 37,300 lines with lines of up to
+  15,000 characters; about 435 more lines are used only by the tests; merging the pages' similar code is real
+  rewriting of instrument code.
+- Five tests that read the source text now accept either quote style.
+
 ## PPMS: Wait s after each outer temperature (user, 2026-11-23)
 
 - **Request:** "Add a time input in the PPMS Field+Temperature scan mode which delay the time after reach the

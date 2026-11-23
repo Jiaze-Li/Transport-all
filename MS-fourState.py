@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 # The instrument code MS-fourState shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 92fdbd4e19b3…
+# Copied from Transport_all.py, SHA-256 753691789470…
 import ctypes
 
 
@@ -96,8 +96,7 @@ _ENGLISH_MESSAGE_BUTTONS = {
 }
 
 
-_ENGLISH_MESSAGE_ICONS = {"error": "error", "warning": "warning", "info": "information",
-                          "question": "question"}
+_ENGLISH_MESSAGE_ICONS = {'error': 'error', 'warning': 'warning', 'info': 'information', 'question': 'question'}
 
 
 _NATIVE_MESSAGE_SHOW = None
@@ -124,8 +123,7 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
     cancel = next((name for name in ("cancel", "no", "abort", "ok") if name in names), names[-1])
     top = tk.Toplevel(parent, class_="EnglishMessageBox")
     try:
-        return _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
-                                         names, default, cancel, options)
+        return _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names, default, cancel, options)
     except BaseException:
         try:
             top.destroy()
@@ -134,8 +132,7 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
         raise
 
 
-def _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names,
-                              default, cancel, options) -> str:
+def _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names, default, cancel, options) -> str:
     top.withdraw()
     top.title(str(title or ""))
     try:
@@ -165,9 +162,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
     if has_image:
         ttk.Label(body, image=image).pack(side="left", anchor="n", padx=(0, 12))
     else:
-        tk.Label(body, bitmap={"information": "info"}.get(icon, icon)).pack(
-            side="left", anchor="n", padx=(0, 12)
-        )
+        tk.Label(body, bitmap={'information': 'info'}.get(icon, icon)).pack(side='left', anchor='n', padx=(0, 12))
     text = ttk.Frame(body)
     text.pack(side="left", fill="both", expand=True)
     try:
@@ -176,9 +171,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
         wrap = 520
     ttk.Label(text, text=str(message or ""), wraplength=wrap, justify="left").pack(anchor="w")
     if options.get("detail"):
-        ttk.Label(text, text=str(options["detail"]), wraplength=wrap, justify="left").pack(
-            anchor="w", pady=(6, 0)
-        )
+        ttk.Label(text, text=str(options['detail']), wraplength=wrap, justify='left').pack(anchor='w', pady=(6, 0))
     top.protocol("WM_DELETE_WINDOW", lambda: answer.set(cancel))
     top.bind("<Escape>", lambda _event: answer.set(cancel))
     def press(_event=None) -> None:
@@ -227,8 +220,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
             pass
         if previous_grab is not None:
             try:
-                if (int(parent.tk.call("winfo", "exists", previous_grab))
-                        and int(parent.tk.call("winfo", "viewable", previous_grab))):
+                if int(parent.tk.call('winfo', 'exists', previous_grab)) and int(parent.tk.call('winfo', 'viewable', previous_grab)):
                     parent.tk.call("grab", "set", previous_grab)
             except tk.TclError:
                 pass
@@ -262,8 +254,7 @@ def folder_name_problem(name: str) -> str:
 
 
 def folder_name_sort_key(name: str) -> list:
-    return [(0, int(part), "") if part.isdigit() else (1, 0, part.casefold())
-            for part in re.split(r"(\d+)", str(name)) if part]
+    return [(0, int(part), '') if part.isdigit() else (1, 0, part.casefold()) for part in re.split('(\\d+)', str(name)) if part]
 
 
 def list_subfolders(directory) -> list[str]:
@@ -344,8 +335,7 @@ def _folder_edit_refusal(folder: Path, action: str) -> str:
         return f"Windows cannot address the name {folder.name!r}; it is left alone here."
     run = scan_run_using_folder(folder)
     if run is not None:
-        return (f"A running scan is saving into {run.as_posix()}; {folder.name} cannot be "
-                f"{action} until that scan has ended.")
+        return f'A running scan is saving into {run.as_posix()}; {folder.name} cannot be {action} until that scan has ended.'
     return ""
 
 
@@ -382,8 +372,7 @@ def rename_subfolder(folder, name: str) -> Path:
 class _RecycleBinInfo(ctypes.Structure):
     if ctypes.sizeof(ctypes.c_void_p) == 4:
         _pack_ = 1
-    _fields_ = [("cbSize", ctypes.c_uint32), ("i64Size", ctypes.c_int64),
-                ("i64NumItems", ctypes.c_int64)]
+    _fields_ = [('cbSize', ctypes.c_uint32), ('i64Size', ctypes.c_int64), ('i64NumItems', ctypes.c_int64)]
 
 
 class _ShellFileOperation(ctypes.Structure):
@@ -438,9 +427,7 @@ def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
         raise OSError("the drive's volume name could not be read")
     guid = volume.value[volume.value.index("{"):volume.value.rindex("}") + 1]
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume"
-                            + "\\" + guid) as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume' + '\\' + guid) as key:
             def value(entry):
                 try:
                     return int(winreg.QueryValueEx(key, entry)[0])
@@ -468,8 +455,7 @@ def recycle_bin_refusal(folder, size: int = 0) -> str:
         if largest is None:
             largest = int(0.05 * _windows_drive_size(root))
         if size > 0.9 * largest:
-            return (f"It is larger than the Recycle Bin of its drive "
-                    f"({_folder_size_text(largest)})")
+            return f'It is larger than the Recycle Bin of its drive ({_folder_size_text(largest)})'
         return ""
     except Exception as error:
         return f"The Recycle Bin of its drive could not be checked ({error})"
@@ -519,8 +505,7 @@ def _folder_is_empty(folder) -> bool:
         return next(entries, None) is None
 
 
-_FOLDER_DELETE_WHILE_SCANNING = (
-    "A scan is running. A folder with data can be deleted here once it has ended.")
+_FOLDER_DELETE_WHILE_SCANNING = 'A scan is running. A folder with data can be deleted here once it has ended.'
 
 
 def folder_delete_question(folder) -> tuple[str, str]:
@@ -538,14 +523,11 @@ def folder_delete_question(folder) -> tuple[str, str]:
             f"{folder.name} holds more than is counted here ({FOLDER_DIALOG_COUNT_LIMIT} files and "
             "folders), or a part of it cannot be read or is a link to another folder. Delete it "
             "in the Windows Explorer.")
-    holds = (f"{files} file{'s' if files != 1 else ''} and {folders} "
-             f"folder{'s' if folders != 1 else ''} ({_folder_size_text(size)})")
+    holds = f"{files} file{('s' if files != 1 else '')} and {folders} folder{('s' if folders != 1 else '')} ({_folder_size_text(size)})"
     no_bin = recycle_bin_refusal(folder, size)
     if no_bin:
-        raise ValueError(f"{folder.name} holds {holds}. {no_bin}, so only an empty folder can be "
-                         "deleted in this window.")
-    return "recycle", (f"Delete the folder {folder.name}?\n\nIt holds {holds}. Windows moves it to "
-                       "the Recycle Bin, where it can be restored.")
+        raise ValueError(f'{folder.name} holds {holds}. {no_bin}, so only an empty folder can be deleted in this window.')
+    return ('recycle', f'Delete the folder {folder.name}?\n\nIt holds {holds}. Windows moves it to the Recycle Bin, where it can be restored.')
 
 
 def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
@@ -567,8 +549,7 @@ def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
     move_folder_to_recycle_bin(folder, window_handle)
     after = recycle_bin_item_count(folder)
     if before is not None and after is not None and after <= before:
-        return (f"{folder.name} is gone. The Recycle Bin did not gain an item, so check that it "
-                "is in there: Windows may have deleted it for good.")
+        return f'{folder.name} is gone. The Recycle Bin did not gain an item, so check that it is in there: Windows may have deleted it for good.'
     return ""
 
 
@@ -621,14 +602,12 @@ class EditableFolderDialog:
         box.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=8)
         box.columnconfigure(0, weight=1)
         box.rowconfigure(0, weight=1)
-        self.listbox = tk.Listbox(box, name="folders", width=64, height=14, activestyle="none",
-                                  exportselection=False, selectmode="browse")
+        self.listbox = tk.Listbox(box, name='folders', width=64, height=14, activestyle='none', exportselection=False, selectmode='browse')
         self.listbox.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.listbox.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=scroll.set)
-        self.status_label = ttk.Label(frame, textvariable=self.status_var, name="status",
-                                      wraplength=520, justify="left")
+        self.status_label = ttk.Label(frame, textvariable=self.status_var, name='status', wraplength=520, justify='left')
         self.status_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 6))
         self.status_label.grid_remove()
         ttk.Label(frame, text="Selection:").grid(row=3, column=0, sticky="w", padx=(0, 6))
@@ -781,8 +760,7 @@ class EditableFolderDialog:
             self._error("Delete folder", f"{folder.name} was not deleted: {error}")
             return
         try:
-            agreed = messagebox.askyesno("Delete folder", question, default="no", icon="warning",
-                                         parent=self.top)
+            agreed = messagebox.askyesno('Delete folder', question, default='no', icon='warning', parent=self.top)
         finally:
             self._regrab()
         if not agreed:
@@ -817,8 +795,7 @@ class EditableFolderDialog:
                 self._error("Choose a folder", f"{path.as_posix()} does not exist.")
                 return
             try:
-                agreed = messagebox.askyesno("Choose a folder", f"{path.as_posix()} does not exist. "
-                                             "Make it?", parent=self.top)
+                agreed = messagebox.askyesno('Choose a folder', f'{path.as_posix()} does not exist. Make it?', parent=self.top)
             finally:
                 self._regrab()
             if not agreed:
@@ -885,8 +862,7 @@ class EditableFolderDialog:
                 pass
             if previous_grab is not None:
                 try:
-                    if (int(parent.tk.call("winfo", "exists", previous_grab))
-                            and int(parent.tk.call("winfo", "viewable", previous_grab))):
+                    if int(parent.tk.call('winfo', 'exists', previous_grab)) and int(parent.tk.call('winfo', 'viewable', previous_grab)):
                         parent.tk.call("grab", "set", previous_grab)
                 except tk.TclError:
                     pass
@@ -899,8 +875,7 @@ def editable_folder_dialog(**options) -> str:
             raise RuntimeError("A folder dialog needs a Tk window")
         return _NATIVE_ASK_DIRECTORY(**options)
     try:
-        dialog = EditableFolderDialog(parent, options.get("title", ""), options.get("initialdir", ""),
-                                      options.get("mustexist", False))
+        dialog = EditableFolderDialog(parent, options.get('title', ''), options.get('initialdir', ''), options.get('mustexist', False))
     except Exception:
         return _NATIVE_ASK_DIRECTORY(**options)
     return dialog.show()
@@ -1065,9 +1040,7 @@ PPMS_TRANSPORT_FREQUENCY_HZ = 317.3
 PPMS_TRANSPORT_REFERENCE_TIMEOUT_S = 8.0
 
 
-PPMS_SR830_RESOURCE_OPTIONS = tuple(
-    f"GPIB0::{address}::INSTR" for address in (8, 9, 10)
-)
+PPMS_SR830_RESOURCE_OPTIONS = tuple((f'GPIB0::{address}::INSTR' for address in (8, 9, 10)))
 
 
 PPMS_SR830_REFERENCE_SLOPE = 1
@@ -1091,9 +1064,7 @@ _SHARED_VISA_MANAGER_USERS = 0
 def acquire_shared_visa_manager():
     global _SHARED_VISA_MANAGER, _SHARED_VISA_MANAGER_USERS
     if pyvisa is None:
-        raise RuntimeError(
-            "pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py"
-        )
+        raise RuntimeError('pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py')
     with _SHARED_VISA_MANAGER_LOCK:
         manager = _SHARED_VISA_MANAGER
         if manager is not None:
@@ -1101,10 +1072,7 @@ def acquire_shared_visa_manager():
                 manager.session
             except BaseException as error:
                 if _SHARED_VISA_MANAGER_USERS:
-                    raise RuntimeError(
-                        "The shared VISA resource manager session became invalid unexpectedly; please close the instruments "
-                        "that still show as connected and reconnect"
-                    ) from error
+                    raise RuntimeError('The shared VISA resource manager session became invalid unexpectedly; please close the instruments that still show as connected and reconnect') from error
                 _SHARED_VISA_MANAGER = None
                 manager = None
         if manager is None:
@@ -1122,9 +1090,7 @@ def release_shared_visa_manager(manager) -> None:
     with _SHARED_VISA_MANAGER_LOCK:
         if manager is not _SHARED_VISA_MANAGER:
             return
-        _SHARED_VISA_MANAGER_USERS = max(
-            0, _SHARED_VISA_MANAGER_USERS - 1
-        )
+        _SHARED_VISA_MANAGER_USERS = max(0, _SHARED_VISA_MANAGER_USERS - 1)
         if _SHARED_VISA_MANAGER_USERS == 0:
             try:
                 manager.close()
@@ -1146,19 +1112,14 @@ def instrument_lease_key(resource: str) -> str:
     return key
 
 
-def acquire_instrument_lease(
-    resource: str, owner: object, owner_label: str
-) -> str:
+def acquire_instrument_lease(resource: str, owner: object, owner_label: str) -> str:
     key = instrument_lease_key(resource)
     if not key:
         raise ValueError("The instrument resource address cannot be empty")
     with _INSTRUMENT_LEASE_LOCK:
         current = _INSTRUMENT_LEASES.get(key)
         if current is not None:
-            raise RuntimeError(
-                f"{resource} is already connected by \"{current[1]}\"; "
-                f"please disconnect it in that module first, then connect from \"{owner_label}\""
-            )
+            raise RuntimeError(f'{resource} is already connected by "{current[1]}"; please disconnect it in that module first, then connect from "{owner_label}"')
         _INSTRUMENT_LEASES[key] = (owner, str(owner_label))
     return key
 
@@ -1194,9 +1155,7 @@ class SafeVisaIdentityController:
         self.preserve_visa_io_defaults = bool(preserve_visa_io_defaults)
         self.safe_off_on_connect = bool(safe_off_on_connect)
         self.enumerate_before_open = bool(enumerate_before_open)
-        self.connect_settle_seconds = max(
-            0.0, float(connect_settle_seconds)
-        )
+        self.connect_settle_seconds = max(0.0, float(connect_settle_seconds))
         self.resource_manager = None
         self.instrument = None
         self.resource_name = ""
@@ -1207,16 +1166,12 @@ class SafeVisaIdentityController:
         return self.instrument is not None
     def connect(self, resource_name: str) -> str:
         if pyvisa is None:
-            raise RuntimeError(
-                "pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py"
-            )
+            raise RuntimeError('pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py')
         resource_name = str(resource_name).strip()
         with self.lock:
             if self.instrument is not None:
                 return self.identity
-            acquire_instrument_lease(
-                resource_name, self, f"{self.owner_scope} / {self.label}"
-            )
+            acquire_instrument_lease(resource_name, self, f'{self.owner_scope} / {self.label}')
             manager = None
             instrument = None
             identity_verified = False
@@ -1225,9 +1180,7 @@ class SafeVisaIdentityController:
                 if self.enumerate_before_open:
                     manager.list_resources()
                 instrument = manager.open_resource(resource_name)
-                instrument.timeout = (
-                    3000 if self.preserve_visa_io_defaults else 5000
-                )
+                instrument.timeout = 3000 if self.preserve_visa_io_defaults else 5000
                 if not self.preserve_visa_io_defaults:
                     instrument.write_termination = "\n"
                     instrument.read_termination = "\n"
@@ -1244,30 +1197,21 @@ class SafeVisaIdentityController:
                 try:
                     identity = instrument.query("*IDN?").strip()
                 except BaseException as error:
-                    raise RuntimeError(
-                        f"{self.label} identity query *IDN? failed: {error}; "
-                        "no output/setting command was sent to the device this time; the VISA session has been closed"
-                    ) from error
+                    raise RuntimeError(f'{self.label} identity query *IDN? failed: {error}; no output/setting command was sent to the device this time; the VISA session has been closed') from error
                 if self.identity_token not in identity.upper():
-                    raise RuntimeError(
-                        f"The device returned by {resource_name} is not {self.label}: {identity}"
-                    )
+                    raise RuntimeError(f'The device returned by {resource_name} is not {self.label}: {identity}')
                 identity_verified = True
                 if self.safe_off_on_connect:
                     for command in self.safe_off_commands:
                         try:
                             instrument.write(command)
                         except BaseException as error:
-                            raise RuntimeError(
-                                f"{self.label} connection safety command {command!r} failed: {error}"
-                            ) from error
+                            raise RuntimeError(f'{self.label} connection safety command {command!r} failed: {error}') from error
                 self.resource_manager = manager
                 self.instrument = instrument
                 self.resource_name = resource_name
                 self.identity = identity
-                self.logger(
-                    f"{self.owner_scope} {self.label} connected: {identity}"
-                )
+                self.logger(f'{self.owner_scope} {self.label} connected: {identity}')
                 return identity
             except BaseException:
                 if instrument is not None:
@@ -1295,9 +1239,7 @@ class SafeVisaIdentityController:
                 except BaseException as error:
                     errors.append(f"{command}: {error}")
             if errors:
-                raise RuntimeError(
-                    f"{self.label} failed to turn output off: " + "; ".join(errors)
-                )
+                raise RuntimeError(f'{self.label} failed to turn output off: ' + '; '.join(errors))
     def disconnect(self) -> None:
         with self.lock:
             instrument = self.instrument
@@ -1391,9 +1333,7 @@ class PPMSMultiVuReadbackController:
         temperature_k = float(temperature_k)
         field_oe = float(field_oe)
         if not math.isfinite(temperature_k) or not math.isfinite(field_oe):
-            raise RuntimeError(
-                f"PPMS returned non-finite readings: T={temperature_k!r}, H={field_oe!r}"
-            )
+            raise RuntimeError(f'PPMS returned non-finite readings: T={temperature_k!r}, H={field_oe!r}')
         return {
             "temperature_k": temperature_k,
             "temperature_status": getattr(
@@ -1416,29 +1356,17 @@ class PPMSMultiVuReadbackController:
         if group is not None and hasattr(group, name):
             return getattr(group, name)
         raise RuntimeError(f"The current MultiPyVu version lacks the mode enum {name}")
-    def set_temperature(
-        self, target_k: float, rate_k_min: float, approach_code: int
-    ) -> dict[str, object]:
+    def set_temperature(self, target_k: float, rate_k_min: float, approach_code: int) -> dict[str, object]:
         with self.lock:
             if self.client is None:
                 raise RuntimeError("PPMS MultiVu is not connected")
             current_k, _status = self.client.get_temperature()
-            target_k, rate_k_min = validate_ppms_temperature_command(
-                target_k, rate_k_min, float(current_k)
-            )
+            target_k, rate_k_min = validate_ppms_temperature_command(target_k, rate_k_min, float(current_k))
             approach_name = "fast_settle" if int(approach_code) == 0 else "no_overshoot"
-            approach = self._enum_member(
-                self.client, "temperature", "temp_approach_mode", approach_name
-            )
+            approach = self._enum_member(self.client, 'temperature', 'temp_approach_mode', approach_name)
             self.client.set_temperature(target_k, float(rate_k_min), approach)
             return self.read_environment()
-    def set_field(
-        self,
-        target_oe: float,
-        rate_oe_s: float,
-        approach_code: int,
-        mode_code: int,
-    ) -> dict[str, object]:
+    def set_field(self, target_oe: float, rate_oe_s: float, approach_code: int, mode_code: int) -> dict[str, object]:
         target_oe, rate_oe_s = validate_ppms_field_command(target_oe, rate_oe_s)
         approach_names = {0: "linear", 1: "no_overshoot", 2: "oscillate"}
         mode_names = {0: "persistent", 1: "driven"}
@@ -1450,12 +1378,8 @@ class PPMSMultiVuReadbackController:
         with self.lock:
             if self.client is None:
                 raise RuntimeError("PPMS MultiVu is not connected")
-            approach = self._enum_member(
-                self.client, "field", "field_approach_mode", approach_name
-            )
-            mode = self._enum_member(
-                self.client, "field", "field_driven_mode", mode_name
-            )
+            approach = self._enum_member(self.client, 'field', 'field_approach_mode', approach_name)
+            mode = self._enum_member(self.client, 'field', 'field_driven_mode', mode_name)
             self.client.set_field(target_oe, rate_oe_s, approach, mode)
             return self.read_environment()
     def disconnect(self) -> None:
@@ -1488,10 +1412,7 @@ class PPMSQDInstrumentReadbackController:
     @staticmethod
     def candidate_dll_paths(explicit_path: str = "") -> tuple[Path, ...]:
         candidates: list[Path] = []
-        for raw_path in (
-            explicit_path,
-            os.environ.get(PPMS_QDINSTRUMENT_DLL_ENV, ""),
-        ):
+        for raw_path in (explicit_path, os.environ.get(PPMS_QDINSTRUMENT_DLL_ENV, '')):
             if str(raw_path).strip():
                 candidates.append(Path(str(raw_path).strip().strip('"')))
         script_directory = Path(__file__).resolve().parent
@@ -1518,15 +1439,9 @@ class PPMSQDInstrumentReadbackController:
                 Path(r"D:\user data\Niu Heng\QDInstrument\QDInstrument.dll"),
             )
         )
-        for raw_directory in (
-            *sys.path,
-            *os.environ.get("PATH", "").split(os.pathsep),
-        ):
+        for raw_directory in (*sys.path, *os.environ.get('PATH', '').split(os.pathsep)):
             if str(raw_directory).strip():
-                candidates.append(
-                    Path(str(raw_directory).strip().strip('"'))
-                    / "QDInstrument.dll"
-                )
+                candidates.append(Path(str(raw_directory).strip().strip('"')) / 'QDInstrument.dll')
         unique: list[Path] = []
         seen: set[str] = set()
         for path in candidates:
@@ -1538,13 +1453,7 @@ class PPMSQDInstrumentReadbackController:
     @staticmethod
     def _windows_discovery_roots() -> tuple[Path, ...]:
         roots: list[Path] = []
-        for variable in (
-            "USERPROFILE",
-            "PUBLIC",
-            "PROGRAMDATA",
-            "ProgramFiles",
-            "ProgramFiles(x86)",
-        ):
+        for variable in ('USERPROFILE', 'PUBLIC', 'PROGRAMDATA', 'ProgramFiles', 'ProgramFiles(x86)'):
             raw = os.environ.get(variable, "").strip()
             if not raw:
                 continue
@@ -1554,19 +1463,8 @@ class PPMSQDInstrumentReadbackController:
             elif variable == "PROGRAMDATA":
                 roots.append(base / "Quantum Design")
             else:
-                roots.extend(
-                    (
-                        base / "Quantum Design",
-                        base / "National Instruments",
-                    )
-                )
-        roots.extend(
-            (
-                Path(r"C:\QDInstrument"),
-                Path(r"C:\QDLabVIEW"),
-                Path(r"D:\user data\Niu Heng"),
-            )
-        )
+                roots.extend((base / 'Quantum Design', base / 'National Instruments'))
+        roots.extend((Path('C:\\QDInstrument'), Path('C:\\QDLabVIEW'), Path('D:\\user data\\Niu Heng')))
         unique: list[Path] = []
         seen: set[str] = set()
         for root in roots:
@@ -1576,14 +1474,7 @@ class PPMSQDInstrumentReadbackController:
                 unique.append(root)
         return tuple(unique)
     @classmethod
-    def discover_dll_paths(
-        cls,
-        explicit_path: str = "",
-        *,
-        recursive: bool = False,
-        time_limit_s: float = 8.0,
-        max_results: int = 8,
-    ) -> tuple[Path, ...]:
+    def discover_dll_paths(cls, explicit_path: str='', *, recursive: bool=False, time_limit_s: float=8.0, max_results: int=8) -> tuple[Path, ...]:
         matches: list[Path] = []
         seen: set[str] = set()
         def add(path: Path) -> bool:
@@ -1605,17 +1496,7 @@ class PPMSQDInstrumentReadbackController:
         if not recursive or not sys.platform.startswith("win"):
             return tuple(matches)
         deadline = time.monotonic() + max(0.5, float(time_limit_s))
-        skipped_names = {
-            "$recycle.bin",
-            ".git",
-            ".svn",
-            "appdata",
-            "cache",
-            "node_modules",
-            "site-packages",
-            "temp",
-            "windowsapps",
-        }
+        skipped_names = {'$recycle.bin', '.git', '.svn', 'appdata', 'cache', 'node_modules', 'site-packages', 'temp', 'windowsapps'}
         for root in cls._windows_discovery_roots():
             if time.monotonic() >= deadline:
                 break
@@ -1628,12 +1509,7 @@ class PPMSQDInstrumentReadbackController:
                         break
                     current_path = Path(current)
                     depth = len(current_path.parts) - root_depth
-                    directory_names[:] = [
-                        name
-                        for name in directory_names
-                        if name.casefold() not in skipped_names
-                        and not name.startswith(".")
-                    ]
+                    directory_names[:] = [name for name in directory_names if name.casefold() not in skipped_names and (not name.startswith('.'))]
                     if depth >= 7:
                         directory_names[:] = []
                     for file_name in file_names:
@@ -1657,10 +1533,7 @@ class PPMSQDInstrumentReadbackController:
         )
     @staticmethod
     def _import_qdinstrument_api():
-        from QuantumDesign.QDInstrument import (
-            QDInstrumentBase,
-            QDInstrumentFactory,
-        )
+        from QuantumDesign.QDInstrument import QDInstrumentBase, QDInstrumentFactory
         return QDInstrumentBase, QDInstrumentFactory
     @classmethod
     def _load_qdinstrument_api(cls, clr, explicit_path: str = ""):
@@ -1678,9 +1551,7 @@ class PPMSQDInstrumentReadbackController:
             return (*api, ".NET auto-resolved: QDInstrument")
         except BaseException as error:
             attempts.append(f".NET assembly name QDInstrument: {error}")
-        for dll in cls.discover_dll_paths(
-            explicit_path, recursive=True, time_limit_s=8.0
-        ):
+        for dll in cls.discover_dll_paths(explicit_path, recursive=True, time_limit_s=8.0):
             try:
                 clr.AddReference(str(dll))
                 api = cls._import_qdinstrument_api()
@@ -1713,20 +1584,14 @@ class PPMSQDInstrumentReadbackController:
             except TypeError:
                 values = [raw_result]
         if len(values) < 2:
-            raise RuntimeError(
-                f"QDInstrument {quantity} returned an unexpected format: {raw_result!r}"
-            )
+            raise RuntimeError(f'QDInstrument {quantity} returned an unexpected format: {raw_result!r}')
         physical_value, status = values[-2], values[-1]
         try:
             physical_value = float(physical_value)
         except (TypeError, ValueError) as error:
-            raise RuntimeError(
-                f"QDInstrument {quantity} reading is not numeric: {physical_value!r}"
-            ) from error
+            raise RuntimeError(f'QDInstrument {quantity} reading is not numeric: {physical_value!r}') from error
         if not math.isfinite(physical_value):
-            raise RuntimeError(
-                f"QDInstrument {quantity} returned a non-finite reading: {physical_value!r}"
-            )
+            raise RuntimeError(f'QDInstrument {quantity} returned a non-finite reading: {physical_value!r}')
         if len(values) >= 3:
             return_code = values[0]
             try:
@@ -1734,9 +1599,7 @@ class PPMSQDInstrumentReadbackController:
             except (TypeError, ValueError):
                 numeric_code = 0
             if numeric_code != 0:
-                raise RuntimeError(
-                    f"QDInstrument {quantity} read failed, return code {numeric_code}"
-                )
+                raise RuntimeError(f'QDInstrument {quantity} read failed, return code {numeric_code}')
         status_text = getattr(status, "name", None)
         if not status_text:
             try:
@@ -1768,32 +1631,19 @@ class PPMSQDInstrumentReadbackController:
         try:
             import System
         except ImportError as error:
-            raise RuntimeError(
-                "pythonnet loaded QDInstrument.dll, but the System reflection interface cannot be imported"
-            ) from error
+            raise RuntimeError('pythonnet loaded QDInstrument.dll, but the System reflection interface cannot be imported') from error
         try:
-            methods = [
-                method
-                for method in instrument.GetType().GetMethods()
-                if str(method.Name) == str(method_name)
-            ]
+            methods = [method for method in instrument.GetType().GetMethods() if str(method.Name) == str(method_name)]
         except BaseException as error:
-            raise RuntimeError(
-                f"Cannot reflect QDInstrument method {method_name}: {error}"
-            ) from error
+            raise RuntimeError(f'Cannot reflect QDInstrument method {method_name}: {error}') from error
         if not methods:
-            raise RuntimeError(
-                f"The current QDInstrument.dll has no method {method_name}"
-            )
+            raise RuntimeError(f'The current QDInstrument.dll has no method {method_name}')
         def rank(method) -> tuple[int, int]:
             try:
                 parameters = list(method.GetParameters())
             except BaseException:
                 return (99, 99)
-            ref_count = sum(
-                bool(getattr(item.ParameterType, "IsByRef", False))
-                for item in parameters
-            )
+            ref_count = sum((bool(getattr(item.ParameterType, 'IsByRef', False)) for item in parameters))
             return (0 if len(parameters) == 2 else 1, -ref_count)
         errors: list[str] = []
         for method in sorted(methods, key=rank):
@@ -1825,22 +1675,14 @@ class PPMSQDInstrumentReadbackController:
             except BaseException as error:
                 errors.append(f"{signature}: {error}")
         details = "\n".join(f"  - {item}" for item in errors)
-        raise RuntimeError(
-            f"QDInstrument {method_name} ref/out call failed:\n{details}"
-        )
+        raise RuntimeError(f'QDInstrument {method_name} ref/out call failed:\n{details}')
     @classmethod
     def _invoke_typed_command(cls, instrument, method_name: str, values):
         try:
             import System
         except ImportError as error:
-            raise RuntimeError(
-                "pythonnet loaded QDInstrument.dll, but the System reflection interface cannot be imported"
-            ) from error
-        methods = [
-            method
-            for method in instrument.GetType().GetMethods()
-            if str(method.Name) == str(method_name)
-        ]
+            raise RuntimeError('pythonnet loaded QDInstrument.dll, but the System reflection interface cannot be imported') from error
+        methods = [method for method in instrument.GetType().GetMethods() if str(method.Name) == str(method_name)]
         if not methods:
             raise RuntimeError(f"The current QDInstrument.dll has no method {method_name}")
         errors: list[str] = []
@@ -1852,23 +1694,15 @@ class PPMSQDInstrumentReadbackController:
                 if len(parameters) != len(values):
                     continue
                 arguments = System.Array[System.Object](len(parameters))
-                for index, (parameter, raw_value) in enumerate(
-                    zip(parameters, values)
-                ):
+                for index, (parameter, raw_value) in enumerate(zip(parameters, values)):
                     value_type = parameter.ParameterType
                     if bool(getattr(value_type, "IsByRef", False)):
                         value_type = value_type.GetElementType()
                     if bool(getattr(value_type, "IsEnum", False)):
-                        converted = System.Enum.ToObject(
-                            value_type, int(raw_value)
-                        )
+                        converted = System.Enum.ToObject(value_type, int(raw_value))
                     else:
                         try:
-                            converted = System.Convert.ChangeType(
-                                raw_value,
-                                value_type,
-                                System.Globalization.CultureInfo.InvariantCulture,
-                            )
+                            converted = System.Convert.ChangeType(raw_value, value_type, System.Globalization.CultureInfo.InvariantCulture)
                         except BaseException:
                             converted = value_type(raw_value)
                     arguments[index] = converted
@@ -1881,19 +1715,14 @@ class PPMSQDInstrumentReadbackController:
                 elif return_value is not None and int(return_value) != 0:
                     if int(return_value) == 1 and method_name in ("SetTemperature", "SetField"):
                         raise QDCommandUncertain(f"{method_name} return code 1; the command may have taken effect, not resending")
-                    raise RuntimeError(
-                        f"return code {int(return_value)} (return type {return_type}); "
-                        "the command may have taken effect; please verify the MultiVu target and rate and do not resubmit"
-                    )
+                    raise RuntimeError(f'return code {int(return_value)} (return type {return_type}); the command may have taken effect; please verify the MultiVu target and rate and do not resubmit')
                 return return_value
             except BaseException as error:
                 if invoked:
                     raise
                 errors.append(f"{signature}: {error}")
         details = "\n".join(f"  - {item}" for item in errors)
-        raise RuntimeError(
-            f"QDInstrument {method_name} call failed:\n{details}"
-        )
+        raise RuntimeError(f'QDInstrument {method_name} call failed:\n{details}')
     def connect(self, host: str, port: int, dll_path: str = "") -> dict[str, object]:
         host, port = PPMSMultiVuReadbackController.validate_endpoint(host, port)
         with self.lock:
@@ -1904,20 +1733,10 @@ class PPMSQDInstrumentReadbackController:
             try:
                 import clr
             except ImportError as error:
-                raise RuntimeError(
-                    "The current Python lacks pythonnet; please run:\n"
-                    "py -m pip install pythonnet"
-                ) from error
+                raise RuntimeError('The current Python lacks pythonnet; please run:\npy -m pip install pythonnet') from error
             try:
-                QDInstrumentBase, QDInstrumentFactory, load_source = (
-                    self._load_qdinstrument_api(clr, dll_path)
-                )
-                instrument = QDInstrumentFactory.GetQDInstrument(
-                    QDInstrumentBase.QDInstrumentType.PPMS,
-                    True,
-                    host,
-                    int(port),
-                )
+                QDInstrumentBase, QDInstrumentFactory, load_source = self._load_qdinstrument_api(clr, dll_path)
+                instrument = QDInstrumentFactory.GetQDInstrument(QDInstrumentBase.QDInstrumentType.PPMS, True, host, int(port))
             except BaseException as error:
                 raise RuntimeError(
                     "Loading QDInstrument.dll or creating the remote PPMS session failed. Please confirm the DLL is not "
@@ -1933,28 +1752,17 @@ class PPMSQDInstrumentReadbackController:
             except BaseException:
                 self.disconnect()
                 raise
-            self.logger(
-                f"PPMS QDInstrument connected: {host}:{port}; assembly={load_source}"
-            )
+            self.logger(f'PPMS QDInstrument connected: {host}:{port}; assembly={load_source}')
             return result
     def read_environment(self) -> dict[str, object]:
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("PPMS QDInstrument is not connected")
-            temperature_raw = self._invoke_ref_readback(
-                self.instrument, "GetTemperature"
-            )
+            temperature_raw = self._invoke_ref_readback(self.instrument, 'GetTemperature')
             field_raw = self._invoke_ref_readback(self.instrument, "GetField")
-        temperature_k, temperature_status = self._normalize_readback(
-            temperature_raw, "temperature"
-        )
+        temperature_k, temperature_status = self._normalize_readback(temperature_raw, 'temperature')
         field_oe, field_status = self._normalize_readback(field_raw, "magnetic field")
-        data = {
-            "temperature_k": temperature_k,
-            "temperature_status": temperature_status,
-            "field_oe": field_oe,
-            "field_status": field_status,
-        }
+        data = {'temperature_k': temperature_k, 'temperature_status': temperature_status, 'field_oe': field_oe, 'field_status': field_status}
         self._verify_environment_command(data)
         return data
     def _verify_environment_command(self, data):
@@ -1966,8 +1774,7 @@ class PPMSQDInstrumentReadbackController:
         label = "Temperature" if temperature else "Magnetic field"
         measured = float(data["temperature_k" if temperature else "field_oe"])
         status = str(data["temperature_status" if temperature else "field_status"]).lower().replace(" ", "")
-        stable = (status in ("stable", "stableattarget") if temperature else
-                  status in ("stable", "holding", "persistent", "stablepersistent", "stabledriven", "standby"))
+        stable = status in ('stable', 'stableattarget') if temperature else status in ('stable', 'holding', 'persistent', 'stablepersistent', 'stabledriven', 'standby')
         tolerance = .1 if temperature else max(PPMS_FIELD_TOLERANCE_OE, abs(target)*PPMS_FIELD_RELATIVE_TOLERANCE)
         if stable and abs(measured-target) <= tolerance:
             text = f"{label} reply uncertain; readback now confirms the target {target:g} was reached and is stable (rate not confirmed by readback)"
@@ -1986,33 +1793,18 @@ class PPMSQDInstrumentReadbackController:
         except QDCommandUncertain as error:
             self.logger(str(error))
             self.pending_environment_command = (name, float(values[0]), time.monotonic() + (14400 if name == "SetTemperature" else 3600))
-    def set_temperature(
-        self, target_k: float, rate_k_min: float, approach_code: int
-    ) -> dict[str, object]:
+    def set_temperature(self, target_k: float, rate_k_min: float, approach_code: int) -> dict[str, object]:
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("PPMS QDInstrument is not connected")
             current = self.read_environment()
-            target_k, rate_k_min = validate_ppms_temperature_command(
-                target_k, rate_k_min, float(current["temperature_k"])
-            )
+            target_k, rate_k_min = validate_ppms_temperature_command(target_k, rate_k_min, float(current['temperature_k']))
             if int(approach_code) not in (0, 1):
                 raise ValueError("PPMS temperature approach parameter is invalid")
-            self._send_environment_command(
-                "SetTemperature",
-                (target_k, rate_k_min, int(approach_code)),
-            )
-            self.logger(
-                f"PPMS temperature setpoint: {target_k:g} K, {rate_k_min:g} K/min"
-            )
+            self._send_environment_command('SetTemperature', (target_k, rate_k_min, int(approach_code)))
+            self.logger(f'PPMS temperature setpoint: {target_k:g} K, {rate_k_min:g} K/min')
             return self.read_environment()
-    def set_field(
-        self,
-        target_oe: float,
-        rate_oe_s: float,
-        approach_code: int,
-        mode_code: int,
-    ) -> dict[str, object]:
+    def set_field(self, target_oe: float, rate_oe_s: float, approach_code: int, mode_code: int) -> dict[str, object]:
         target_oe, rate_oe_s = validate_ppms_field_command(target_oe, rate_oe_s)
         if int(approach_code) not in (0, 1, 2):
             raise ValueError("PPMS field approach parameter is invalid")
@@ -2021,19 +1813,8 @@ class PPMSQDInstrumentReadbackController:
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("PPMS QDInstrument is not connected")
-            self._send_environment_command(
-                "SetField",
-                (
-                    target_oe,
-                    rate_oe_s,
-                    int(approach_code),
-                    int(mode_code),
-                ),
-            )
-            self.logger(
-                f"PPMS field setpoint: {target_oe:+g} Oe, "
-                f"{rate_oe_s:g} Oe/s, mode={int(mode_code)}"
-            )
+            self._send_environment_command('SetField', (target_oe, rate_oe_s, int(approach_code), int(mode_code)))
+            self.logger(f'PPMS field setpoint: {target_oe:+g} Oe, {rate_oe_s:g} Oe/s, mode={int(mode_code)}')
             return self.read_environment()
     def disconnect(self) -> None:
         with self.lock:
@@ -2052,9 +1833,7 @@ class PPMSQDInstrumentReadbackController:
                     except BaseException:
                         pass
                     break
-            self.logger(
-                "PPMS QDInstrument client disconnected (current setpoints unchanged)"
-            )
+            self.logger('PPMS QDInstrument client disconnected (current setpoints unchanged)')
 
 
 class PPMSScanCancelled(RuntimeError):
@@ -2069,8 +1848,7 @@ class PPMSMotorDebug:
         instrument = self.controller.instrument
         if instrument is None:
             raise RuntimeError("Please connect QDInstrument first")
-        methods = [m for m in instrument.GetType().GetMethods()
-                   if str(m.Name) == name and len(list(m.GetParameters())) == count]
+        methods = [m for m in instrument.GetType().GetMethods() if str(m.Name) == name and len(list(m.GetParameters())) == count]
         if len(methods) != 1:
             raise RuntimeError(f"{name}: no unique compatible interface found; please use 'Interface info' and send the log")
         return methods[0]
@@ -2182,11 +1960,8 @@ class PPMSMotorDebug:
             if str(args[1] or "").strip() or str(args[2] or "").strip():
                 ambiguous = True
                 self.controller.logger("MOVE reply is non-empty, execution result pending readback confirmation; MOVE not resent")
-            return {"target_deg": target, "return_code": result, "ambiguous": ambiguous,
-                    "raw_reply": str(args[1] or ""), "raw_error": str(args[2] or "")}
-    def move_and_verify(self, target, speed, cancelled=lambda: False,
-                        timeout=90.0, interval=0.5, allow_large=False,
-                        index_target=None):
+            return {'target_deg': target, 'return_code': result, 'ambiguous': ambiguous, 'raw_reply': str(args[1] or ''), 'raw_error': str(args[2] or '')}
+    def move_and_verify(self, target, speed, cancelled=lambda: False, timeout=90.0, interval=0.5, allow_large=False, index_target=None):
         if cancelled():
             raise PPMSScanCancelled("Cancelled before moving, MOVE not sent; this does not mean the motor is stopped")
         submission = self.move(target, speed, allow_large=True) if allow_large else self.move(target, speed)
@@ -2222,13 +1997,7 @@ class PPMSRemoteReadbackController:
     @property
     def connected(self) -> bool:
         return self.active is not None and self.active.connected
-    def connect(
-        self,
-        backend: str,
-        host: str,
-        port: int,
-        dll_path: str = "",
-    ) -> dict[str, object]:
+    def connect(self, backend: str, host: str, port: int, dll_path: str='') -> dict[str, object]:
         with self.lock:
             if self.connected:
                 return self.active.read_environment()
@@ -2248,28 +2017,16 @@ class PPMSRemoteReadbackController:
             if not self.connected:
                 raise RuntimeError("PPMS remote interface is not connected")
             return self.active.read_environment()
-    def set_temperature(
-        self, target_k: float, rate_k_min: float, approach_code: int
-    ) -> dict[str, object]:
+    def set_temperature(self, target_k: float, rate_k_min: float, approach_code: int) -> dict[str, object]:
         with self.lock:
             if not self.connected:
                 raise RuntimeError("PPMS remote interface is not connected")
-            return self.active.set_temperature(
-                target_k, rate_k_min, approach_code
-            )
-    def set_field(
-        self,
-        target_oe: float,
-        rate_oe_s: float,
-        approach_code: int,
-        mode_code: int,
-    ) -> dict[str, object]:
+            return self.active.set_temperature(target_k, rate_k_min, approach_code)
+    def set_field(self, target_oe: float, rate_oe_s: float, approach_code: int, mode_code: int) -> dict[str, object]:
         with self.lock:
             if not self.connected:
                 raise RuntimeError("PPMS remote interface is not connected")
-            return self.active.set_field(
-                target_oe, rate_oe_s, approach_code, mode_code
-            )
+            return self.active.set_field(target_oe, rate_oe_s, approach_code, mode_code)
     def disconnect(self) -> None:
         with self.lock:
             controller = self.active
@@ -2279,58 +2036,35 @@ class PPMSRemoteReadbackController:
                 controller.disconnect()
 
 
-def validate_ppms_temperature_command(
-    target_k: float,
-    rate_k_min: float,
-    current_k: float | None = None,
-) -> tuple[float, float]:
+def validate_ppms_temperature_command(target_k: float, rate_k_min: float, current_k: float | None=None) -> tuple[float, float]:
     target_k = float(target_k)
     rate_k_min = float(rate_k_min)
     if not math.isfinite(target_k) or not math.isfinite(rate_k_min):
         raise ValueError("PPMS target temperature and ramp rate must be finite values")
     if not PPMS_TEMPERATURE_MIN_K <= target_k <= PPMS_TEMPERATURE_MAX_K:
-        raise ValueError(
-            f"PPMS target temperature must be within {PPMS_TEMPERATURE_MIN_K:g}–"
-            f"{PPMS_TEMPERATURE_MAX_K:g} K"
-        )
+        raise ValueError(f'PPMS target temperature must be within {PPMS_TEMPERATURE_MIN_K:g}–{PPMS_TEMPERATURE_MAX_K:g} K')
     if rate_k_min <= 0:
         raise ValueError("PPMS temperature ramp rate must be greater than 0 K/min")
     current_valid = current_k is not None and math.isfinite(float(current_k))
     enters_low_range = target_k <= PPMS_TEMPERATURE_LOW_BOUNDARY_K
     if current_valid:
-        enters_low_range = enters_low_range or (
-            float(current_k) <= PPMS_TEMPERATURE_LOW_BOUNDARY_K
-        )
-    maximum = (
-        PPMS_TEMPERATURE_LOW_MAX_RATE_K_MIN
-        if enters_low_range
-        else PPMS_TEMPERATURE_MAX_RATE_K_MIN
-    )
+        enters_low_range = enters_low_range or float(current_k) <= PPMS_TEMPERATURE_LOW_BOUNDARY_K
+    maximum = PPMS_TEMPERATURE_LOW_MAX_RATE_K_MIN if enters_low_range else PPMS_TEMPERATURE_MAX_RATE_K_MIN
     if rate_k_min > maximum + 1e-12:
         region = "within the 5–9 K range" if enters_low_range else "above 9 K"
-        raise ValueError(
-            f"PPMS temperature ramp rate {region} must not exceed {maximum:g} K/min"
-        )
+        raise ValueError(f'PPMS temperature ramp rate {region} must not exceed {maximum:g} K/min')
     return target_k, rate_k_min
 
 
-def validate_ppms_field_command(
-    target_oe: float,
-    rate_oe_s: float,
-) -> tuple[float, float]:
+def validate_ppms_field_command(target_oe: float, rate_oe_s: float) -> tuple[float, float]:
     target_oe = float(target_oe)
     rate_oe_s = float(rate_oe_s)
     if not math.isfinite(target_oe) or not math.isfinite(rate_oe_s):
         raise ValueError("PPMS target field and field ramp rate must be finite values")
     if abs(target_oe) > PPMS_FIELD_LIMIT_OE:
-        raise ValueError(
-            f"PPMS target field must be within ±{PPMS_FIELD_LIMIT_OE:g} Oe"
-        )
+        raise ValueError(f'PPMS target field must be within ±{PPMS_FIELD_LIMIT_OE:g} Oe')
     if rate_oe_s <= 0 or rate_oe_s >= PPMS_FIELD_RATE_LIMIT_OE_S:
-        raise ValueError(
-            f"PPMS field ramp rate must be greater than 0 and below "
-            f"{PPMS_FIELD_RATE_LIMIT_OE_S:g} Oe/s"
-        )
+        raise ValueError(f'PPMS field ramp rate must be greater than 0 and below {PPMS_FIELD_RATE_LIMIT_OE_S:g} Oe/s')
     return target_oe, rate_oe_s
 
 
@@ -2374,15 +2108,9 @@ class Keithley6221Controller:
             return
         self._write_checked(K6221_OUTPUT_LOW_FLOATING)
         if self._read_output_low_to_earth() != 0:
-            raise RuntimeError("6221 output low stayed earth-grounded; "
-                               "set TRIAX -> OUTPUT LOW -> FLOATING on the front panel")
+            raise RuntimeError('6221 output low stayed earth-grounded; set TRIAX -> OUTPUT LOW -> FLOATING on the front panel')
     @staticmethod
-    def _validate(
-        current_a: float,
-        pulse_width_s: float,
-        compliance_v: float,
-        pulse_count: int,
-    ):
+    def _validate(current_a: float, pulse_width_s: float, compliance_v: float, pulse_count: int):
         current_a = float(current_a)
         pulse_width_s = float(pulse_width_s)
         compliance_v = float(compliance_v)
@@ -2393,45 +2121,26 @@ class Keithley6221Controller:
         if not math.isfinite(pulse_count_numeric) or not pulse_count_numeric.is_integer():
             raise ValueError("6221 pulse count must be an integer")
         pulse_count = int(pulse_count_numeric)
-        if not all(
-            math.isfinite(value)
-            for value in (current_a, pulse_width_s, compliance_v)
-        ):
+        if not all((math.isfinite(value) for value in (current_a, pulse_width_s, compliance_v))):
             raise ValueError("6221 current, pulse width and compliance voltage must be finite values")
         if abs(current_a) > K6221_MAX_ABS_CURRENT_A:
-            raise ValueError(
-                f"6221 current exceeds the software limit ±{K6221_MAX_ABS_CURRENT_A * 1000:g} mA"
-            )
+            raise ValueError(f'6221 current exceeds the software limit ±{K6221_MAX_ABS_CURRENT_A * 1000:g} mA')
         if 0.0 < abs(current_a) < K6221_MIN_NONZERO_CURRENT_A:
             raise ValueError("6221 non-zero pulse current magnitude cannot be less than 4 pA")
         if not K6221_MIN_PULSE_WIDTH_S <= pulse_width_s <= K6221_MAX_PULSE_WIDTH_S:
-            raise ValueError(
-                "6221 pulse width must be between "
-                f"{K6221_MIN_PULSE_WIDTH_S * 1e6:g} us–"
-                f"{K6221_MAX_PULSE_WIDTH_S:g} s"
-            )
+            raise ValueError(f'6221 pulse width must be between {K6221_MIN_PULSE_WIDTH_S * 1000000.0:g} us–{K6221_MAX_PULSE_WIDTH_S:g} s')
         if not K6221_MIN_COMPLIANCE_V <= compliance_v <= K6221_MAX_COMPLIANCE_V:
-            raise ValueError(
-                f"6221 compliance voltage must be between {K6221_MIN_COMPLIANCE_V:g}–"
-                f"{K6221_MAX_COMPLIANCE_V:g} V"
-            )
+            raise ValueError(f'6221 compliance voltage must be between {K6221_MIN_COMPLIANCE_V:g}–{K6221_MAX_COMPLIANCE_V:g} V')
         if not 1 <= pulse_count <= K6221_MAX_PULSE_COUNT:
-            raise ValueError(
-                f"6221 pulse count must be between 1 and {K6221_MAX_PULSE_COUNT}"
-            )
+            raise ValueError(f'6221 pulse count must be between 1 and {K6221_MAX_PULSE_COUNT}')
         total_time_s = 2.0 * pulse_width_s * pulse_count
         if total_time_s > K6221_MAX_WAVEFORM_TIME_S:
-            raise ValueError(
-                "Total waveform time (pulse width × pulse count) exceeds "
-                f"{K6221_MAX_WAVEFORM_TIME_S:g} s"
-            )
+            raise ValueError(f'Total waveform time (pulse width × pulse count) exceeds {K6221_MAX_WAVEFORM_TIME_S:g} s')
         return current_a, pulse_width_s, compliance_v, pulse_count
     def connect(self, resource_name: str, compliance_v: float) -> str:
         if pyvisa is None:
             raise RuntimeError("pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py")
-        _, _, compliance_v, _ = self._validate(
-            0.0, self.pulse_width_s, compliance_v, self.pulse_count
-        )
+        _, _, compliance_v, _ = self._validate(0.0, self.pulse_width_s, compliance_v, self.pulse_count)
         with self.lock:
             if self.instrument is not None:
                 return self.identity
@@ -2446,9 +2155,7 @@ class Keithley6221Controller:
                 instrument.read_termination = "\n"
                 identity = instrument.query("*IDN?").strip()
                 if "6221" not in identity.upper():
-                    raise RuntimeError(
-                        f"The device returned by {resource_name} is not a Keithley 6221: {identity}"
-                    )
+                    raise RuntimeError(f'The device returned by {resource_name} is not a Keithley 6221: {identity}')
                 self.resource_manager = manager
                 self.instrument = instrument
                 self.resource_name = resource_name
@@ -2480,38 +2187,23 @@ class Keithley6221Controller:
                 self.instrument = None
                 release_instrument_lease(resource_name, self)
                 raise
-    def set_continuous_output(
-        self,
-        mode: str,
-        current_a: float,
-        frequency_hz: float,
-        compliance_v: float,
-    ) -> dict[str, object]:
+    def set_continuous_output(self, mode: str, current_a: float, frequency_hz: float, compliance_v: float) -> dict[str, object]:
         mode = str(mode).strip().upper()
         current_a = float(current_a)
         frequency_hz = float(frequency_hz)
         compliance_v = float(compliance_v)
         if mode not in {"AC", "DC"}:
             raise ValueError("6221 continuous output mode can only be AC or DC")
-        if not all(
-            math.isfinite(value)
-            for value in (current_a, frequency_hz, compliance_v)
-        ):
+        if not all((math.isfinite(value) for value in (current_a, frequency_hz, compliance_v))):
             raise ValueError("6221 continuous output parameters must be finite values")
         if not K6221_MIN_COMPLIANCE_V <= compliance_v <= K6221_MAX_COMPLIANCE_V:
-            raise ValueError(
-                f"6221 compliance voltage must be between {K6221_MIN_COMPLIANCE_V:g}–"
-                f"{K6221_MAX_COMPLIANCE_V:g} V"
-            )
+            raise ValueError(f'6221 compliance voltage must be between {K6221_MIN_COMPLIANCE_V:g}–{K6221_MAX_COMPLIANCE_V:g} V')
         if mode == "AC":
             if current_a < 0:
                 raise ValueError("6221 AC current uses the RMS amplitude and cannot be negative")
             peak_a = math.sqrt(2.0) * current_a
             if peak_a > K6221_MAX_ABS_CURRENT_A:
-                raise ValueError(
-                    "6221 AC peak exceeds the hardware range; "
-                    f"RMS maximum is about {K6221_MAX_ABS_CURRENT_A / math.sqrt(2) * 1000:g} mA"
-                )
+                raise ValueError(f'6221 AC peak exceeds the hardware range; RMS maximum is about {K6221_MAX_ABS_CURRENT_A / math.sqrt(2) * 1000:g} mA')
             if 0.0 < current_a < K6221_MIN_NONZERO_CURRENT_A:
                 raise ValueError("6221 non-zero AC RMS current cannot be less than 4 pA")
             if not 1e-3 <= frequency_hz <= 1e5:
@@ -2519,9 +2211,7 @@ class Keithley6221Controller:
         else:
             peak_a = 0.0
             if abs(current_a) > K6221_MAX_ABS_CURRENT_A:
-                raise ValueError(
-                    f"6221 DC current exceeds ±{K6221_MAX_ABS_CURRENT_A * 1000:g} mA"
-                )
+                raise ValueError(f'6221 DC current exceeds ±{K6221_MAX_ABS_CURRENT_A * 1000:g} mA')
             if 0.0 < abs(current_a) < K6221_MIN_NONZERO_CURRENT_A:
                 raise ValueError("6221 non-zero DC current magnitude cannot be less than 4 pA")
         with self.lock:
@@ -2546,72 +2236,30 @@ class Keithley6221Controller:
                     "SOUR:WAVE:INIT",
                 )
             else:
-                commands = (
-                    "SOUR:WAVE:ABOR",
-                    f"CURR:COMP {compliance_v:.12g}",
-                    "SOUR:CURR:RANG:AUTO ON",
-                    f"SOUR:CURR {current_a:.12e}",
-                    "OUTP ON",
-                )
+                commands = ('SOUR:WAVE:ABOR', f'CURR:COMP {compliance_v:.12g}', 'SOUR:CURR:RANG:AUTO ON', f'SOUR:CURR {current_a:.12e}', 'OUTP ON')
             for command in commands:
                 self._write_checked(command)
-            actual_compliance = float(
-                self.instrument.query("CURR:COMP?").strip()
-            )
-            output_state = int(round(float(
-                self.instrument.query("OUTP?").strip()
-            )))
+            actual_compliance = float(self.instrument.query('CURR:COMP?').strip())
+            output_state = int(round(float(self.instrument.query('OUTP?').strip())))
             if mode == "AC":
-                actual_peak = float(
-                    self.instrument.query("SOUR:WAVE:AMPL?").strip()
-                )
-                actual_frequency = float(
-                    self.instrument.query("SOUR:WAVE:FREQ?").strip()
-                )
+                actual_peak = float(self.instrument.query('SOUR:WAVE:AMPL?').strip())
+                actual_frequency = float(self.instrument.query('SOUR:WAVE:FREQ?').strip())
                 actual_current = actual_peak / math.sqrt(2.0)
-                if not math.isclose(
-                    actual_peak, peak_a, rel_tol=5e-4, abs_tol=1e-12
-                ):
+                if not math.isclose(actual_peak, peak_a, rel_tol=0.0005, abs_tol=1e-12):
                     self.output_off()
-                    raise RuntimeError(
-                        "6221 AC amplitude readback mismatch: "
-                        f"requested {peak_a:g} Apeak, readback {actual_peak:g} Apeak"
-                    )
-                if not math.isclose(
-                    actual_frequency,
-                    frequency_hz,
-                    rel_tol=5e-4,
-                    abs_tol=1e-6,
-                ):
+                    raise RuntimeError(f'6221 AC amplitude readback mismatch: requested {peak_a:g} Apeak, readback {actual_peak:g} Apeak')
+                if not math.isclose(actual_frequency, frequency_hz, rel_tol=0.0005, abs_tol=1e-06):
                     self.output_off()
-                    raise RuntimeError(
-                        "6221 AC frequency readback mismatch: "
-                        f"requested {frequency_hz:g} Hz, readback {actual_frequency:g} Hz"
-                    )
+                    raise RuntimeError(f'6221 AC frequency readback mismatch: requested {frequency_hz:g} Hz, readback {actual_frequency:g} Hz')
             else:
-                actual_current = float(
-                    self.instrument.query("SOUR:CURR?").strip()
-                )
+                actual_current = float(self.instrument.query('SOUR:CURR?').strip())
                 actual_frequency = math.nan
-                if not math.isclose(
-                    actual_current, current_a, rel_tol=5e-4, abs_tol=1e-12
-                ):
+                if not math.isclose(actual_current, current_a, rel_tol=0.0005, abs_tol=1e-12):
                     self.output_off()
-                    raise RuntimeError(
-                        "6221 DC current readback mismatch: "
-                        f"requested {current_a:g} A, readback {actual_current:g} A"
-                    )
-            if not math.isclose(
-                actual_compliance,
-                compliance_v,
-                rel_tol=5e-4,
-                abs_tol=1e-6,
-            ) or output_state != 1:
+                    raise RuntimeError(f'6221 DC current readback mismatch: requested {current_a:g} A, readback {actual_current:g} A')
+            if not math.isclose(actual_compliance, compliance_v, rel_tol=0.0005, abs_tol=1e-06) or output_state != 1:
                 self.output_off()
-                raise RuntimeError(
-                    "6221 continuous output start readback mismatch: "
-                    f"compliance={actual_compliance:g} V, output={output_state}"
-                )
+                raise RuntimeError(f'6221 continuous output start readback mismatch: compliance={actual_compliance:g} V, output={output_state}')
             self.current_a = actual_current
             self.compliance_v = actual_compliance
             self.output_enabled = True
@@ -2621,38 +2269,22 @@ class Keithley6221Controller:
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("Keithley 6221 is not connected")
-            output_on = bool(round(float(
-                self.instrument.query("OUTP?").strip()
-            )))
-            compliance_v = float(
-                self.instrument.query("CURR:COMP?").strip()
-            )
-            measurement_condition = int(round(float(
-                self.instrument.query("STAT:MEAS:COND?").strip()
-            )))
+            output_on = bool(round(float(self.instrument.query('OUTP?').strip())))
+            compliance_v = float(self.instrument.query('CURR:COMP?').strip())
+            measurement_condition = int(round(float(self.instrument.query('STAT:MEAS:COND?').strip())))
             mode = self.output_mode if output_on else "OFF"
             frequency_hz = math.nan
             if mode in {"AC", "PULSE"}:
-                amplitude_a = float(
-                    self.instrument.query("SOUR:WAVE:AMPL?").strip()
-                )
-                offset_a = float(
-                    self.instrument.query("SOUR:WAVE:OFFS?").strip()
-                )
-                frequency_hz = float(
-                    self.instrument.query("SOUR:WAVE:FREQ?").strip()
-                )
+                amplitude_a = float(self.instrument.query('SOUR:WAVE:AMPL?').strip())
+                offset_a = float(self.instrument.query('SOUR:WAVE:OFFS?').strip())
+                frequency_hz = float(self.instrument.query('SOUR:WAVE:FREQ?').strip())
                 if mode == "AC":
                     current_a = amplitude_a / math.sqrt(2.0)
                 else:
                     sign_source = offset_a if offset_a != 0 else 1.0
-                    current_a = math.copysign(
-                        abs(offset_a) + abs(amplitude_a), sign_source
-                    )
+                    current_a = math.copysign(abs(offset_a) + abs(amplitude_a), sign_source)
             else:
-                current_a = float(
-                    self.instrument.query("SOUR:CURR?").strip()
-                )
+                current_a = float(self.instrument.query('SOUR:CURR?').strip())
             self.output_enabled = output_on
             self.current_a = current_a if output_on else 0.0
             self.compliance_v = compliance_v
@@ -2668,16 +2300,8 @@ class Keithley6221Controller:
                 "in_compliance": bool(measurement_condition & 8),
                 "sample_monotonic": time.monotonic(),
             }
-    def set_dc_pulse(
-        self,
-        current_a: float,
-        pulse_width_s: float,
-        compliance_v: float,
-        pulse_count: int,
-    ) -> dict[str, object]:
-        current_a, pulse_width_s, compliance_v, pulse_count = self._validate(
-            current_a, pulse_width_s, compliance_v, pulse_count
-        )
+    def set_dc_pulse(self, current_a: float, pulse_width_s: float, compliance_v: float, pulse_count: int) -> dict[str, object]:
+        current_a, pulse_width_s, compliance_v, pulse_count = self._validate(current_a, pulse_width_s, compliance_v, pulse_count)
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("Keithley 6221 is not connected")
@@ -2721,13 +2345,9 @@ class Keithley6221Controller:
             actual_offset = float(self.instrument.query("SOUR:WAVE:OFFS?").strip())
             actual_frequency = float(self.instrument.query("SOUR:WAVE:FREQ?").strip())
             actual_compliance = float(self.instrument.query("CURR:COMP?").strip())
-            actual_cycles = int(round(float(
-                self.instrument.query("SOUR:WAVE:DUR:CYCL?").strip()
-            )))
+            actual_cycles = int(round(float(self.instrument.query('SOUR:WAVE:DUR:CYCL?').strip())))
             output_state = int(round(float(self.instrument.query("OUTP?").strip())))
-            measurement_condition = int(round(float(
-                self.instrument.query("STAT:MEAS:COND?").strip()
-            )))
+            measurement_condition = int(round(float(self.instrument.query('STAT:MEAS:COND?').strip())))
             checks = (
                 ("amplitude", actual_amplitude, amplitude_a, 5e-4, 1e-12),
                 ("offset", actual_offset, offset_a, 5e-4, 1e-12),
@@ -2735,24 +2355,14 @@ class Keithley6221Controller:
                 ("compliance voltage", actual_compliance, compliance_v, 5e-4, 1e-6),
             )
             for label, actual, requested, rel_tol, abs_tol in checks:
-                if not math.isfinite(actual) or not math.isclose(
-                    actual, requested, rel_tol=rel_tol, abs_tol=abs_tol
-                ):
+                if not math.isfinite(actual) or not math.isclose(actual, requested, rel_tol=rel_tol, abs_tol=abs_tol):
                     self.output_off()
-                    raise RuntimeError(
-                        f"6221 {label} readback mismatch: requested {requested:g}, "
-                        f"readback {actual:g}"
-                    )
+                    raise RuntimeError(f'6221 {label} readback mismatch: requested {requested:g}, readback {actual:g}')
             if actual_cycles != pulse_count:
                 self.output_off()
-                raise RuntimeError(
-                    "6221 pulse count readback mismatch: "
-                    f"requested {pulse_count}, readback {actual_cycles}"
-                )
+                raise RuntimeError(f'6221 pulse count readback mismatch: requested {pulse_count}, readback {actual_cycles}')
             completed_before_readback = output_state == 0
-            self.current_a = math.copysign(
-                abs(actual_offset) + abs(actual_amplitude), current_a
-            )
+            self.current_a = math.copysign(abs(actual_offset) + abs(actual_amplitude), current_a)
             self.pulse_width_s = 1.0 / (2.0 * actual_frequency)
             self.compliance_v = actual_compliance
             self.pulse_count = pulse_count
@@ -2822,9 +2432,7 @@ class Keithley6221Controller:
                 raise shutdown_error
 
 
-WINDOWS_RESERVED_FILE_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
-)
+WINDOWS_RESERVED_FILE_NAMES = frozenset({'CON', 'PRN', 'AUX', 'NUL', *(f'COM{i}' for i in range(1, 10)), *(f'LPT{i}' for i in range(1, 10))})
 
 
 # CombinedControlApp._ppms_field_is_ready of the main program, as a function.
@@ -2834,10 +2442,7 @@ def ppms_field_is_ready(result: dict[str, object], target_oe: float, driven: boo
     status = str(result.get("field_status", "")).casefold().replace(" ", "")
     if driven and "persistent" in status:
         return False
-    stable_status = any(
-        token in status
-        for token in ("holding", "persistent", "stable", "standby")
-    )
+    stable_status = any((token in status for token in ('holding', 'persistent', 'stable', 'standby')))
     return stable_status and abs(measured - target_oe) <= tolerance
 
 
@@ -2878,16 +2483,8 @@ def read_ppms_cryogen_display(ppms):
 core = sys.modules[__name__]
 HERE = Path(__file__).resolve().parent
 OE_PER_T = 10_000.0
-DEFAULT_STATES = (
-    ("D", 360.0, 1500.0, 22.0),
-    ("A", 270.0, 1500.0, -22.0),
-    ("B", 270.0, 1500.0, 22.0),
-    ("E", 360.0, -1500.0, 22.0),
-    ("C", 270.0, 0.0, -23.0),
-    ("F", 270.0, 0.0, 23.0),
-)
-MANUAL_DEFAULTS = {"angle": "360", "field": "0", "current_ma": "0.5", "pulse_ma": "22",
-                   "pulse_width_us": "30"}
+DEFAULT_STATES = (('D', 360.0, 1500.0, 22.0), ('A', 270.0, 1500.0, -22.0), ('B', 270.0, 1500.0, 22.0), ('E', 360.0, -1500.0, 22.0), ('C', 270.0, 0.0, -23.0), ('F', 270.0, 0.0, 23.0))
+MANUAL_DEFAULTS = {'angle': '360', 'field': '0', 'current_ma': '0.5', 'pulse_ma': '22', 'pulse_width_us': '30'}
 DEFAULT_SEQUENCE = "D A B E"
 DEFAULT_CYCLE = "D A B E B A"
 APP_TITLE = "MS-fourState"
@@ -2909,8 +2506,7 @@ def fill_screen(root):
     root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")
     return "geometry"
 MODES = {"cycle": "Cycle", "sequence": "Sequence"}
-STATE_COLORS = {"D": "#000000", "A": "#c62828", "B": "#1565c0", "E": "#2e7d32",
-                "C": "#ef6c00", "F": "#00838f"}
+STATE_COLORS = {'D': '#000000', 'A': '#c62828', 'B': '#1565c0', 'E': '#2e7d32', 'C': '#ef6c00', 'F': '#00838f'}
 DEFAULTS = {
     "pulse_width_us": "30",
     "pulse_count": "1",
@@ -2929,8 +2525,7 @@ DEFAULTS = {
 APPROACHES = {"Linear": 0, "No overshoot": 1}
 CONNECTIONS = {"ppms": "PPMS (QDInstrument)", "6221": "Keithley 6221", "sr830": "SR830"}
 CONSOLE_NAMES = {"ppms": "PPMS", "6221": "6221", "sr830": "SR830"}
-CONSOLE_COLORS = {"background": "#11161c", "note": "#e8edf2", "sent": "#7fd4ff",
-                  "reply": "#a9b6c2", "error": "#ff7b72", "time": "#6c7a88"}
+CONSOLE_COLORS = {'background': '#11161c', 'note': '#e8edf2', 'sent': '#7fd4ff', 'reply': '#a9b6c2', 'error': '#ff7b72', 'time': '#6c7a88'}
 CONSOLE_LINES = 3000
 STATUS_POLL_S = 2.0
 CRYOGEN_POLL_S = 30.0
@@ -2955,8 +2550,7 @@ SR830_BASELINE = (
     ("ISRC", 1), ("IGND", 0), ("ICPL", 0), ("ILIN", 0), ("SYNC", 0),
     ("SENS", 9), ("OFLT", 10), ("OFSL", 1), ("RMOD", 1), ("PHAS", 0),
 )
-SR830_RECORDED = ("HARM", "FMOD", "RSLP", "ISRC", "IGND", "ICPL", "ILIN", "SYNC",
-                  "SENS", "OFLT", "OFSL", "RMOD", "PHAS")
+SR830_RECORDED = ('HARM', 'FMOD', 'RSLP', 'ISRC', 'IGND', 'ICPL', 'ILIN', 'SYNC', 'SENS', 'OFLT', 'OFSL', 'RMOD', 'PHAS')
 CSV_COLUMNS = (
     "step", "cycle", "state", "time_s", "timestamp",
     "angle_set_deg", "angle_read_deg",
@@ -3042,8 +2636,7 @@ def _shared_settings(values):
     if not 1.0 <= frequency <= 100_000.0:
         raise ValueError("Read frequency must be 1-100000 Hz")
     settle = {}
-    for key, label in (("field_settle_s", "Field settle (s)"), ("after_pulse_s", "Wait after pulse (s)"),
-                       ("read_settle_s", "Extra read settle (s)")):
+    for key, label in (('field_settle_s', 'Field settle (s)'), ('after_pulse_s', 'Wait after pulse (s)'), ('read_settle_s', 'Extra read settle (s)')):
         settle[key] = _number(values[key], label)
         if not 0 <= settle[key] <= 3600:
             raise ValueError(f"{label} must be 0-3600 s")
@@ -3066,8 +2659,7 @@ def build_settings(states, sequence_text, values, autorange=True, until_stop=Fal
         pulse_ma = _number(pulse_text, f"{name} pulse current")
         core.PPMSMotorDebug.validate_move(angle, shared["decel"], angle)
         core.validate_ppms_field_command(field, shared["field_rate_oe_s"])
-        core.Keithley6221Controller._validate(
-            pulse_ma / 1000.0, shared["pulse_width_s"], shared["compliance_v"], shared["pulse_count"])
+        core.Keithley6221Controller._validate(pulse_ma / 1000.0, shared['pulse_width_s'], shared['compliance_v'], shared['pulse_count'])
         parsed[name] = (angle, field, pulse_ma)
     sequence = parse_sequence(sequence_text, tuple(parsed))
     repeats = None if until_stop else _whole(values["repeats"], "Repeats", 1, 100_000)
@@ -3160,9 +2752,7 @@ def echo_visa_commands(echo, name_of):
         if getattr(manager, "_echoed", False) is not True:
             open_resource = manager.open_resource
             def open_echoed(resource_name, *args, **kwargs):
-                return EchoedResource(open_resource(resource_name, *args, **kwargs),
-                                      _ECHO_TARGET["name_of"](resource_name),
-                                      lambda line: _ECHO_TARGET["echo"](line))
+                return EchoedResource(open_resource(resource_name, *args, **kwargs), _ECHO_TARGET['name_of'](resource_name), lambda line: _ECHO_TARGET['echo'](line))
             manager.open_resource = open_echoed
             manager._echoed = True
         return manager
@@ -3175,8 +2765,7 @@ class EchoedPPMS:
         object.__setattr__(self, "_echo", echo)
     @staticmethod
     def describe(data):
-        return (f"T {float(data['temperature_k']):.3f} K {data.get('temperature_status', '')} | "
-                f"H {float(data['field_oe']):+.1f} Oe {data.get('field_status', '')}")
+        return f"T {float(data['temperature_k']):.3f} K {data.get('temperature_status', '')} | H {float(data['field_oe']):+.1f} Oe {data.get('field_status', '')}"
     def _reply(self, data):
         try:
             self._echo(f"PPMS < {self.describe(data)}")
@@ -3191,8 +2780,7 @@ class EchoedPPMS:
             self._echo(f"PPMS ! {error}")
             raise
     def set_field(self, target, rate, approach, mode):
-        self._echo(f"PPMS > SetField {float(target):+g} Oe at {float(rate):g} Oe/s, "
-                   f"{self.APPROACH_NAMES.get(approach, approach)}, {'Persistent' if mode == 0 else 'Driven'}")
+        self._echo(f"PPMS > SetField {float(target):+g} Oe at {float(rate):g} Oe/s, {self.APPROACH_NAMES.get(approach, approach)}, {('Persistent' if mode == 0 else 'Driven')}")
         try:
             return self._reply(self._ppms.set_field(target, rate, approach, mode))
         except Exception as error:
@@ -3232,8 +2820,7 @@ def tau_seconds(code):
         raise RuntimeError("SR830 time-constant readback invalid")
     return (1 if code % 2 == 0 else 3) * 10 ** (code // 2 - 5)
 class FourStateRun:
-    def __init__(self, ppms, source, lockin, settings, *, emit, stop, motor=None,
-                 clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, ppms, source, lockin, settings, *, emit, stop, motor=None, clock=time.monotonic, sleep=time.sleep):
         self.ppms = ppms
         self.source = source
         self.lockin = lockin
@@ -3300,8 +2887,7 @@ class FourStateRun:
             else:
                 settled_since = None
             if self.clock() >= deadline:
-                raise RuntimeError(
-                    f"Field did not settle at {target:+g} Oe: {data.get('field_oe')} Oe / {data.get('field_status')}")
+                raise RuntimeError(f"Field did not settle at {target:+g} Oe: {data.get('field_oe')} Oe / {data.get('field_status')}")
             self.wait(0.5)
     def ensure_zero_field(self):
         if self.commanded_field in (None, 0.0):
@@ -3311,14 +2897,11 @@ class FourStateRun:
         return self.field_to(0.0)
     def rotate_to(self, angle):
         before = self.motor.read()
-        if (abs(before["angle_deg"] - angle) <= ANGLE_TOLERANCE_DEG
-                and before["status"] in ("AtTarget", "AtIndexSwitch")):
+        if abs(before['angle_deg'] - angle) <= ANGLE_TOLERANCE_DEG and before['status'] in ('AtTarget', 'AtIndexSwitch'):
             return before["angle_deg"]
         large = abs(angle - before["angle_deg"]) > LARGE_ROTATION_DEG
         self.check()
-        result = self.motor.move_and_verify(
-            angle, self.settings.decel, cancelled=self.stop.is_set,
-            allow_large=large, timeout=900.0 if large else 90.0)
+        result = self.motor.move_and_verify(angle, self.settings.decel, cancelled=self.stop.is_set, allow_large=large, timeout=900.0 if large else 90.0)
         self.emit("ppms-reading", {"angle_deg": result["angle_deg"], "angle_status": result.get("status", "AtTarget")})
         return result["angle_deg"]
     def compliance_events(self):
@@ -3343,8 +2926,7 @@ class FourStateRun:
         if pulse_ma == 0:
             self.source_off()
             return {"in_compliance": "no pulse"}
-        current_a, width_s, compliance_v, count = core.Keithley6221Controller._validate(
-            pulse_ma / 1000.0, s.pulse_width_s, s.compliance_v, s.pulse_count)
+        current_a, width_s, compliance_v, count = core.Keithley6221Controller._validate(pulse_ma / 1000.0, s.pulse_width_s, s.compliance_v, s.pulse_count)
         frequency = 1.0 / (2.0 * width_s)
         amplitude = abs(current_a) / 2.0
         offset = current_a / 2.0
@@ -3451,8 +3033,7 @@ class FourStateRun:
         tau = tau_seconds(int(found["OFLT"]))
         if tau > LOCKIN_MAX_TAU_S:
             raise RuntimeError(f"SR830 time constant {tau:g} s is above {LOCKIN_MAX_TAU_S:g} s; set a shorter one")
-        self.lockin_settings = {command: int(value) if float(value).is_integer() else value
-                                for command, value in found.items()}
+        self.lockin_settings = {command: int(value) if float(value).is_integer() else value for command, value in found.items()}
         self.lockin_settings["tau_s"] = tau
         for channel, name in ((1, "X"), (2, "Y")):
             offset, expand = sr830_query(lockin, f"OEXP? {channel}", 2)
@@ -3468,9 +3049,7 @@ class FourStateRun:
             if not status & 8 and math.isclose(frequency, expected, rel_tol=5e-3, abs_tol=0.1):
                 return frequency
             if self.clock() >= deadline:
-                raise RuntimeError(
-                    f"SR830 did not lock to the 6221 reference: {frequency:.6g} Hz, LIAS={status}; "
-                    "check the 6221 trigger-link/marker cable to the SR830 reference input")
+                raise RuntimeError(f'SR830 did not lock to the 6221 reference: {frequency:.6g} Hz, LIAS={status}; check the 6221 trigger-link/marker cable to the SR830 reference input')
             self.wait(0.2)
     def clear_overload_latch(self):
         sr830_query(self.lockin, "LIAS?", 1)
@@ -3629,8 +3208,7 @@ class FourStateRun:
                     else:
                         settled_since = None
                     if self.clock() >= deadline:
-                        problems.append(f"field not confirmed at 0 Oe: {data.get('field_oe')} Oe / "
-                                        f"{data.get('field_status')}")
+                        problems.append(f"field not confirmed at 0 Oe: {data.get('field_oe')} Oe / {data.get('field_status')}")
                         break
         except LookupError:
             pass
@@ -3644,16 +3222,12 @@ class FourStateRun:
             return None
         reading = self.motor.read()
         if reading["status"] not in ROTATOR_AT_REST:
-            raise RuntimeError(
-                f"The rotator is {reading['status']} at {reading['angle_deg']:.2f}°: nothing sent. "
-                "Read until it shows AtTarget, or check MultiVu")
+            raise RuntimeError(f"The rotator is {reading['status']} at {reading['angle_deg']:.2f}°: nothing sent. Read until it shows AtTarget, or check MultiVu")
         return reading
     def require_zero_field(self):
         data = self.environment()
         if not core.ppms_field_is_ready(data, 0.0):
-            raise RuntimeError(
-                f"The rotator turns only at zero field; the field is {data.get('field_oe')} Oe / "
-                f"{data.get('field_status')}. Zero H first")
+            raise RuntimeError(f"The rotator turns only at zero field; the field is {data.get('field_oe')} Oe / {data.get('field_status')}. Zero H first")
     def manual_move(self, angle, confirm_large):
         self.require_zero_field()
         before = self.require_rotator_at_rest()
@@ -3686,8 +3260,7 @@ class FourStateRun:
                 shown = self.clock()
             status = str(data.get("field_status", "")).strip().lower().replace(" ", "")
             if any(fault in status for fault in FIELD_FAULTS):
-                raise RuntimeError(f"PPMS reports {data.get('field_status')} at {data.get('field_oe')} Oe; "
-                                   "check MultiVu (not resent)")
+                raise RuntimeError(f"PPMS reports {data.get('field_status')} at {data.get('field_oe')} Oe; check MultiVu (not resent)")
             try:
                 measured = float(data["field_oe"])
             except (KeyError, TypeError, ValueError):
@@ -3700,8 +3273,7 @@ class FourStateRun:
             elif left_persistent and not at_target:
                 raise RuntimeError(f"Persistent at {measured:+.7g} Oe, not {target:+g} Oe; check MultiVu (not resent)")
             if self.clock() >= deadline:
-                raise RuntimeError(f"Not Persistent at {target:+g} Oe in time: {data.get('field_oe')} Oe / "
-                                   f"{data.get('field_status')}; check MultiVu (not resent)")
+                raise RuntimeError(f"Not Persistent at {target:+g} Oe in time: {data.get('field_oe')} Oe / {data.get('field_status')}; check MultiVu (not resent)")
             self.wait(0.5)
     def manual_current(self):
         self.require_rotator_at_rest()
@@ -3795,20 +3367,12 @@ def nice_ticks(low, high, count=5):
     return ticks
 TIME_UNITS = ((600.0, "s", 1.0), (3 * 3600.0, "min", 60.0), (math.inf, "h", 3600.0))
 TRACE_COLUMNS = ("time_s", "quantity", "value", "unit", "state")
-WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
-                          *(f"LPT{i}" for i in range(1, 10))}
+WINDOWS_RESERVED_NAMES = {'CON', 'PRN', 'AUX', 'NUL', *(f'COM{i}' for i in range(1, 10)), *(f'LPT{i}' for i in range(1, 10))}
 def valid_file_stem(stem):
-    return bool(stem) and not stem.endswith((".", " ")) and not re.search(r'[<>:"/\\|?*\x00-\x1f]', stem) \
-        and stem.split(".")[0].upper() not in WINDOWS_RESERVED_NAMES
+    return bool(stem) and (not stem.endswith(('.', ' '))) and (not re.search('[<>:"/\\\\|?*\\x00-\\x1f]', stem)) and (stem.split('.')[0].upper() not in WINDOWS_RESERVED_NAMES)
 def run_file_paths(folder, stem):
     folder = Path(folder)
-    return {
-        "csv": folder / f"{stem}.csv",
-        "settings": folder / f"{stem}_settings.json",
-        "trace": folder / f"{stem}_trace.csv",
-        "log": folder / f"{stem}_log.txt",
-        "plot": folder / f"{stem}_plot.eps",
-    }
+    return {'csv': folder / f'{stem}.csv', 'settings': folder / f'{stem}_settings.json', 'trace': folder / f'{stem}_trace.csv', 'log': folder / f'{stem}_log.txt', 'plot': folder / f'{stem}_plot.eps'}
 def append_live_csv(path, row):
     with Path(path).open("a", newline="", encoding="utf-8-sig") as handle:
         csv.DictWriter(handle, fieldnames=CSV_COLUMNS, extrasaction="ignore").writerow(row)
@@ -3867,8 +3431,7 @@ class StatePlot:
         last = max((trace[0] for trace in self.traces), default=0.0)
         unit, per_unit = time_unit(last)
         x_low, x_high = 0.0, (last * 1.02 or 60.0) / per_unit
-        of = {quantity: [trace for trace in self.traces if trace[1] == quantity]
-              for quantity in ("H", "I", "pulse", "X", "read")}
+        of = {quantity: [trace for trace in self.traces if trace[1] == quantity] for quantity in ('H', 'I', 'pulse', 'X', 'read')}
         def x_pixel(seconds):
             return left + (seconds / per_unit - x_low) / (x_high - x_low) * (width - left - right)
         h_points = [(at, value / OE_PER_T) for at, _, value, _ in of["H"]]
@@ -3895,14 +3458,11 @@ class StatePlot:
             y0 = top + index * (panel_height + gap)
             y1 = y0 + panel_height
             for start, end in periods:
-                canvas.create_rectangle(x_pixel(start), y0, max(x_pixel(end), x_pixel(start) + 2), y1,
-                                        fill="#e3ecf7", outline="")
+                canvas.create_rectangle(x_pixel(start), y0, max(x_pixel(end), x_pixel(start) + 2), y1, fill='#e3ecf7', outline='')
             canvas.create_rectangle(left, y0, width - right, y1, outline="#555555")
             canvas.create_text(16, (y0 + y1) / 2, text=label, angle=90, anchor="center", font=("TkDefaultFont", 11))
             if index == 1 and periods:
-                canvas.create_text(width - right - 6, y0 + 4, anchor="ne", fill="#46637f",
-                                   text=f"shaded: read, {max(v for _, v in levels):g} mA RMS",
-                                   font=("TkDefaultFont", 9))
+                canvas.create_text(width - right - 6, y0 + 4, anchor='ne', fill='#46637f', text=f'shaded: read, {max((v for _, v in levels)):g} mA RMS', font=('TkDefaultFont', 9))
             values = ranges[index]
             if values:
                 low, high = min(values), max(values)
@@ -3944,19 +3504,16 @@ class StatePlot:
                 if labelled:
                     for at, value, state in reads:
                         color = STATE_COLORS.get(base_state(state or ""), "#6a1b9a")
-                        canvas.create_text(x_pixel(at), y_pixel(value) - 16, text=state, fill=color,
-                                           font=("TkDefaultFont", 11, "bold"))
+                        canvas.create_text(x_pixel(at), y_pixel(value) - 16, text=state, fill=color, font=('TkDefaultFont', 11, 'bold'))
                 if not samples and not reads:
-                    canvas.create_text((left + width - right) / 2, (y0 + y1) / 2, text="Waiting for data",
-                                       fill="#757575")
+                    canvas.create_text((left + width - right) / 2, (y0 + y1) / 2, text='Waiting for data', fill='#757575')
         axis_y = height - bottom
         for tick in nice_ticks(x_low, x_high, max(2, min(10, int((width - left - right) / 90)))):
             if x_low <= tick <= x_high:
                 x = left + (tick - x_low) / (x_high - x_low) * (width - left - right)
                 canvas.create_line(x, axis_y, x, axis_y + 4, fill="#555555")
                 canvas.create_text(x, axis_y + 6, text=f"{tick:g}", anchor="n", font=("TkDefaultFont", 10))
-        canvas.create_text((left + width - right) / 2, height - 12, text=f"Time since start ({unit})",
-                           font=("TkDefaultFont", 11))
+        canvas.create_text((left + width - right) / 2, height - 12, text=f'Time since start ({unit})', font=('TkDefaultFont', 11))
 class FourStateApp:
     def __init__(self, root, mode="cycle", maximise=True):
         if mode not in MODES:
@@ -4008,8 +3565,7 @@ class FourStateApp:
         flow.grid(row=0, column=0, sticky="ew")
         connections = ttk.LabelFrame(flow, text="Connections", padding=6)
         connections.columnconfigure(9, weight=1)
-        dll_default = next((str(p) for p in core.PPMSQDInstrumentReadbackController.candidate_dll_paths()
-                            if p.is_file()), "")
+        dll_default = next((str(p) for p in core.PPMSQDInstrumentReadbackController.candidate_dll_paths() if p.is_file()), '')
         self.host_var = tk.StringVar(value=PPMS_HOST)
         self.port_var = tk.StringVar(value=str(core.PPMS_QDINSTRUMENT_DEFAULT_PORT))
         self.dll_var = tk.StringVar(value=dll_default)
@@ -4019,8 +3575,7 @@ class FourStateApp:
         self.connection_widgets = {}
         self.connection_failed = {key: False for key in CONNECTIONS}
         for row, (key, label) in enumerate(CONNECTIONS.items()):
-            ttk.Label(connections, text=f"{label}:").grid(
-                row=row, column=0, sticky="e", padx=(0, 4), pady=1)
+            ttk.Label(connections, text=f'{label}:').grid(row=row, column=0, sticky='e', padx=(0, 4), pady=1)
             if key == "ppms":
                 host = ttk.Combobox(connections, textvariable=self.host_var, values=PPMS_HOSTS, width=16)
                 host.grid(row=row, column=1, sticky="w")
@@ -4035,17 +3590,13 @@ class FourStateApp:
                 address = (ttk.Entry(connections, textvariable=self.source_resource_var, width=18),)
                 address[0].grid(row=row, column=1, sticky="w")
             else:
-                address = (ttk.Combobox(connections, textvariable=self.lockin_resource_var,
-                                        values=core.PPMS_SR830_RESOURCE_OPTIONS, width=16),)
+                address = (ttk.Combobox(connections, textvariable=self.lockin_resource_var, values=core.PPMS_SR830_RESOURCE_OPTIONS, width=16),)
                 address[0].grid(row=row, column=1, sticky="w")
-            connect = ttk.Button(connections, text="Connect", width=8,
-                                 command=lambda selected=key: self.connect_device(selected))
+            connect = ttk.Button(connections, text='Connect', width=8, command=lambda selected=key: self.connect_device(selected))
             connect.grid(row=row, column=6, padx=(10, 1), pady=1)
-            disconnect = ttk.Button(connections, text="Disconnect", width=10,
-                                    command=lambda selected=key: self.disconnect_device(selected))
+            disconnect = ttk.Button(connections, text='Disconnect', width=10, command=lambda selected=key: self.disconnect_device(selected))
             disconnect.grid(row=row, column=7, padx=1, pady=1)
-            lamp = tk.Canvas(connections, width=16, height=16, highlightthickness=0,
-                             background=root.cget("background"))
+            lamp = tk.Canvas(connections, width=16, height=16, highlightthickness=0, background=root.cget('background'))
             lamp.create_oval(3, 3, 13, 13, fill=LAMP_COLORS["off"], outline="#6f757b", tags="lamp")
             lamp.grid(row=row, column=8, padx=(6, 2))
             state = ttk.Label(connections, textvariable=self.status_vars[key], anchor="w")
@@ -4060,8 +3611,7 @@ class FourStateApp:
             ttk.Label(states, text=title).grid(row=0, column=column, padx=3, sticky="w")
         self.state_vars = {}
         for row, (name, angle, field, pulse) in enumerate(DEFAULT_STATES, 1):
-            ttk.Label(states, text=name, foreground=STATE_COLORS.get(base_state(name), "#000000")).grid(
-                row=row, column=0, padx=3, sticky="w")
+            ttk.Label(states, text=name, foreground=STATE_COLORS.get(base_state(name), '#000000')).grid(row=row, column=0, padx=3, sticky='w')
             variables = tuple(tk.StringVar(value=f"{value:g}") for value in (angle, field, pulse))
             for column, variable in enumerate(variables, 1):
                 entry = ttk.Entry(states, textvariable=variable, width=9)
@@ -4080,12 +3630,7 @@ class FourStateApp:
             ("Decel (0 fast–14 slow)", "decel"),
         ), columns=2)
         read = ttk.LabelFrame(flow, text="Read (H = 0, SR830 1st harmonic)", padding=6)
-        self._parameter_rows(read, (
-            ("Read current (mA RMS)", "read_current_ma"),
-            ("Frequency (Hz)", "read_frequency_hz"),
-            ("Read time (s)", "read_time_s"),
-            ("Extra settle (s)", "read_settle_s"),
-        ))
+        self._parameter_rows(read, (('Read current (mA RMS)', 'read_current_ma'), ('Frequency (Hz)', 'read_frequency_hz'), ('Read time (s)', 'read_time_s'), ('Extra settle (s)', 'read_settle_s')))
         self.autorange_var = tk.BooleanVar(value=True)
         autorange = ttk.Checkbutton(read, text="SR830 autorange before each read", variable=self.autorange_var)
         autorange.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
@@ -4096,8 +3641,7 @@ class FourStateApp:
         run.columnconfigure(13, weight=1)
         self.mode_var = tk.StringVar(value=MODES[self.initial_mode])
         ttk.Label(run, text="Mode").grid(row=0, column=0, sticky="w")
-        mode = ttk.Combobox(run, textvariable=self.mode_var, values=tuple(MODES.values()),
-                            state="readonly", width=10)
+        mode = ttk.Combobox(run, textvariable=self.mode_var, values=tuple(MODES.values()), state='readonly', width=10)
         mode.grid(row=0, column=1, sticky="w", padx=(4, 10))
         mode.bind("<<ComboboxSelected>>", lambda event: self._apply_mode())
         self.inputs.append((mode, "readonly"))
@@ -4126,8 +3670,7 @@ class FourStateApp:
         self.start_button.grid(row=0, column=7, padx=2)
         self.stop_button = ttk.Button(run, text="Stop", command=self.stop, width=8, state="disabled")
         self.stop_button.grid(row=0, column=8, padx=2)
-        self.save_csv_button = ttk.Button(run, text="Save CSV as", command=self.save_csv_as, width=12,
-                                          state="disabled")
+        self.save_csv_button = ttk.Button(run, text='Save CSV as', command=self.save_csv_as, width=12, state='disabled')
         self.save_csv_button.grid(row=0, column=9, padx=2)
         self.save_plot_button = ttk.Button(run, text="Save plot", command=self.save_plot, width=10)
         self.save_plot_button.grid(row=0, column=10, padx=2)
@@ -4182,15 +3725,11 @@ class FourStateApp:
             ("field", "-- Oe"), ("field_status", "not read"),
             ("angle", "-- °"), ("angle_status", "not read"),
             ("pressure", "--"), ("helium", "--"), ("source", "--"), ("time", "not read yet"))}
-        for column, (title, value, state) in enumerate((("Temperature", "temperature", "temperature_status"),
-                                                        ("Field", "field", "field_status"),
-                                                        ("Angle", "angle", "angle_status"))):
+        for column, (title, value, state) in enumerate((('Temperature', 'temperature', 'temperature_status'), ('Field', 'field', 'field_status'), ('Angle', 'angle', 'angle_status'))):
             padx = (0 if column == 0 else 22, 0)
             ttk.Label(status, text=title).grid(row=0, column=column, sticky="w", padx=padx)
-            ttk.Label(status, textvariable=self.status_box_vars[value], font=("TkDefaultFont", 15, "bold"),
-                      width=11, anchor="w").grid(row=1, column=column, sticky="w", padx=padx)
-            ttk.Label(status, textvariable=self.status_box_vars[state], foreground="#5f6670",
-                      width=16, anchor="w").grid(row=2, column=column, sticky="w", padx=padx)
+            ttk.Label(status, textvariable=self.status_box_vars[value], font=('TkDefaultFont', 15, 'bold'), width=11, anchor='w').grid(row=1, column=column, sticky='w', padx=padx)
+            ttk.Label(status, textvariable=self.status_box_vars[state], foreground='#5f6670', width=16, anchor='w').grid(row=2, column=column, sticky='w', padx=padx)
         line = ttk.Frame(status)
         line.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
         for title, key in (("Pressure", "pressure"), ("He level", "helium"), ("6221", "source"), ("Read", "time")):
@@ -4295,8 +3834,7 @@ class FourStateApp:
         self.manual_vars = {key: tk.StringVar(value=value) for key, value in MANUAL_DEFAULTS.items()}
         self.manual_buttons = {}
         def field(row, column, label, variable):
-            ttk.Label(manual, text=label).grid(row=row, column=column, sticky="e",
-                                               padx=(0 if column == 0 else 10, 3), pady=1)
+            ttk.Label(manual, text=label).grid(row=row, column=column, sticky='e', padx=(0 if column == 0 else 10, 3), pady=1)
             entry = ttk.Entry(manual, textvariable=variable, width=8)
             entry.grid(row=row, column=column + 1, sticky="w", pady=1)
             self.inputs.append((entry, "normal"))
@@ -4320,18 +3858,13 @@ class FourStateApp:
         field(3, 0, "Pulse mA", self.manual_vars["pulse_ma"])
         field(3, 2, "Width µs", self.manual_vars["pulse_width_us"])
         button(3, 4, "Pulse", self.manual_pulse)
-        note = ttk.Label(
-            manual, foreground="#8a4b00", wraplength=300,
-            text=("H ends Persistent · Move only at 0 Oe, 6221 off first · "
-                  "Pulse: count and compliance from Write · Stop: 6221 off, 0 Oe"),
-        )
+        note = ttk.Label(manual, foreground='#8a4b00', wraplength=300, text='H ends Persistent · Move only at 0 Oe, 6221 off first · Pulse: count and compliance from Write · Stop: 6221 off, 0 Oe')
         note.grid(row=4, column=0, columnspan=6, sticky="ew", pady=(4, 0))
         note.bind("<Configure>", lambda event: event.widget.configure(wraplength=max(150, event.width - 2)))
         return manual
     def _manual_check(self, *, ppms=False, source=False, safety=True, moves=False):
         if moves and self.motor_pending:
-            raise ValueError("The rotator may still be turning after the last Move: "
-                             "press Read until it shows AtTarget (or check MultiVu)")
+            raise ValueError('The rotator may still be turning after the last Move: press Read until it shows AtTarget (or check MultiVu)')
         if ppms:
             if not self.ppms.connected:
                 raise ValueError("Connect the PPMS first")
@@ -4349,8 +3882,7 @@ class FourStateApp:
         try:
             self._manual_check(ppms=True, moves=True)
             if self.field_unconfirmed is not None:
-                raise ValueError(f"The last field command ({self.field_unconfirmed:+g} Oe) was not confirmed: "
-                                 "Zero H first, so the rotator never turns in a field")
+                raise ValueError(f'The last field command ({self.field_unconfirmed:+g} Oe) was not confirmed: Zero H first, so the rotator never turns in a field')
             settings = manual_settings(self._manual_values())
             angle = _number(self.manual_vars["angle"].get(), "Angle")
             core.PPMSMotorDebug.validate_move(angle, settings.decel, angle)
@@ -4362,9 +3894,7 @@ class FourStateApp:
                 f"Rotator {before:.4f}° → {target:g}°: a turn over {LARGE_ROTATION_DEG:g}°.\n"
                 "Confirm the mechanical travel and wiring clearance; the rotator has no "
                 "software stop (keep MultiVu Motion Control at hand). Continue?")
-        self._run_manual(f"Moving the rotator to {angle:g}°", settings,
-                         lambda run: run.manual_move(angle, confirm_large),
-                         lambda result: f"Rotator at {result:.4f}°", kind="move")
+        self._run_manual(f'Moving the rotator to {angle:g}°', settings, lambda run: run.manual_move(angle, confirm_large), lambda result: f'Rotator at {result:.4f}°', kind='move')
     def manual_set_field(self, zero=False):
         if self.busy:
             return
@@ -4404,20 +3934,17 @@ class FourStateApp:
         except ValueError as error:
             messagebox.showerror(self.title, str(error), parent=self.root)
             return
-        self._run_manual("6221 off", manual_settings(DEFAULTS), lambda run: run.source_off(),
-                         lambda result: "6221 output OFF, read back")
+        self._run_manual('6221 off', manual_settings(DEFAULTS), lambda run: run.source_off(), lambda result: '6221 output OFF, read back')
     def manual_pulse(self):
         if self.busy:
             return
         try:
             self._manual_check(source=True, moves=True)
-            settings = manual_settings(dict(self._manual_values(),
-                                            pulse_width_us=self.manual_vars["pulse_width_us"].get()))
+            settings = manual_settings(dict(self._manual_values(), pulse_width_us=self.manual_vars['pulse_width_us'].get()))
             pulse_ma = _number(self.manual_vars["pulse_ma"].get(), "Pulse mA")
             if pulse_ma == 0:
                 raise ValueError("Pulse mA is 0: nothing to send")
-            core.Keithley6221Controller._validate(
-                pulse_ma / 1000.0, settings.pulse_width_s, settings.compliance_v, settings.pulse_count)
+            core.Keithley6221Controller._validate(pulse_ma / 1000.0, settings.pulse_width_s, settings.compliance_v, settings.pulse_count)
         except ValueError as error:
             messagebox.showerror(self.title, str(error), parent=self.root)
             return
@@ -4440,8 +3967,7 @@ class FourStateApp:
         if not (self.ppms.connected or self.source.connected):
             messagebox.showerror(self.title, "Connect the PPMS or the 6221 first", parent=self.root)
             return
-        self._run_manual("Reading", manual_settings(DEFAULTS), lambda run: None,
-                         lambda result: "Read: see Now in Manual settings")
+        self._run_manual('Reading', manual_settings(DEFAULTS), lambda run: None, lambda result: 'Read: see Now in Manual settings')
     def _ask_from_worker(self, question):
         answered = threading.Event()
         answer = []
@@ -4477,8 +4003,7 @@ class FourStateApp:
                 run.shutdown()
                 outcome, problems = ("stopped", core.PPMSScanCancelled("Stopped")), list(run.shutdown_problems)
                 reading = read()
-            self.post("call", lambda: self._manual_finished(
-                label, describe, result, outcome, problems, reading, kind, target))
+            self.post('call', lambda: self._manual_finished(label, describe, result, outcome, problems, reading, kind, target))
         self.worker = threading.Thread(target=target_, daemon=True)
         self.worker.start()
     def _manual_finished(self, label, describe, result, outcome, problems, reading, kind="", target=None):
@@ -4503,8 +4028,7 @@ class FourStateApp:
         elif state == "declined":
             text = f"{label}: {outcome[1]}"
         elif state == "stopped":
-            text = "Stopped: " + ("6221 off and 0 Oe, read back" if not problems
-                                  else "PROBLEM: " + "; ".join(problems))
+            text = 'Stopped: ' + ('6221 off and 0 Oe, read back' if not problems else 'PROBLEM: ' + '; '.join(problems))
             if kind == "move":
                 text += ". If the rotator was moving, check MultiVu; Read until it shows AtTarget"
         else:
@@ -4521,8 +4045,7 @@ class FourStateApp:
                 elif self.source.connected:
                     notes.append("The 6221 has been turned off (read back).")
                 if kind == "field":
-                    notes.append(f"The PPMS may still be going to {target:+g} Oe; the command is not resent. "
-                                 "Zero H, or MultiVu, to return to 0 Oe. Move is refused until then.")
+                    notes.append(f'The PPMS may still be going to {target:+g} Oe; the command is not resent. Zero H, or MultiVu, to return to 0 Oe. Move is refused until then.')
                 else:
                     notes.append("The field and angle are left as they are.")
                 detail += "\n\n" + "\n".join(notes)
@@ -4557,11 +4080,9 @@ class FourStateApp:
         for index, (label, key) in enumerate(rows):
             group, row = divmod(index, per_column)
             column = 2 * group
-            ttk.Label(frame, text=label).grid(row=row, column=column, sticky="w", pady=1,
-                                              padx=(0 if group == 0 else 16, 0))
+            ttk.Label(frame, text=label).grid(row=row, column=column, sticky='w', pady=1, padx=(0 if group == 0 else 16, 0))
             if key == "approach":
-                widget = ttk.Combobox(frame, textvariable=self.values[key], values=tuple(APPROACHES),
-                                      state="readonly", width=13)
+                widget = ttk.Combobox(frame, textvariable=self.values[key], values=tuple(APPROACHES), state='readonly', width=13)
                 enabled = "readonly"
             else:
                 widget = ttk.Entry(frame, textvariable=self.values[key], width=10)
@@ -4746,8 +4267,7 @@ class FourStateApp:
         def work():
             result = connect()
             if key == "ppms":
-                return (f"Connected: {result['temperature_k']:.4g} K, "
-                        f"{result['field_oe']:+.6g} Oe / {result['field_status']}")
+                return f"Connected: {result['temperature_k']:.4g} K, {result['field_oe']:+.6g} Oe / {result['field_status']}"
             if key == "sr830":
                 return f"Connected, PPMS page settings: {str(result)[:40]}"
             return f"Connected: {str(result)[:60]}"
@@ -4780,8 +4300,7 @@ class FourStateApp:
         self.status_vars[key].set("Disconnecting…")
         self._in_thread(f"Disconnecting {label}…", self._controller(key).disconnect, done)
     def current_settings(self):
-        states = {name: tuple(variable.get() for variable in variables)
-                  for name, variables in self.state_vars.items()}
+        states = {name: tuple((variable.get() for variable in variables)) for name, variables in self.state_vars.items()}
         values = {key: variable.get() for key, variable in self.values.items()}
         if self.mode == "cycle":
             text, until_stop = self.cycle_var.get(), self.until_stop_var.get()
@@ -4801,14 +4320,11 @@ class FourStateApp:
             if not self.safety_var.get():
                 raise ValueError("Tick the safety confirmation first")
             if self.motor_pending:
-                raise ValueError("The rotator may still be turning after the last Move: "
-                                 "press Read (Manual settings) until it shows AtTarget")
+                raise ValueError('The rotator may still be turning after the last Move: press Read (Manual settings) until it shows AtTarget')
         except ValueError as error:
             messagebox.showerror(self.title, str(error), parent=self.root)
             return
-        if not messagebox.askyesno(
-                self.title, self.summary(settings) + "\n\nContinue to choose the save folder and start?",
-                parent=self.root, default="no"):
+        if not messagebox.askyesno(self.title, self.summary(settings) + '\n\nContinue to choose the save folder and start?', parent=self.root, default='no'):
             return
         try:
             paths = self._choose_run_files()
@@ -4821,10 +4337,8 @@ class FourStateApp:
             record = asdict(settings)
             record["mode"] = self.mode
             record["until_stop"] = settings.repeats is None
-            record["states"] = {name: dict(angle_deg=a, write_field_oe=h, pulse_ma=i)
-                                for name, (a, h, i) in settings.states.items()}
-            record["instruments"] = {"ppms_host": self.host_var.get(), "6221": self.source.identity,
-                                     "sr830": self.lockin.identity}
+            record['states'] = {name: dict(angle_deg=a, write_field_oe=h, pulse_ma=i) for name, (a, h, i) in settings.states.items()}
+            record['instruments'] = {'ppms_host': self.host_var.get(), '6221': self.source.identity, 'sr830': self.lockin.identity}
             record["files"] = {key: path.name for key, path in paths.items()}
             paths["settings"].write_text(json.dumps(record, indent=2), encoding="utf-8")
         except OSError as error:
@@ -4863,9 +4377,7 @@ class FourStateApp:
         self.worker.start()
     def _choose_run_files(self):
         start = self.last_paths["csv"].parent if self.last_paths else HERE
-        folder = filedialog.askdirectory(
-            parent=self.root, title=f"Select the folder for the {self.title} live CSV",
-            initialdir=str(start))
+        folder = filedialog.askdirectory(parent=self.root, title=f'Select the folder for the {self.title} live CSV', initialdir=str(start))
         if not folder:
             return None
         default_stem = f"{APP_TITLE}_{MODES[self.mode]}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -4886,8 +4398,7 @@ class FourStateApp:
                 stem = stem[:-4]
             if valid_file_stem(stem):
                 break
-            messagebox.showerror("Invalid file name", "Enter a valid file name without a path or "
-                                 "characters forbidden in Windows file names.", parent=self.root)
+            messagebox.showerror('Invalid file name', 'Enter a valid file name without a path or characters forbidden in Windows file names.', parent=self.root)
         suffix = 0
         while True:
             name = f"{stem}_{suffix:02d}" if suffix else stem
@@ -4945,13 +4456,10 @@ class FourStateApp:
             self._append_log(f"CSV write failed at step {row['step']}: {error}")
             if not self.__dict__.get("csv_failed"):
                 self.csv_failed = True
-                messagebox.showwarning(self.title, f"Writing the CSV failed: {error}\n\nThe run continues and the "
-                                       "plot keeps every point; Save CSV as saves them all at the end.",
-                                       parent=self.root)
+                messagebox.showwarning(self.title, f'Writing the CSV failed: {error}\n\nThe run continues and the plot keeps every point; Save CSV as saves them all at the end.', parent=self.root)
         finally:
             done = len(self.rows)
-            self.progress.configure(value=done if self.run is None or self.run.settings.total_steps
-                                    else (done - 1) % self.steps_per_cycle + 1)
+            self.progress.configure(value=done if self.run is None or self.run.settings.total_steps else (done - 1) % self.steps_per_cycle + 1)
             self.last_var.set(
                 f"Last read: step {row['step']}, state {row['state']}\n"
                 f"X = {row['x_v'] * 1e6:+.4g} µV   Y = {row['y_v'] * 1e6:+.4g} µV\n"
@@ -5049,8 +4557,7 @@ class FourStateApp:
             self.status_var.set(f"Plot saved: {path}")
     def close(self):
         if self.worker is not None or self.busy:
-            messagebox.showwarning(self.title, "Wait for the run or the connection to finish before closing.",
-                                   parent=self.root)
+            messagebox.showwarning(self.title, 'Wait for the run or the connection to finish before closing.', parent=self.root)
             return
         for controller in (self.source, self.lockin, self.ppms):
             try:

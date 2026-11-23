@@ -20,7 +20,7 @@ from typing import Callable
 # The English dialogs (Tk's own message boxes and file dialogs) it shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 92fdbd4e19b3…
+# Copied from Transport_all.py, SHA-256 753691789470…
 import ctypes
 
 
@@ -81,8 +81,7 @@ _ENGLISH_MESSAGE_BUTTONS = {
 }
 
 
-_ENGLISH_MESSAGE_ICONS = {"error": "error", "warning": "warning", "info": "information",
-                          "question": "question"}
+_ENGLISH_MESSAGE_ICONS = {'error': 'error', 'warning': 'warning', 'info': 'information', 'question': 'question'}
 
 
 _NATIVE_MESSAGE_SHOW = None
@@ -109,8 +108,7 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
     cancel = next((name for name in ("cancel", "no", "abort", "ok") if name in names), names[-1])
     top = tk.Toplevel(parent, class_="EnglishMessageBox")
     try:
-        return _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
-                                         names, default, cancel, options)
+        return _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names, default, cancel, options)
     except BaseException:
         try:
             top.destroy()
@@ -119,8 +117,7 @@ def _english_message_box(parent, title, message, _icon, _type, **options) -> str
         raise
 
 
-def _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names,
-                              default, cancel, options) -> str:
+def _show_english_message_box(top, parent, title, message, _icon, kind, buttons, names, default, cancel, options) -> str:
     top.withdraw()
     top.title(str(title or ""))
     try:
@@ -150,9 +147,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
     if has_image:
         ttk.Label(body, image=image).pack(side="left", anchor="n", padx=(0, 12))
     else:
-        tk.Label(body, bitmap={"information": "info"}.get(icon, icon)).pack(
-            side="left", anchor="n", padx=(0, 12)
-        )
+        tk.Label(body, bitmap={'information': 'info'}.get(icon, icon)).pack(side='left', anchor='n', padx=(0, 12))
     text = ttk.Frame(body)
     text.pack(side="left", fill="both", expand=True)
     try:
@@ -161,9 +156,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
         wrap = 520
     ttk.Label(text, text=str(message or ""), wraplength=wrap, justify="left").pack(anchor="w")
     if options.get("detail"):
-        ttk.Label(text, text=str(options["detail"]), wraplength=wrap, justify="left").pack(
-            anchor="w", pady=(6, 0)
-        )
+        ttk.Label(text, text=str(options['detail']), wraplength=wrap, justify='left').pack(anchor='w', pady=(6, 0))
     top.protocol("WM_DELETE_WINDOW", lambda: answer.set(cancel))
     top.bind("<Escape>", lambda _event: answer.set(cancel))
     def press(_event=None) -> None:
@@ -212,8 +205,7 @@ def _show_english_message_box(top, parent, title, message, _icon, kind, buttons,
             pass
         if previous_grab is not None:
             try:
-                if (int(parent.tk.call("winfo", "exists", previous_grab))
-                        and int(parent.tk.call("winfo", "viewable", previous_grab))):
+                if int(parent.tk.call('winfo', 'exists', previous_grab)) and int(parent.tk.call('winfo', 'viewable', previous_grab)):
                     parent.tk.call("grab", "set", previous_grab)
             except tk.TclError:
                 pass
@@ -247,8 +239,7 @@ def folder_name_problem(name: str) -> str:
 
 
 def folder_name_sort_key(name: str) -> list:
-    return [(0, int(part), "") if part.isdigit() else (1, 0, part.casefold())
-            for part in re.split(r"(\d+)", str(name)) if part]
+    return [(0, int(part), '') if part.isdigit() else (1, 0, part.casefold()) for part in re.split('(\\d+)', str(name)) if part]
 
 
 def list_subfolders(directory) -> list[str]:
@@ -329,8 +320,7 @@ def _folder_edit_refusal(folder: Path, action: str) -> str:
         return f"Windows cannot address the name {folder.name!r}; it is left alone here."
     run = scan_run_using_folder(folder)
     if run is not None:
-        return (f"A running scan is saving into {run.as_posix()}; {folder.name} cannot be "
-                f"{action} until that scan has ended.")
+        return f'A running scan is saving into {run.as_posix()}; {folder.name} cannot be {action} until that scan has ended.'
     return ""
 
 
@@ -367,8 +357,7 @@ def rename_subfolder(folder, name: str) -> Path:
 class _RecycleBinInfo(ctypes.Structure):
     if ctypes.sizeof(ctypes.c_void_p) == 4:
         _pack_ = 1
-    _fields_ = [("cbSize", ctypes.c_uint32), ("i64Size", ctypes.c_int64),
-                ("i64NumItems", ctypes.c_int64)]
+    _fields_ = [('cbSize', ctypes.c_uint32), ('i64Size', ctypes.c_int64), ('i64NumItems', ctypes.c_int64)]
 
 
 class _ShellFileOperation(ctypes.Structure):
@@ -423,9 +412,7 @@ def _recycle_bin_settings(root: str) -> tuple[bool, int | None]:
         raise OSError("the drive's volume name could not be read")
     guid = volume.value[volume.value.index("{"):volume.value.rindex("}") + 1]
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume"
-                            + "\\" + guid) as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume' + '\\' + guid) as key:
             def value(entry):
                 try:
                     return int(winreg.QueryValueEx(key, entry)[0])
@@ -453,8 +440,7 @@ def recycle_bin_refusal(folder, size: int = 0) -> str:
         if largest is None:
             largest = int(0.05 * _windows_drive_size(root))
         if size > 0.9 * largest:
-            return (f"It is larger than the Recycle Bin of its drive "
-                    f"({_folder_size_text(largest)})")
+            return f'It is larger than the Recycle Bin of its drive ({_folder_size_text(largest)})'
         return ""
     except Exception as error:
         return f"The Recycle Bin of its drive could not be checked ({error})"
@@ -504,8 +490,7 @@ def _folder_is_empty(folder) -> bool:
         return next(entries, None) is None
 
 
-_FOLDER_DELETE_WHILE_SCANNING = (
-    "A scan is running. A folder with data can be deleted here once it has ended.")
+_FOLDER_DELETE_WHILE_SCANNING = 'A scan is running. A folder with data can be deleted here once it has ended.'
 
 
 def folder_delete_question(folder) -> tuple[str, str]:
@@ -523,14 +508,11 @@ def folder_delete_question(folder) -> tuple[str, str]:
             f"{folder.name} holds more than is counted here ({FOLDER_DIALOG_COUNT_LIMIT} files and "
             "folders), or a part of it cannot be read or is a link to another folder. Delete it "
             "in the Windows Explorer.")
-    holds = (f"{files} file{'s' if files != 1 else ''} and {folders} "
-             f"folder{'s' if folders != 1 else ''} ({_folder_size_text(size)})")
+    holds = f"{files} file{('s' if files != 1 else '')} and {folders} folder{('s' if folders != 1 else '')} ({_folder_size_text(size)})"
     no_bin = recycle_bin_refusal(folder, size)
     if no_bin:
-        raise ValueError(f"{folder.name} holds {holds}. {no_bin}, so only an empty folder can be "
-                         "deleted in this window.")
-    return "recycle", (f"Delete the folder {folder.name}?\n\nIt holds {holds}. Windows moves it to "
-                       "the Recycle Bin, where it can be restored.")
+        raise ValueError(f'{folder.name} holds {holds}. {no_bin}, so only an empty folder can be deleted in this window.')
+    return ('recycle', f'Delete the folder {folder.name}?\n\nIt holds {holds}. Windows moves it to the Recycle Bin, where it can be restored.')
 
 
 def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
@@ -552,8 +534,7 @@ def delete_subfolder(folder, how: str, window_handle: int = 0) -> str:
     move_folder_to_recycle_bin(folder, window_handle)
     after = recycle_bin_item_count(folder)
     if before is not None and after is not None and after <= before:
-        return (f"{folder.name} is gone. The Recycle Bin did not gain an item, so check that it "
-                "is in there: Windows may have deleted it for good.")
+        return f'{folder.name} is gone. The Recycle Bin did not gain an item, so check that it is in there: Windows may have deleted it for good.'
     return ""
 
 
@@ -606,14 +587,12 @@ class EditableFolderDialog:
         box.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=8)
         box.columnconfigure(0, weight=1)
         box.rowconfigure(0, weight=1)
-        self.listbox = tk.Listbox(box, name="folders", width=64, height=14, activestyle="none",
-                                  exportselection=False, selectmode="browse")
+        self.listbox = tk.Listbox(box, name='folders', width=64, height=14, activestyle='none', exportselection=False, selectmode='browse')
         self.listbox.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.listbox.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=scroll.set)
-        self.status_label = ttk.Label(frame, textvariable=self.status_var, name="status",
-                                      wraplength=520, justify="left")
+        self.status_label = ttk.Label(frame, textvariable=self.status_var, name='status', wraplength=520, justify='left')
         self.status_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 6))
         self.status_label.grid_remove()
         ttk.Label(frame, text="Selection:").grid(row=3, column=0, sticky="w", padx=(0, 6))
@@ -766,8 +745,7 @@ class EditableFolderDialog:
             self._error("Delete folder", f"{folder.name} was not deleted: {error}")
             return
         try:
-            agreed = messagebox.askyesno("Delete folder", question, default="no", icon="warning",
-                                         parent=self.top)
+            agreed = messagebox.askyesno('Delete folder', question, default='no', icon='warning', parent=self.top)
         finally:
             self._regrab()
         if not agreed:
@@ -802,8 +780,7 @@ class EditableFolderDialog:
                 self._error("Choose a folder", f"{path.as_posix()} does not exist.")
                 return
             try:
-                agreed = messagebox.askyesno("Choose a folder", f"{path.as_posix()} does not exist. "
-                                             "Make it?", parent=self.top)
+                agreed = messagebox.askyesno('Choose a folder', f'{path.as_posix()} does not exist. Make it?', parent=self.top)
             finally:
                 self._regrab()
             if not agreed:
@@ -870,8 +847,7 @@ class EditableFolderDialog:
                 pass
             if previous_grab is not None:
                 try:
-                    if (int(parent.tk.call("winfo", "exists", previous_grab))
-                            and int(parent.tk.call("winfo", "viewable", previous_grab))):
+                    if int(parent.tk.call('winfo', 'exists', previous_grab)) and int(parent.tk.call('winfo', 'viewable', previous_grab)):
                         parent.tk.call("grab", "set", previous_grab)
                 except tk.TclError:
                     pass
@@ -884,8 +860,7 @@ def editable_folder_dialog(**options) -> str:
             raise RuntimeError("A folder dialog needs a Tk window")
         return _NATIVE_ASK_DIRECTORY(**options)
     try:
-        dialog = EditableFolderDialog(parent, options.get("title", ""), options.get("initialdir", ""),
-                                      options.get("mustexist", False))
+        dialog = EditableFolderDialog(parent, options.get('title', ''), options.get('initialdir', ''), options.get('mustexist', False))
     except Exception:
         return _NATIVE_ASK_DIRECTORY(**options)
     return dialog.show()
@@ -920,9 +895,7 @@ def use_english_tk_dialogs(root: tk.Misc) -> bool:
         return False
 
 
-WINDOWS_RESERVED_FILE_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
-)
+WINDOWS_RESERVED_FILE_NAMES = frozenset({'CON', 'PRN', 'AUX', 'NUL', *(f'COM{i}' for i in range(1, 10)), *(f'LPT{i}' for i in range(1, 10))})
 # ===== END English dialogs copied from Transport_all.py =====
 def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
     installed = tuple(tkfont.families(root))
@@ -938,23 +911,13 @@ def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
     default_family = str(default_font.actual("family"))
     fixed_family = str(fixed_font.actual("family"))
     if sys.platform.startswith("win"):
-        ui_candidates = (
-            "Microsoft YaHei UI",
-            "Microsoft YaHei",
-            "DengXian",
-            "Segoe UI",
-        )
+        ui_candidates = ('Microsoft YaHei UI', 'Microsoft YaHei', 'DengXian', 'Segoe UI')
         mono_candidates = ("Cascadia Mono", "Consolas", "Courier New")
     elif sys.platform == "darwin":
         ui_candidates = ("PingFang SC", "Heiti SC", "Helvetica Neue")
         mono_candidates = ("SF Mono", "Menlo", "Monaco")
     else:
-        ui_candidates = (
-            "Noto Sans CJK SC",
-            "Noto Sans SC",
-            "WenQuanYi Micro Hei",
-            "DejaVu Sans",
-        )
+        ui_candidates = ('Noto Sans CJK SC', 'Noto Sans SC', 'WenQuanYi Micro Hei', 'DejaVu Sans')
         mono_candidates = ("Noto Sans Mono CJK SC", "DejaVu Sans Mono")
     ui_family = choose(ui_candidates, default_family)
     mono_family = choose(mono_candidates, fixed_family)
@@ -977,11 +940,7 @@ def configure_tk_font_system(root: tk.Misc) -> tuple[str, str]:
     for font_name, (family, size, weight) in named_specs.items():
         if font_name not in available_named_fonts:
             continue
-        tkfont.nametofont(font_name, root=root).configure(
-            family=family,
-            size=size,
-            weight=weight,
-        )
+        tkfont.nametofont(font_name, root=root).configure(family=family, size=size, weight=weight)
     root.option_add("*Font", "TkDefaultFont", "widgetDefault")
     root.option_add("*Menu.Font", "TkMenuFont", "widgetDefault")
     setattr(top_level, "_moke_ui_font_family", ui_family)
@@ -1022,9 +981,7 @@ class LabOneDotNetAdapter:
         try:
             import clr
         except ImportError as error:
-            raise RuntimeError(
-                "The current Python lacks pythonnet; cannot load the .NET API bundled with LabOne"
-            ) from error
+            raise RuntimeError('The current Python lacks pythonnet; cannot load the .NET API bundled with LabOne') from error
         dll_directory, api_dll = self._find_dotnet_api()
         self.dll_directory = dll_directory
         self.api_dll = api_dll
@@ -1041,25 +998,14 @@ class LabOneDotNetAdapter:
             if api_type is None or enum_type is None:
                 exported = list(assembly.GetExportedTypes())
                 if api_type is None:
-                    api_type = next(
-                        (item for item in exported if item.Name == "ziDotNET"),
-                        None,
-                    )
+                    api_type = next((item for item in exported if item.Name == 'ziDotNET'), None)
                 if enum_type is None:
-                    enum_type = next(
-                        (
-                            item for item in exported
-                            if item.Name == "ZIAPIVersion_enum"
-                        ),
-                        None,
-                    )
+                    enum_type = next((item for item in exported if item.Name == 'ZIAPIVersion_enum'), None)
             if api_type is None or enum_type is None:
                 raise RuntimeError("ziDotNET or the API level enum was not found in the DLL")
         except BaseException as error:
             self._close_dll_directory()
-            raise RuntimeError(
-                f"Failed to load the LabOne .NET DLL ({api_dll}): {error}"
-            ) from error
+            raise RuntimeError(f'Failed to load the LabOne .NET DLL ({api_dll}): {error}') from error
         self._daq = Activator.CreateInstance(api_type)
         enum_level = Enum.ToObject(enum_type, int(api_level))
         try:
@@ -1074,9 +1020,7 @@ class LabOneDotNetAdapter:
             except BaseException:
                 pass
             self._close_dll_directory()
-            raise RuntimeError(
-                f"LabOne .NET API failed to connect to {host}:{port}: {error}"
-            ) from error
+            raise RuntimeError(f'LabOne .NET API failed to connect to {host}:{port}: {error}') from error
     @staticmethod
     def _find_dotnet_api() -> tuple[Path, Path]:
         is_64_bit = sys.maxsize > 2**32
@@ -1092,14 +1036,8 @@ class LabOneDotNetAdapter:
         explicit = os.environ.get("MOKE_LABONE_DOTNET_API", "").strip().strip('"')
         if explicit:
             configured = Path(explicit)
-            candidates.append(
-                configured if configured.suffix.lower() == ".dll"
-                else configured / api_filename
-            )
-        runtime_directories = {
-            Path(__file__).resolve().parent,
-            Path(sys.executable).resolve().parent,
-        }
+            candidates.append(configured if configured.suffix.lower() == '.dll' else configured / api_filename)
+        runtime_directories = {Path(__file__).resolve().parent, Path(sys.executable).resolve().parent}
         candidates.extend(directory / api_filename for directory in runtime_directories)
         for root in roots:
             candidates.extend(
@@ -1119,20 +1057,13 @@ class LabOneDotNetAdapter:
             checked.append(str(candidate))
             try:
                 if candidate.is_file():
-                    core_dll = candidate.with_name(
-                        f"ziDotNETCore-{suffix}.dll"
-                    )
+                    core_dll = candidate.with_name(f'ziDotNETCore-{suffix}.dll')
                     if not core_dll.is_file():
-                        raise RuntimeError(
-                            f"Found {candidate.name}, but the same directory is missing {core_dll.name}"
-                        )
+                        raise RuntimeError(f'Found {candidate.name}, but the same directory is missing {core_dll.name}')
                     return candidate.parent, candidate
             except OSError:
                 continue
-        raise RuntimeError(
-            "No matching-version .NET API bundled with LabOne was found. Please confirm that the full "
-            "LabOne (including API/DotNet) is installed. Checked: " + "; ".join(checked)
-        )
+        raise RuntimeError('No matching-version .NET API bundled with LabOne was found. Please confirm that the full LabOne (including API/DotNet) is installed. Checked: ' + '; '.join(checked))
     def _close_dll_directory(self) -> None:
         handle = self._dll_directory_handle
         self._dll_directory_handle = None
@@ -1149,12 +1080,7 @@ class LabOneDotNetAdapter:
         self._daq.sync()
     def getSample(self, path: str) -> dict[str, float]:
         sample = self._daq.getDemodSample(str(path))
-        return {
-            "x": float(sample.x),
-            "y": float(sample.y),
-            "frequency": float(sample.frequency),
-            "phase": float(sample.phase),
-        }
+        return {'x': float(sample.x), 'y': float(sample.y), 'frequency': float(sample.frequency), 'phase': float(sample.phase)}
     def getString(self, path: str) -> str:
         return str(self._daq.getString(str(path)))
     def connectDevice(self, device: str, interface: str) -> None:
@@ -1183,27 +1109,13 @@ class LabOneCAPIAdapter:
         self.api_dll = self._find_c_api()
         self._dll_directory_handle = None
         if hasattr(os, "add_dll_directory"):
-            self._dll_directory_handle = os.add_dll_directory(
-                str(self.api_dll.parent)
-            )
+            self._dll_directory_handle = os.add_dll_directory(str(self.api_dll.parent))
         try:
             self._lib = ctypes.WinDLL(str(self.api_dll))
             self._bind_functions()
             self._connection = ctypes.c_void_p()
-            self._check(
-                self._lib.ziAPIInit(ctypes.byref(self._connection)),
-                "ziAPIInit",
-            )
-            self._check(
-                self._lib.ziAPIConnectEx(
-                    self._connection,
-                    str(host).encode("ascii"),
-                    int(port),
-                    int(api_level),
-                    b"allowVersionMismatch=1",
-                ),
-                f"ziAPIConnectEx({host}:{port})",
-            )
+            self._check(self._lib.ziAPIInit(ctypes.byref(self._connection)), 'ziAPIInit')
+            self._check(self._lib.ziAPIConnectEx(self._connection, str(host).encode('ascii'), int(port), int(api_level), b'allowVersionMismatch=1'), f'ziAPIConnectEx({host}:{port})')
         except BaseException:
             self._destroy()
             raise
@@ -1212,44 +1124,21 @@ class LabOneCAPIAdapter:
         result = ctypes.c_int
         self._lib.ziAPIInit.argtypes = [ctypes.POINTER(connection)]
         self._lib.ziAPIInit.restype = result
-        self._lib.ziAPIConnectEx.argtypes = [
-            connection,
-            ctypes.c_char_p,
-            ctypes.c_uint16,
-            ctypes.c_int,
-            ctypes.c_char_p,
-        ]
+        self._lib.ziAPIConnectEx.argtypes = [connection, ctypes.c_char_p, ctypes.c_uint16, ctypes.c_int, ctypes.c_char_p]
         self._lib.ziAPIConnectEx.restype = result
         self._lib.ziAPIDisconnect.argtypes = [connection]
         self._lib.ziAPIDisconnect.restype = result
         self._lib.ziAPIDestroy.argtypes = [connection]
         self._lib.ziAPIDestroy.restype = result
-        self._lib.ziAPIConnectDevice.argtypes = [
-            connection,
-            ctypes.c_char_p,
-            ctypes.c_char_p,
-            ctypes.c_char_p,
-        ]
+        self._lib.ziAPIConnectDevice.argtypes = [connection, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
         self._lib.ziAPIConnectDevice.restype = result
-        self._lib.ziAPISetValueI.argtypes = [
-            connection,
-            ctypes.c_char_p,
-            ctypes.c_int64,
-        ]
+        self._lib.ziAPISetValueI.argtypes = [connection, ctypes.c_char_p, ctypes.c_int64]
         self._lib.ziAPISetValueI.restype = result
-        self._lib.ziAPIGetValueI.argtypes = [
-            connection,
-            ctypes.c_char_p,
-            ctypes.POINTER(ctypes.c_int64),
-        ]
+        self._lib.ziAPIGetValueI.argtypes = [connection, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int64)]
         self._lib.ziAPIGetValueI.restype = result
         self._lib.ziAPISync.argtypes = [connection]
         self._lib.ziAPISync.restype = result
-        self._lib.ziAPIGetDemodSample.argtypes = [
-            connection,
-            ctypes.c_char_p,
-            ctypes.POINTER(self._DemodSample),
-        ]
+        self._lib.ziAPIGetDemodSample.argtypes = [connection, ctypes.c_char_p, ctypes.POINTER(self._DemodSample)]
         self._lib.ziAPIGetDemodSample.restype = result
     @staticmethod
     def _candidate_labview_roots() -> list[Path]:
@@ -1257,11 +1146,7 @@ class LabOneCAPIAdapter:
         for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
             ni_root = Path(base) / "National Instruments"
             try:
-                roots.extend(
-                    item / "instr.lib/Zurich Instruments LabOne"
-                    for item in ni_root.glob("LabVIEW*")
-                    if item.is_dir()
-                )
+                roots.extend((item / 'instr.lib/Zurich Instruments LabOne' for item in ni_root.glob('LabVIEW*') if item.is_dir()))
             except OSError:
                 continue
         return roots
@@ -1273,27 +1158,15 @@ class LabOneCAPIAdapter:
         candidates: list[Path] = []
         if explicit:
             configured = Path(explicit)
-            candidates.append(
-                configured if configured.suffix.lower() == ".dll"
-                else configured / filename
-            )
+            candidates.append(configured if configured.suffix.lower() == '.dll' else configured / filename)
         for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
             labone = Path(base) / "Zurich Instruments/LabOne"
-            candidates.extend(
-                (
-                    labone / "API/C/lib" / filename,
-                    labone / "API/C/bin" / filename,
-                    labone / filename,
-                )
-            )
+            candidates.extend((labone / 'API/C/lib' / filename, labone / 'API/C/bin' / filename, labone / filename))
             try:
                 candidates.extend(labone.rglob(filename))
             except OSError:
                 pass
-        runtime_directories = {
-            Path(__file__).resolve().parent,
-            Path(sys.executable).resolve().parent,
-        }
+        runtime_directories = {Path(__file__).resolve().parent, Path(sys.executable).resolve().parent}
         candidates.extend(directory / filename for directory in runtime_directories)
         for root in cls._candidate_labview_roots():
             try:
@@ -1331,49 +1204,21 @@ class LabOneCAPIAdapter:
         if int(code) != 0:
             raise RuntimeError(f"{operation} failed, LabOne C API code={int(code)}")
     def setInt(self, path: str, value: int) -> None:
-        self._check(
-            self._lib.ziAPISetValueI(
-                self._connection, self._path(path), int(value)
-            ),
-            f"setInt({path})",
-        )
+        self._check(self._lib.ziAPISetValueI(self._connection, self._path(path), int(value)), f'setInt({path})')
     def getInt(self, path: str) -> int:
         value = ctypes.c_int64()
-        self._check(
-            self._lib.ziAPIGetValueI(
-                self._connection, self._path(path), ctypes.byref(value)
-            ),
-            f"getInt({path})",
-        )
+        self._check(self._lib.ziAPIGetValueI(self._connection, self._path(path), ctypes.byref(value)), f'getInt({path})')
         return int(value.value)
     def sync(self) -> None:
         self._check(self._lib.ziAPISync(self._connection), "ziAPISync")
     def getSample(self, path: str) -> dict[str, float]:
         sample = self._DemodSample()
-        self._check(
-            self._lib.ziAPIGetDemodSample(
-                self._connection, self._path(path), ctypes.byref(sample)
-            ),
-            f"getDemodSample({path})",
-        )
-        return {
-            "x": float(sample.x),
-            "y": float(sample.y),
-            "frequency": float(sample.frequency),
-            "phase": float(sample.phase),
-        }
+        self._check(self._lib.ziAPIGetDemodSample(self._connection, self._path(path), ctypes.byref(sample)), f'getDemodSample({path})')
+        return {'x': float(sample.x), 'y': float(sample.y), 'frequency': float(sample.frequency), 'phase': float(sample.phase)}
     def getString(self, path: str) -> str:
         return ""
     def connectDevice(self, device: str, interface: str) -> None:
-        self._check(
-            self._lib.ziAPIConnectDevice(
-                self._connection,
-                str(device).encode("ascii"),
-                str(interface).encode("ascii"),
-                b"",
-            ),
-            f"connectDevice({device}, {interface})",
-        )
+        self._check(self._lib.ziAPIConnectDevice(self._connection, str(device).encode('ascii'), str(interface).encode('ascii'), b''), f'connectDevice({device}, {interface})')
     def _destroy(self) -> None:
         connection = getattr(self, "_connection", None)
         library = getattr(self, "_lib", None)
@@ -1398,21 +1243,13 @@ class LabOneCAPIAdapter:
             self._destroy()
 NONLOCAL_MFLI_SERVER_HOST = "192.168.69.78"
 NONLOCAL_MFLI_SERVER_PORT = 8004
-NONLOCAL_MFLI_SERVER_CANDIDATES = (
-    ("127.0.0.1", NONLOCAL_MFLI_SERVER_PORT),
-    (NONLOCAL_MFLI_SERVER_HOST, NONLOCAL_MFLI_SERVER_PORT),
-)
+NONLOCAL_MFLI_SERVER_CANDIDATES = (('127.0.0.1', NONLOCAL_MFLI_SERVER_PORT), (NONLOCAL_MFLI_SERVER_HOST, NONLOCAL_MFLI_SERVER_PORT))
 NONLOCAL_MFLI_API_LEVEL = 5
 NONLOCAL_MFLI_DEMODULATOR = 0
 NONLOCAL_MFLI_EXTREF_DEMODULATOR = 1
 NONLOCAL_MFLI_EXTREF_CHANNEL = 0
 NONLOCAL_MFLI_INPUT_SCALING = 1.0
-NONLOCAL_MFLI_REFERENCE_INPUTS = {
-    "Aux Input 1": 8,
-    "Aux Input 2": 9,
-    "Trigger In 1": 2,
-    "Trigger In 2": 3,
-}
+NONLOCAL_MFLI_REFERENCE_INPUTS = {'Aux Input 1': 8, 'Aux Input 2': 9, 'Trigger In 1': 2, 'Trigger In 2': 3}
 NONLOCAL_MFLI_DEFAULT_REFERENCE_INPUT = "Aux Input 1"
 NONLOCAL_MFLI_LEGACY_PYTHON_ENV = "MOKE_MFLI_PYTHON"
 NONLOCAL_SAMPLE_HZ = 1.0
@@ -1424,22 +1261,12 @@ NONLOCAL_SR830_FULL_SCALE_V = (
     500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3, 50e-3, 100e-3,
     200e-3, 500e-3, 1.0,
 )
-STFMR_LOCKIN_DEFAULT_RESOURCES = {
-    "kepco": "GPIB0::6::INSTR",
-    "gauss": "GPIB0::15::INSTR",
-    "smb": "GPIB0::28::INSTR",
-    "830": "GPIB0::9::INSTR",
-    "mfli": "dev4435",
-}
+STFMR_LOCKIN_DEFAULT_RESOURCES = {'kepco': 'GPIB0::6::INSTR', 'gauss': 'GPIB0::15::INSTR', 'smb': 'GPIB0::28::INSTR', '830': 'GPIB0::9::INSTR', 'mfli': 'dev4435'}
 STFMR_KEPCO_MAX_CURRENT_A = 10.0
 STFMR_KEPCO_MAX_VOLTAGE_V = 20.0
 STFMR_LOCKIN_SR830_SENSITIVITY_CODE = 13
 STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE = 10
-STFMR_LOCKIN_SR830_REFERENCE_INPUTS = {
-    "Sine": 0,
-    "TTL Rising": 1,
-    "TTL Falling": 2,
-}
+STFMR_LOCKIN_SR830_REFERENCE_INPUTS = {'Sine': 0, 'TTL Rising': 1, 'TTL Falling': 2}
 STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT = "Sine"
 _INSTRUMENT_LEASE_LOCK = threading.RLock()
 _INSTRUMENT_LEASES: dict[str, tuple[object, str]] = {}
@@ -1449,9 +1276,7 @@ _SHARED_VISA_MANAGER_USERS = 0
 def acquire_shared_visa_manager():
     global _SHARED_VISA_MANAGER, _SHARED_VISA_MANAGER_USERS
     if pyvisa is None:
-        raise RuntimeError(
-            "pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py"
-        )
+        raise RuntimeError('pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py')
     with _SHARED_VISA_MANAGER_LOCK:
         manager = _SHARED_VISA_MANAGER
         if manager is not None:
@@ -1459,10 +1284,7 @@ def acquire_shared_visa_manager():
                 manager.session
             except BaseException as error:
                 if _SHARED_VISA_MANAGER_USERS:
-                    raise RuntimeError(
-                        "The shared VISA resource manager session became invalid unexpectedly; please close the instruments "
-                        "that still show as connected and reconnect"
-                    ) from error
+                    raise RuntimeError('The shared VISA resource manager session became invalid unexpectedly; please close the instruments that still show as connected and reconnect') from error
                 _SHARED_VISA_MANAGER = None
                 manager = None
         if manager is None:
@@ -1478,9 +1300,7 @@ def release_shared_visa_manager(manager) -> None:
     with _SHARED_VISA_MANAGER_LOCK:
         if manager is not _SHARED_VISA_MANAGER:
             return
-        _SHARED_VISA_MANAGER_USERS = max(
-            0, _SHARED_VISA_MANAGER_USERS - 1
-        )
+        _SHARED_VISA_MANAGER_USERS = max(0, _SHARED_VISA_MANAGER_USERS - 1)
         if _SHARED_VISA_MANAGER_USERS == 0:
             try:
                 manager.close()
@@ -1488,19 +1308,14 @@ def release_shared_visa_manager(manager) -> None:
                 pass
             finally:
                 _SHARED_VISA_MANAGER = None
-def acquire_instrument_lease(
-    resource: str, owner: object, owner_label: str
-) -> str:
+def acquire_instrument_lease(resource: str, owner: object, owner_label: str) -> str:
     key = str(resource).strip().upper()
     if not key:
         raise ValueError("The instrument resource address cannot be empty")
     with _INSTRUMENT_LEASE_LOCK:
         current = _INSTRUMENT_LEASES.get(key)
         if current is not None:
-            raise RuntimeError(
-                f"{resource} is already connected by \"{current[1]}\"; "
-                f"please disconnect it in that module first, then connect from \"{owner_label}\""
-            )
+            raise RuntimeError(f'{resource} is already connected by "{current[1]}"; please disconnect it in that module first, then connect from "{owner_label}"')
         _INSTRUMENT_LEASES[key] = (owner, str(owner_label))
     return key
 def release_instrument_lease(resource: str, owner: object) -> None:
@@ -1532,9 +1347,7 @@ class SafeVisaIdentityController:
         self.preserve_visa_io_defaults = bool(preserve_visa_io_defaults)
         self.safe_off_on_connect = bool(safe_off_on_connect)
         self.enumerate_before_open = bool(enumerate_before_open)
-        self.connect_settle_seconds = max(
-            0.0, float(connect_settle_seconds)
-        )
+        self.connect_settle_seconds = max(0.0, float(connect_settle_seconds))
         self.resource_manager = None
         self.instrument = None
         self.resource_name = ""
@@ -1545,16 +1358,12 @@ class SafeVisaIdentityController:
         return self.instrument is not None
     def connect(self, resource_name: str) -> str:
         if pyvisa is None:
-            raise RuntimeError(
-                "pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py"
-            )
+            raise RuntimeError('pyvisa is missing; please run: py -m pip install pyvisa pyvisa-py')
         resource_name = str(resource_name).strip()
         with self.lock:
             if self.instrument is not None:
                 return self.identity
-            acquire_instrument_lease(
-                resource_name, self, f"{self.owner_scope} / {self.label}"
-            )
+            acquire_instrument_lease(resource_name, self, f'{self.owner_scope} / {self.label}')
             manager = None
             instrument = None
             identity_verified = False
@@ -1563,9 +1372,7 @@ class SafeVisaIdentityController:
                 if self.enumerate_before_open:
                     manager.list_resources()
                 instrument = manager.open_resource(resource_name)
-                instrument.timeout = (
-                    3000 if self.preserve_visa_io_defaults else 5000
-                )
+                instrument.timeout = 3000 if self.preserve_visa_io_defaults else 5000
                 if not self.preserve_visa_io_defaults:
                     instrument.write_termination = "\n"
                     instrument.read_termination = "\n"
@@ -1582,30 +1389,21 @@ class SafeVisaIdentityController:
                 try:
                     identity = instrument.query("*IDN?").strip()
                 except BaseException as error:
-                    raise RuntimeError(
-                        f"{self.label} identity query *IDN? failed: {error}; "
-                        "no output/setting command was sent to the device this time; the VISA session has been closed"
-                    ) from error
+                    raise RuntimeError(f'{self.label} identity query *IDN? failed: {error}; no output/setting command was sent to the device this time; the VISA session has been closed') from error
                 if self.identity_token not in identity.upper():
-                    raise RuntimeError(
-                        f"{resource_name} returned a device that is not {self.label}: {identity}"
-                    )
+                    raise RuntimeError(f'{resource_name} returned a device that is not {self.label}: {identity}')
                 identity_verified = True
                 if self.safe_off_on_connect:
                     for command in self.safe_off_commands:
                         try:
                             instrument.write(command)
                         except BaseException as error:
-                            raise RuntimeError(
-                                f"{self.label} connection safety command {command!r} failed: {error}"
-                            ) from error
+                            raise RuntimeError(f'{self.label} connection safety command {command!r} failed: {error}') from error
                 self.resource_manager = manager
                 self.instrument = instrument
                 self.resource_name = resource_name
                 self.identity = identity
-                self.logger(
-                    f"{self.owner_scope} {self.label} connected: {identity}"
-                )
+                self.logger(f'{self.owner_scope} {self.label} connected: {identity}')
                 return identity
             except BaseException:
                 if instrument is not None:
@@ -1633,9 +1431,7 @@ class SafeVisaIdentityController:
                 except BaseException as error:
                     errors.append(f"{command}: {error}")
             if errors:
-                raise RuntimeError(
-                    f"{self.label} failed to turn output off: " + "; ".join(errors)
-                )
+                raise RuntimeError(f'{self.label} failed to turn output off: ' + '; '.join(errors))
     def disconnect(self) -> None:
         with self.lock:
             instrument = self.instrument
@@ -1690,9 +1486,7 @@ class STFMRKepco4886Controller:
         with self.lock:
             if self.instrument is not None:
                 return self.identity
-            acquire_instrument_lease(
-                resource_name, self, "STFMR / KEPCO BOP 4886 20-10"
-            )
+            acquire_instrument_lease(resource_name, self, 'STFMR / KEPCO BOP 4886 20-10')
             manager = None
             instrument = None
             try:
@@ -1706,9 +1500,7 @@ class STFMRKepco4886Controller:
                 self.instrument = instrument
                 self.resource_name = resource_name
                 self.identity = "KEPCO BOP 4886 20-10 (not queried)"
-                self.logger(
-                    "STFMR KEPCO VISA session opened; no query or output command sent"
-                )
+                self.logger('STFMR KEPCO VISA session opened; no query or output command sent')
                 return self.identity
             except BaseException:
                 if instrument is not None:
@@ -1742,9 +1534,7 @@ class STFMRKepco4886Controller:
             if self.instrument is None:
                 raise RuntimeError("KEPCO is not connected")
             return self._cached_state()
-    def set_output(
-        self, mode: str, target: float, complementary_limit: float
-    ) -> dict[str, object]:
+    def set_output(self, mode: str, target: float, complementary_limit: float) -> dict[str, object]:
         selected = str(mode).strip().upper()
         target = float(target)
         limit = abs(float(complementary_limit))
@@ -1767,23 +1557,9 @@ class STFMRKepco4886Controller:
                 raise RuntimeError("KEPCO is not connected")
             commands = [f"FUNC:MODE {selected}"]
             if selected == "CURR":
-                commands.extend(
-                    (
-                        f"CURR 0;VOLT {limit:.12g}",
-                        "VOLT:RANG:AUTO 1;CURR:RANG:AUTO 1",
-                        "OUTP ON",
-                        f"CURR {target:.6f}",
-                    )
-                )
+                commands.extend((f'CURR 0;VOLT {limit:.12g}', 'VOLT:RANG:AUTO 1;CURR:RANG:AUTO 1', 'OUTP ON', f'CURR {target:.6f}'))
             else:
-                commands.extend(
-                    (
-                        f"VOLT 0;CURR {limit:.12g}",
-                        "VOLT:RANG:AUTO 1;CURR:RANG:AUTO 1",
-                        "OUTP ON",
-                        f"VOLT {target:.6f}",
-                    )
-                )
+                commands.extend((f'VOLT 0;CURR {limit:.12g}', 'VOLT:RANG:AUTO 1;CURR:RANG:AUTO 1', 'OUTP ON', f'VOLT {target:.6f}'))
             self.active_mode = selected
             try:
                 for command in commands:
@@ -1822,11 +1598,7 @@ class STFMRKepco4886Controller:
         with self.lock:
             if self.instrument is None or not self.output_owned:
                 return
-            zero = (
-                "VOLT 0.000000"
-                if self.active_mode == "VOLT"
-                else "CURR 0.000000"
-            )
+            zero = 'VOLT 0.000000' if self.active_mode == 'VOLT' else 'CURR 0.000000'
             self._write_exact(zero)
             self._write_exact("OUTP OFF")
             self.output_owned = False
@@ -1865,12 +1637,7 @@ class STFMRKepco4886Controller:
 class STFMRGauss475Controller(SafeVisaIdentityController):
     UNIT_LABELS = {1: "G", 2: "T", 3: "Oe", 4: "A/m"}
     def __init__(self, logger: Callable[[str], None]) -> None:
-        super().__init__(
-            logger,
-            "Lake Shore 475 gaussmeter",
-            "MODEL475",
-            owner_scope="STFMR",
-        )
+        super().__init__(logger, 'Lake Shore 475 gaussmeter', 'MODEL475', owner_scope='STFMR')
     def read_field(self) -> dict[str, object]:
         with self.lock:
             if self.instrument is None:
@@ -1879,32 +1646,18 @@ class STFMRGauss475Controller(SafeVisaIdentityController):
             unit_code = int(float(self.instrument.query("UNIT?")))
             if not math.isfinite(value):
                 raise RuntimeError("Lake Shore 475 readback contains non-finite values")
-            return {
-                "field": value,
-                "unit_code": unit_code,
-                "unit": self.UNIT_LABELS.get(unit_code, f"UNIT {unit_code}"),
-            }
+            return {'field': value, 'unit_code': unit_code, 'unit': self.UNIT_LABELS.get(unit_code, f'UNIT {unit_code}')}
     @staticmethod
     def value_in_gauss(result: dict[str, object]) -> float:
         value = float(result["field"])
         unit_code = int(result["unit_code"])
-        factors = {
-            1: 1.0,
-            2: 1.0e4,
-            3: 1.0,
-            4: 4.0 * math.pi / 1000.0,
-        }
+        factors = {1: 1.0, 2: 10000.0, 3: 1.0, 4: 4.0 * math.pi / 1000.0}
         if unit_code not in factors:
             raise RuntimeError(f"Cannot convert Lake Shore UNIT {unit_code} to G")
         return value * factors[unit_code]
 class STFMRSR830Controller(SafeVisaIdentityController):
     def __init__(self, logger: Callable[[str], None]) -> None:
-        super().__init__(
-            logger,
-            "Stanford SR830",
-            "SR830",
-            owner_scope="STFMR",
-        )
+        super().__init__(logger, 'Stanford SR830', 'SR830', owner_scope='STFMR')
         self.reference_input = STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT
         self.sensitivity_index = STFMR_LOCKIN_SR830_SENSITIVITY_CODE
         self.auto_range_enabled = True
@@ -1916,11 +1669,7 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         if len(values) != expected or not all(math.isfinite(v) for v in values):
             raise RuntimeError(f"SR830 readback cannot be parsed: {response!r}")
         return values
-    def configure(
-        self,
-        reference_input: str = STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT,
-        auto_range: bool = True,
-    ) -> dict[str, object]:
+    def configure(self, reference_input: str=STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT, auto_range: bool=True) -> dict[str, object]:
         reference_input = str(reference_input).strip()
         if reference_input not in STFMR_LOCKIN_SR830_REFERENCE_INPUTS:
             choices = ", ".join(STFMR_LOCKIN_SR830_REFERENCE_INPUTS)
@@ -1947,50 +1696,21 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 "DDEF 2,0,0",
             ):
                 self.instrument.write(command)
-            actual_reference_mode = int(round(float(
-                self.instrument.query("FMOD?").strip()
-            )))
-            actual_reference_slope = int(round(float(
-                self.instrument.query("RSLP?").strip()
-            )))
-            actual_harmonic = int(round(float(
-                self.instrument.query("HARM?").strip()
-            )))
-            actual_sensitivity = int(round(float(
-                self.instrument.query("SENS?").strip()
-            )))
-            if (
-                actual_reference_mode != 0
-                or actual_reference_slope != reference_slope
-                or actual_harmonic != 1
-            ):
-                raise RuntimeError(
-                    "SR830 REF IN configuration readback mismatch: "
-                    f"FMOD={actual_reference_mode}, "
-                    f"RSLP={actual_reference_slope}, HARM={actual_harmonic}"
-                )
+            actual_reference_mode = int(round(float(self.instrument.query('FMOD?').strip())))
+            actual_reference_slope = int(round(float(self.instrument.query('RSLP?').strip())))
+            actual_harmonic = int(round(float(self.instrument.query('HARM?').strip())))
+            actual_sensitivity = int(round(float(self.instrument.query('SENS?').strip())))
+            if actual_reference_mode != 0 or actual_reference_slope != reference_slope or actual_harmonic != 1:
+                raise RuntimeError(f'SR830 REF IN configuration readback mismatch: FMOD={actual_reference_mode}, RSLP={actual_reference_slope}, HARM={actual_harmonic}')
             if actual_sensitivity != STFMR_LOCKIN_SR830_SENSITIVITY_CODE:
-                raise RuntimeError(
-                    "SR830 initial sensitivity readback mismatch: "
-                    f"requested SENS {STFMR_LOCKIN_SR830_SENSITIVITY_CODE}, "
-                    f"readback {actual_sensitivity}"
-                )
+                raise RuntimeError(f'SR830 initial sensitivity readback mismatch: requested SENS {STFMR_LOCKIN_SR830_SENSITIVITY_CODE}, readback {actual_sensitivity}')
             self.reference_input = reference_input
             self.sensitivity_index = actual_sensitivity
             self.auto_range_enabled = bool(auto_range)
             self.low_range_count = 0
             self.range_cooldown = 0
-            return {
-                "reference_input": reference_input,
-                "reference_slope": actual_reference_slope,
-                "sensitivity_index": actual_sensitivity,
-                "auto_range": self.auto_range_enabled,
-            }
-    def wait_for_reference(
-        self,
-        expected_frequency_hz: float,
-        timeout_s: float = 5.0,
-    ) -> dict[str, object]:
+            return {'reference_input': reference_input, 'reference_slope': actual_reference_slope, 'sensitivity_index': actual_sensitivity, 'auto_range': self.auto_range_enabled}
+    def wait_for_reference(self, expected_frequency_hz: float, timeout_s: float=5.0) -> dict[str, object]:
         expected = float(expected_frequency_hz)
         if not math.isfinite(expected) or expected <= 0:
             raise ValueError("SR830 expected reference frequency must be a finite positive number")
@@ -2002,20 +1722,9 @@ class STFMRSR830Controller(SafeVisaIdentityController):
                 if self.instrument is None:
                     raise RuntimeError("SR830 is not connected")
                 frequency = float(self.instrument.query("FREQ?").strip())
-                status = int(round(float(
-                    self.instrument.query("LIAS?").strip()
-                )))
-            if not (status & 8) and math.isclose(
-                frequency,
-                expected,
-                rel_tol=5e-3,
-                abs_tol=0.1,
-            ):
-                return {
-                    "frequency_hz": frequency,
-                    "status": status,
-                    "reference_input": self.reference_input,
-                }
+                status = int(round(float(self.instrument.query('LIAS?').strip())))
+            if not status & 8 and math.isclose(frequency, expected, rel_tol=0.005, abs_tol=0.1):
+                return {'frequency_hz': frequency, 'status': status, 'reference_input': self.reference_input}
             time.sleep(0.1)
         raise RuntimeError(
             f"SR830 REF IN not locked: selected {self.reference_input}, "
@@ -2050,13 +1759,9 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         if requested == old:
             return ""
         self.instrument.write(f"SENS {requested}")
-        actual = int(round(float(
-            self.instrument.query("SENS?").strip()
-        )))
+        actual = int(round(float(self.instrument.query('SENS?').strip())))
         if actual != requested:
-            raise RuntimeError(
-                f"SR830 auto-range readback mismatch: requested {requested}, readback {actual}"
-            )
+            raise RuntimeError(f'SR830 auto-range readback mismatch: requested {requested}, readback {actual}')
         self.sensitivity_index = actual
         self.range_cooldown = 3
         return f"SENS {old}->{actual} ({reason})"
@@ -2071,18 +1776,11 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("SR830 is not connected")
-            x, y, r_value, theta, frequency = self._numbers(
-                self.instrument.query("SNAP? 1,2,3,4,9"), 5
-            )
+            x, y, r_value, theta, frequency = self._numbers(self.instrument.query('SNAP? 1,2,3,4,9'), 5)
             lias = int(round(float(self.instrument.query("LIAS?").strip())))
             sensitivity_used = int(self.sensitivity_index)
             auto_range_action = self._auto_range_locked(r_value, lias)
-        reference_valid = not (lias & 8) and math.isclose(
-            frequency,
-            float(expected_frequency_hz),
-            rel_tol=5e-3,
-            abs_tol=0.1,
-        )
+        reference_valid = not lias & 8 and math.isclose(frequency, float(expected_frequency_hz), rel_tol=0.005, abs_tol=0.1)
         return {
             "x_v": x,
             "y_v": y,
@@ -2102,13 +1800,7 @@ class STFMRSR830Controller(SafeVisaIdentityController):
         }
 class STFMRSMB100AController(SafeVisaIdentityController):
     def __init__(self, logger: Callable[[str], None]) -> None:
-        super().__init__(
-            logger,
-            "R&S SMB100A",
-            "SMB100A",
-            safe_off_commands=("AM:STAT OFF", "LFO OFF", "OUTPUT OFF"),
-            owner_scope="STFMR",
-        )
+        super().__init__(logger, 'R&S SMB100A', 'SMB100A', safe_off_commands=('AM:STAT OFF', 'LFO OFF', 'OUTPUT OFF'), owner_scope='STFMR')
     def configure(self, frequency_ghz: float, power_dbm: float, lfo_hz: float) -> None:
         frequency_ghz = float(frequency_ghz)
         power_dbm = float(power_dbm)
@@ -2122,16 +1814,7 @@ class STFMRSMB100AController(SafeVisaIdentityController):
         with self.lock:
             if self.instrument is None:
                 raise RuntimeError("SMB100A is not connected")
-            for command in (
-                ":AM:DEPT:LIN 1.0E+2",
-                "LFO:VOLT 0.50 V",
-                f"LFO:FREQ {lfo_hz:.7g} Hz",
-                f":POW {power_dbm:.6g}",
-                f"FREQ {frequency_ghz:.9g}GHz",
-                "LFO ON",
-                "OUTPUT ON",
-                "AM:STAT ON",
-            ):
+            for command in (':AM:DEPT:LIN 1.0E+2', 'LFO:VOLT 0.50 V', f'LFO:FREQ {lfo_hz:.7g} Hz', f':POW {power_dbm:.6g}', f'FREQ {frequency_ghz:.9g}GHz', 'LFO ON', 'OUTPUT ON', 'AM:STAT ON'):
                 self.instrument.write(command)
     def set_frequency(self, frequency_ghz: float) -> None:
         frequency_ghz = float(frequency_ghz)
@@ -2408,35 +2091,15 @@ def _find_mfli_legacy_python() -> Path:
     if configured:
         candidates.append(Path(configured.strip('"')))
     system_drive = os.environ.get("SystemDrive", "C:")
-    drive_root = Path(
-        system_drive + os.sep if system_drive.endswith(":") else system_drive
-    )
+    drive_root = Path(system_drive + os.sep if system_drive.endswith(':') else system_drive)
     user_profile = os.environ.get("USERPROFILE", "")
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     if local_app_data:
-        candidates.append(
-            Path(local_app_data) / "NBB/MOKE_MFLI_PY37/python.exe"
-        )
-    candidates.append(
-        Path(__file__).resolve().parent / ".mfli_py37/python.exe"
-    )
-    candidates.extend(
-        (
-            drive_root
-            / "ProgramData/miniconda3/envs/GMS_VENV_PYTHON/python.exe",
-            drive_root
-            / "ProgramData/anaconda3/envs/GMS_VENV_PYTHON/python.exe",
-        )
-    )
+        candidates.append(Path(local_app_data) / 'NBB/MOKE_MFLI_PY37/python.exe')
+    candidates.append(Path(__file__).resolve().parent / '.mfli_py37/python.exe')
+    candidates.extend((drive_root / 'ProgramData/miniconda3/envs/GMS_VENV_PYTHON/python.exe', drive_root / 'ProgramData/anaconda3/envs/GMS_VENV_PYTHON/python.exe'))
     if user_profile:
-        candidates.extend(
-            (
-                Path(user_profile)
-                / "miniconda3/envs/GMS_VENV_PYTHON/python.exe",
-                Path(user_profile)
-                / "anaconda3/envs/GMS_VENV_PYTHON/python.exe",
-            )
-        )
+        candidates.extend((Path(user_profile) / 'miniconda3/envs/GMS_VENV_PYTHON/python.exe', Path(user_profile) / 'anaconda3/envs/GMS_VENV_PYTHON/python.exe'))
     rejected = []
     validation_code = (
         "import sys,pkg_resources,numpy,zhinst,zhinst.utils;"
@@ -2481,15 +2144,7 @@ class LegacyMFLIBridge:
         self.responses: queue.Queue = queue.Queue()
         self.diagnostics: list[str] = []
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        command = [
-            str(self.python_path),
-            "-u",
-            "-c",
-            _MFLI_BRIDGE_SOURCE,
-            str(device_id),
-            str(NONLOCAL_MFLI_API_LEVEL),
-            str(NONLOCAL_MFLI_DEMODULATOR),
-        ]
+        command = [str(self.python_path), '-u', '-c', _MFLI_BRIDGE_SOURCE, str(device_id), str(NONLOCAL_MFLI_API_LEVEL), str(NONLOCAL_MFLI_DEMODULATOR)]
         try:
             self.process = subprocess.Popen(
                 command,
@@ -2502,16 +2157,8 @@ class LegacyMFLIBridge:
                 bufsize=1,
                 creationflags=creationflags,
             )
-            threading.Thread(
-                target=self._read_stdout,
-                name="MFLI-bridge-stdout",
-                daemon=True,
-            ).start()
-            threading.Thread(
-                target=self._read_stderr,
-                name="MFLI-bridge-stderr",
-                daemon=True,
-            ).start()
+            threading.Thread(target=self._read_stdout, name='MFLI-bridge-stdout', daemon=True).start()
+            threading.Thread(target=self._read_stderr, name='MFLI-bridge-stderr', daemon=True).start()
             ready = self._receive(timeout_s)
             if ready.get("event") != "ready":
                 raise RuntimeError(f"MFLI bridge start reply is abnormal: {ready!r}")
@@ -2539,9 +2186,7 @@ class LegacyMFLIBridge:
                 line = raw_line.rstrip("\r\n")
                 if line.startswith(_MFLI_BRIDGE_PREFIX):
                     try:
-                        self.responses.put(
-                            json.loads(line[len(_MFLI_BRIDGE_PREFIX):])
-                        )
+                        self.responses.put(json.loads(line[len(_MFLI_BRIDGE_PREFIX):]))
                     except BaseException as error:
                         self._append_diagnostic(f"JSON parse failed: {error}: {line}")
                 else:
@@ -2562,29 +2207,17 @@ class LegacyMFLIBridge:
         try:
             reply = self.responses.get(timeout=max(0.1, float(timeout_s)))
         except queue.Empty as error:
-            raise RuntimeError(
-                f"The legacy LabOne bridge did not reply within {timeout_s:g} s"
-                + self._diagnostic_suffix()
-            ) from error
+            raise RuntimeError(f'The legacy LabOne bridge did not reply within {timeout_s:g} s' + self._diagnostic_suffix()) from error
         if reply.get("_eof"):
             exit_code = self.process.poll() if self.process is not None else None
-            raise RuntimeError(
-                f"The legacy LabOne bridge exited unexpectedly (code={exit_code})"
-                + self._diagnostic_suffix()
-            )
+            raise RuntimeError(f'The legacy LabOne bridge exited unexpectedly (code={exit_code})' + self._diagnostic_suffix())
         if not reply.get("ok"):
             detail = str(reply.get("error", "unknown error")).strip()
-            raise RuntimeError(
-                "Legacy LabOne bridge failed: " + detail + self._diagnostic_suffix()
-            )
+            raise RuntimeError('Legacy LabOne bridge failed: ' + detail + self._diagnostic_suffix())
         return reply
-    def request(
-        self, command: str, timeout_s: float = 10.0, **parameters
-    ) -> dict[str, object]:
+    def request(self, command: str, timeout_s: float=10.0, **parameters) -> dict[str, object]:
         if self.process is None or self.process.poll() is not None:
-            raise RuntimeError(
-                "Legacy LabOne bridge is not running" + self._diagnostic_suffix()
-            )
+            raise RuntimeError('Legacy LabOne bridge is not running' + self._diagnostic_suffix())
         if self.process.stdin is None:
             raise RuntimeError("Legacy LabOne bridge stdin is unavailable")
         payload = {"command": str(command)}
@@ -2593,9 +2226,7 @@ class LegacyMFLIBridge:
             self.process.stdin.write(json.dumps(payload, ensure_ascii=True) + "\n")
             self.process.stdin.flush()
         except (BrokenPipeError, OSError) as error:
-            raise RuntimeError(
-                "Cannot send a command to the legacy LabOne bridge" + self._diagnostic_suffix()
-            ) from error
+            raise RuntimeError('Cannot send a command to the legacy LabOne bridge' + self._diagnostic_suffix()) from error
         return self._receive(timeout_s)
     def close(self, force: bool = False) -> None:
         process = self.process
@@ -2659,21 +2290,13 @@ class NonLocalACController:
     def mfli_connected(self) -> bool:
         return self.mfli_daq is not None or self.mfli_bridge is not None
     def _close_manager_if_unused(self) -> None:
-        if (
-            self.source is not None
-            or self.lockins
-            or self.nanovoltmeter is not None
-            or self.resource_manager is None
-        ):
+        if self.source is not None or self.lockins or self.nanovoltmeter is not None or (self.resource_manager is None):
             return
         manager = self.resource_manager
         self.resource_manager = None
         release_shared_visa_manager(manager)
     @staticmethod
-    def _mfli_reachable_servers(
-        timeout_s: float = 1.2,
-        candidates=None,
-    ) -> tuple[list[tuple[str, int]], list[str]]:
+    def _mfli_reachable_servers(timeout_s: float=1.2, candidates=None) -> tuple[list[tuple[str, int]], list[str]]:
         reachable = []
         diagnostics = []
         for host, port in (NONLOCAL_MFLI_SERVER_CANDIDATES if candidates is None else candidates):
@@ -2695,17 +2318,12 @@ class NonLocalACController:
                 return self.mfli_identity
             direct_errors: list[str] = []
             server_override = getattr(self, "mfli_server_candidates", None)
-            reachable_servers, tcp_diagnostics = self._mfli_reachable_servers(
-                candidates=server_override
-            )
+            reachable_servers, tcp_diagnostics = self._mfli_reachable_servers(candidates=server_override)
             self.logger("MFLI network pre-check: " + "; ".join(tcp_diagnostics))
             if not reachable_servers:
                 diagnostic_text = "; ".join(tcp_diagnostics)
                 if server_override is not None:
-                    checks = "\n".join(
-                        f"Test-NetConnection {host} -Port {port}"
-                        for host, port in server_override
-                    )
+                    checks = '\n'.join((f'Test-NetConnection {host} -Port {port}' for host, port in server_override))
                     raise RuntimeError(
                         f"Zurich {requested}: its Data Server is unreachable; "
                         "the LabOne API handshake has not started.\n\n"
@@ -2729,9 +2347,7 @@ class NonLocalACController:
                     + zurich_choice_hint(requested)
                 )
             mfli_lease_resource = f"LABONE::{requested}"
-            acquire_instrument_lease(
-                mfli_lease_resource, self, "Non-local Zurich MFLI"
-            )
+            acquire_instrument_lease(mfli_lease_resource, self, 'Non-local Zurich MFLI')
             self.mfli_lease_resource = mfli_lease_resource
             bridge = None
             try:
@@ -2748,43 +2364,22 @@ class NonLocalACController:
                 }
                 self.mfli_config = {}
                 self.mfli_identity = bridge.identity
-                self.logger(
-                    "Non-local Zurich MFLI connected through the exactly matching LabOne 18.12 "
-                    f"environment: {bridge.identity}"
-                )
+                self.logger(f'Non-local Zurich MFLI connected through the exactly matching LabOne 18.12 environment: {bridge.identity}')
                 return bridge.identity
             except BaseException as bridge_error:
                 if bridge is not None:
                     bridge.close(force=True)
                 direct_errors.append(f"18.12 Python 3.7 bridge: {bridge_error}")
-                self.logger(
-                    "The exactly matching LabOne 18.12 bridge is currently unavailable; continuing to try the current "
-                    f"Python's native API: {bridge_error}"
-                )
+                self.logger(f"The exactly matching LabOne 18.12 bridge is currently unavailable; continuing to try the current Python's native API: {bridge_error}")
             if sys.platform == "win32":
-                native_adapters = (
-                    ("LabOne C API", LabOneCAPIAdapter,
-                     "current-python-labone-c-api"),
-                    ("LabOne .NET", LabOneDotNetAdapter,
-                     "current-python-labone-dotnet"),
-                )
+                native_adapters = (('LabOne C API', LabOneCAPIAdapter, 'current-python-labone-c-api'), ('LabOne .NET', LabOneDotNetAdapter, 'current-python-labone-dotnet'))
                 for adapter_label, adapter_class, connection_name in native_adapters:
                     for server_host, server_port in reachable_servers:
                         daq = None
                         try:
-                            daq = adapter_class(
-                                server_host,
-                                server_port,
-                                NONLOCAL_MFLI_API_LEVEL,
-                            )
-                            sample_node = (
-                                f"/{requested}/demods/"
-                                f"{NONLOCAL_MFLI_DEMODULATOR}/sample"
-                            )
-                            enable_node = (
-                                f"/{requested}/demods/"
-                                f"{NONLOCAL_MFLI_DEMODULATOR}/enable"
-                            )
+                            daq = adapter_class(server_host, server_port, NONLOCAL_MFLI_API_LEVEL)
+                            sample_node = f'/{requested}/demods/{NONLOCAL_MFLI_DEMODULATOR}/sample'
+                            enable_node = f'/{requested}/demods/{NONLOCAL_MFLI_DEMODULATOR}/enable'
                             try:
                                 daq.setInt(enable_node, 1)
                                 daq.sync()
@@ -2799,19 +2394,11 @@ class NonLocalACController:
                                         daq.getSample(sample_node)
                                         break
                                     except BaseException as attach_error:
-                                        attachment_errors.append(
-                                            f"{interface}: {attach_error}"
-                                        )
+                                        attachment_errors.append(f'{interface}: {attach_error}')
                                 else:
-                                    raise RuntimeError(
-                                        "Data Server connected, but DEV4435 cannot be read: "
-                                        + " | ".join(attachment_errors)
-                                    )
+                                    raise RuntimeError('Data Server connected, but DEV4435 cannot be read: ' + ' | '.join(attachment_errors))
                             version = ""
-                            for version_node in (
-                                "/zi/about/version",
-                                "/zi/about/revision",
-                            ):
+                            for version_node in ('/zi/about/version', '/zi/about/revision'):
                                 try:
                                     version = str(daq.getString(version_node)).strip()
                                 except BaseException:
@@ -2825,59 +2412,30 @@ class NonLocalACController:
                             self.mfli_daq = daq
                             self.mfli_bridge = None
                             self.mfli_device = requested
-                            self.mfli_props = {
-                                "serveraddress": server_host,
-                                "serverport": server_port,
-                                "serverversion": version,
-                                "connection": connection_name,
-                                "api_dll": str(daq.api_dll),
-                            }
+                            self.mfli_props = {'serveraddress': server_host, 'serverport': server_port, 'serverversion': version, 'connection': connection_name, 'api_dll': str(daq.api_dll)}
                             self.mfli_config = {}
                             self.mfli_identity = identity
-                            self.logger(
-                                "Non-local Zurich MFLI loaded by the current Python "
-                                f"{adapter_label}: {identity} @ "
-                                f"{server_host}:{server_port}"
-                            )
+                            self.logger(f'Non-local Zurich MFLI loaded by the current Python {adapter_label}: {identity} @ {server_host}:{server_port}')
                             return identity
                         except BaseException as error:
-                            direct_errors.append(
-                                f"{adapter_label} {server_host}:{server_port}: "
-                                f"{error}"
-                            )
+                            direct_errors.append(f'{adapter_label} {server_host}:{server_port}: {error}')
                             if daq is not None:
                                 try:
                                     daq.disconnect()
                                 except BaseException:
                                     pass
-                            self.logger(
-                                f"The current Python loaded {adapter_label} but connecting to "
-                                f"{server_host}:{server_port} failed: {error}"
-                            )
+                            self.logger(f'The current Python loaded {adapter_label} but connecting to {server_host}:{server_port} failed: {error}')
             if zi_core is not None:
                 for server_host, server_port in reachable_servers:
                     if server_host == NONLOCAL_MFLI_SERVER_HOST:
-                        direct_errors.append(
-                            "Modern Core: skipped the server confirmed to run LabOne 18.12.59443 "
-                            f"at {server_host}:{server_port} to avoid waiting another 20 s"
-                        )
+                        direct_errors.append(f'Modern Core: skipped the server confirmed to run LabOne 18.12.59443 at {server_host}:{server_port} to avoid waiting another 20 s')
                         continue
                     daq = None
                     try:
-                        daq = zi_core.ziDAQServer(
-                            server_host,
-                            server_port,
-                            NONLOCAL_MFLI_API_LEVEL,
-                            allow_version_mismatch=True,
-                        )
-                        sample_node = (
-                            f"/{requested}/demods/"
-                            f"{NONLOCAL_MFLI_DEMODULATOR}/sample"
-                        )
+                        daq = zi_core.ziDAQServer(server_host, server_port, NONLOCAL_MFLI_API_LEVEL, allow_version_mismatch=True)
+                        sample_node = f'/{requested}/demods/{NONLOCAL_MFLI_DEMODULATOR}/sample'
                         try:
-                            visible_nodes = daq.listNodes(
-                                f"/{requested}", recursive=False, absolute=True
-                            )
+                            visible_nodes = daq.listNodes(f'/{requested}', recursive=False, absolute=True)
                         except TypeError:
                             visible_nodes = daq.listNodes(f"/{requested}", 0)
                         if not visible_nodes:
@@ -2887,26 +2445,14 @@ class NonLocalACController:
                                     daq.connectDevice(requested, interface)
                                     break
                                 except BaseException as attach_error:
-                                    attachment_errors.append(
-                                        f"{interface}: {attach_error}"
-                                    )
+                                    attachment_errors.append(f'{interface}: {attach_error}')
                             else:
-                                raise RuntimeError(
-                                    "Data Server connected, but the device cannot be attached: "
-                                    + " | ".join(attachment_errors)
-                                )
-                        daq.setInt(
-                            f"/{requested}/demods/"
-                            f"{NONLOCAL_MFLI_DEMODULATOR}/enable",
-                            1,
-                        )
+                                raise RuntimeError('Data Server connected, but the device cannot be attached: ' + ' | '.join(attachment_errors))
+                        daq.setInt(f'/{requested}/demods/{NONLOCAL_MFLI_DEMODULATOR}/enable', 1)
                         daq.sync()
                         daq.getSample(sample_node)
                         version = ""
-                        for version_node in (
-                            "/zi/about/version",
-                            "/zi/about/revision",
-                        ):
+                        for version_node in ('/zi/about/version', '/zi/about/revision'):
                             try:
                                 version = str(daq.getString(version_node)).strip()
                             except BaseException:
@@ -2920,57 +2466,32 @@ class NonLocalACController:
                         self.mfli_daq = daq
                         self.mfli_bridge = None
                         self.mfli_device = requested
-                        self.mfli_props = {
-                            "serveraddress": server_host,
-                            "serverport": server_port,
-                            "serverversion": version,
-                            "connection": "current-python-core",
-                            "allow_version_mismatch": True,
-                        }
+                        self.mfli_props = {'serveraddress': server_host, 'serverport': server_port, 'serverversion': version, 'connection': 'current-python-core', 'allow_version_mismatch': True}
                         self.mfli_config = {}
                         self.mfli_identity = identity
-                        self.logger(
-                            "Non-local Zurich MFLI connected directly by the current Python Core API"
-                            f": {identity} @ {server_host}:{server_port}"
-                        )
+                        self.logger(f'Non-local Zurich MFLI connected directly by the current Python Core API: {identity} @ {server_host}:{server_port}')
                         return identity
                     except BaseException as error:
-                        direct_errors.append(
-                            f"Core {server_host}:{server_port}: {error}"
-                        )
+                        direct_errors.append(f'Core {server_host}:{server_port}: {error}')
                         if daq is not None:
                             try:
                                 daq.disconnect()
                             except BaseException:
                                 pass
-                        self.logger(
-                            f"The current Python Core API connection to {server_host}:{server_port} "
-                            f"failed: {error}"
-                        )
+                        self.logger(f'The current Python Core API connection to {server_host}:{server_port} failed: {error}')
             if zi_core is None and zi_utils is not None and reachable_servers:
                 daq = None
                 try:
-                    session = zi_utils.create_api_session(
-                        requested, NONLOCAL_MFLI_API_LEVEL
-                    )
+                    session = zi_utils.create_api_session(requested, NONLOCAL_MFLI_API_LEVEL)
                     if not isinstance(session, tuple) or len(session) < 3:
-                        raise RuntimeError(
-                            f"create_api_session returned an unexpected format: {session!r}"
-                        )
+                        raise RuntimeError(f'create_api_session returned an unexpected format: {session!r}')
                     daq, discovered, props = session[:3]
                     device = str(discovered).strip().lower()
                     if not device:
                         raise RuntimeError("LabOne Discovery did not return an MFLI device name")
-                    daq.setInt(
-                        f"/{device}/demods/"
-                        f"{NONLOCAL_MFLI_DEMODULATOR}/enable",
-                        1,
-                    )
+                    daq.setInt(f'/{device}/demods/{NONLOCAL_MFLI_DEMODULATOR}/enable', 1)
                     daq.sync()
-                    daq.getSample(
-                        f"/{device}/demods/"
-                        f"{NONLOCAL_MFLI_DEMODULATOR}/sample"
-                    )
+                    daq.getSample(f'/{device}/demods/{NONLOCAL_MFLI_DEMODULATOR}/sample')
                     identity_parts = ["Zurich Instruments MFLI", device]
                     if isinstance(props, dict):
                         version = props.get("serverversion") or props.get("version")
@@ -2980,16 +2501,11 @@ class NonLocalACController:
                     self.mfli_daq = daq
                     self.mfli_bridge = None
                     self.mfli_device = device
-                    self.mfli_props = (
-                        dict(props) if isinstance(props, dict) else {}
-                    )
+                    self.mfli_props = dict(props) if isinstance(props, dict) else {}
                     self.mfli_props["connection"] = "current-python-discovery"
                     self.mfli_config = {}
                     self.mfli_identity = identity
-                    self.logger(
-                        "Non-local Zurich MFLI connected by the current Python Discovery"
-                        f": {identity}"
-                    )
+                    self.logger(f'Non-local Zurich MFLI connected by the current Python Discovery: {identity}')
                     return identity
                 except BaseException as error:
                     direct_errors.append(f"Discovery: {error}")
@@ -2998,10 +2514,7 @@ class NonLocalACController:
                             daq.disconnect()
                         except BaseException:
                             pass
-                    self.logger(
-                        "The current Python Discovery failed; trying the legacy environment bridge as a last resort: "
-                        f"{error}"
-                    )
+                    self.logger(f'The current Python Discovery failed; trying the legacy environment bridge as a last resort: {error}')
             direct_detail = " | ".join(direct_errors)
             release_instrument_lease(self.mfli_lease_resource, self)
             self.mfli_lease_resource = ""
@@ -3075,39 +2588,24 @@ class NonLocalACController:
             raise ValueError("MFLI Signal Input 1 Scaling must be a finite positive number")
         if not math.isfinite(timeconstant_s) or timeconstant_s <= 0:
             raise ValueError("MFLI time constant must be a finite positive number")
-        reference_adcselect = NONLOCAL_MFLI_REFERENCE_INPUTS[
-            reference_source
-        ]
+        reference_adcselect = NONLOCAL_MFLI_REFERENCE_INPUTS[reference_source]
         options_text = str(self.mfli_props.get("options", "")).upper()
         has_demod_2 = bool(self.mfli_props.get("has_demod_2", False))
         if self.mfli_bridge is None and not options_text:
             try:
-                options_text = str(
-                    self.mfli_daq.getString(
-                        f"/{self.mfli_device}/features/options"
-                    )
-                ).upper()
+                options_text = str(self.mfli_daq.getString(f'/{self.mfli_device}/features/options')).upper()
                 self.mfli_props["options"] = options_text
             except BaseException:
                 pass
         if self.mfli_bridge is None and not has_demod_2:
             try:
-                self.mfli_daq.getInt(
-                    f"/{self.mfli_device}/demods/"
-                    f"{NONLOCAL_MFLI_EXTREF_DEMODULATOR}/enable"
-                )
+                self.mfli_daq.getInt(f'/{self.mfli_device}/demods/{NONLOCAL_MFLI_EXTREF_DEMODULATOR}/enable')
                 has_demod_2 = True
             except BaseException:
                 has_demod_2 = False
             self.mfli_props["has_demod_2"] = has_demod_2
-        has_multi_demod = (
-            ("MD" in options_text) if options_text else has_demod_2
-        )
-        extref_demod = (
-            NONLOCAL_MFLI_EXTREF_DEMODULATOR
-            if has_multi_demod
-            else NONLOCAL_MFLI_DEMODULATOR
-        )
+        has_multi_demod = 'MD' in options_text if options_text else has_demod_2
+        extref_demod = NONLOCAL_MFLI_EXTREF_DEMODULATOR if has_multi_demod else NONLOCAL_MFLI_DEMODULATOR
         if self.mfli_bridge is not None:
             reply = self.mfli_bridge.request(
                 "configure",
@@ -3153,26 +2651,16 @@ class NonLocalACController:
             self.mfli_daq.setInt(ac_node, 1 if coupling == "AC" else 0)
             self.mfli_daq.setInt(imp50_node, requested_imp50)
             self.mfli_daq.setDouble(scaling_node, input_scaling)
-            ext_demod_node = (
-                f"/{device}/demods/{extref_demod}/adcselect"
-            )
-            ext_osc_node = (
-                f"/{device}/demods/{extref_demod}/oscselect"
-            )
-            ext_harmonic_node = (
-                f"/{device}/demods/{extref_demod}/harmonic"
-            )
-            ext_demod_enable_node = (
-                f"/{device}/demods/{extref_demod}/enable"
-            )
+            ext_demod_node = f'/{device}/demods/{extref_demod}/adcselect'
+            ext_osc_node = f'/{device}/demods/{extref_demod}/oscselect'
+            ext_harmonic_node = f'/{device}/demods/{extref_demod}/harmonic'
+            ext_demod_enable_node = f'/{device}/demods/{extref_demod}/enable'
             self.mfli_daq.setInt(ext_demod_node, reference_adcselect)
             self.mfli_daq.setInt(ext_osc_node, 0)
             if extref_demod != demod:
                 self.mfli_daq.setInt(ext_harmonic_node, 1)
             self.mfli_daq.setInt(ext_demod_enable_node, 1)
-            selected_extref_input = int(
-                self.mfli_daq.getInt(ext_demod_node)
-            )
+            selected_extref_input = int(self.mfli_daq.getInt(ext_demod_node))
             try:
                 self.mfli_daq.setInt(extref_demod_node, extref_demod)
             except BaseException:
@@ -3185,11 +2673,7 @@ class NonLocalACController:
             if extref_demod == demod:
                 self.mfli_daq.sync()
                 if selected_extref_input != reference_adcselect:
-                    raise RuntimeError(
-                        f"MFLI single-demodulator external reference failed to select {reference_source}: "
-                        f"expected {reference_adcselect}, readback "
-                        f"{selected_extref_input}"
-                    )
+                    raise RuntimeError(f'MFLI single-demodulator external reference failed to select {reference_source}: expected {reference_adcselect}, readback {selected_extref_input}')
                 self.mfli_daq.setInt(measurement_adc_node, 0)
             self.mfli_daq.setInt(osc_node, 0)
             self.mfli_daq.setInt(harmonic_node, harmonic)
@@ -3200,86 +2684,40 @@ class NonLocalACController:
             self.mfli_daq.sync()
             actual_ac = int(self.mfli_daq.getInt(ac_node))
             actual_imp50 = int(self.mfli_daq.getInt(imp50_node))
-            actual_scaling = float(
-                self.mfli_daq.getDouble(scaling_node)
-            )
+            actual_scaling = float(self.mfli_daq.getDouble(scaling_node))
             actual_harmonic = int(self.mfli_daq.getInt(harmonic_node))
-            actual_extref_harmonic = (
-                int(self.mfli_daq.getInt(ext_harmonic_node))
-                if extref_demod != demod
-                else 1
-            )
+            actual_extref_harmonic = int(self.mfli_daq.getInt(ext_harmonic_node)) if extref_demod != demod else 1
             extref_enabled = int(self.mfli_daq.getInt(extref_enable_node))
-            input_range_v = float(
-                self.mfli_daq.getDouble(f"/{device}/sigins/0/range")
-            )
-            actual_timeconstant = float(
-                self.mfli_daq.getDouble(timeconstant_node)
-            )
+            input_range_v = float(self.mfli_daq.getDouble(f'/{device}/sigins/0/range'))
+            actual_timeconstant = float(self.mfli_daq.getDouble(timeconstant_node))
             actual_filter_order = int(self.mfli_daq.getInt(order_node))
             actual_sample_rate = float(self.mfli_daq.getDouble(rate_node))
             if extref_demod != demod:
                 try:
-                    selected_extref_input = int(
-                        self.mfli_daq.getInt(extref_adc_node)
-                    )
+                    selected_extref_input = int(self.mfli_daq.getInt(extref_adc_node))
                 except BaseException:
                     pass
             extref_adcselect = selected_extref_input
         if actual_ac != (1 if coupling == "AC" else 0):
             raise RuntimeError(f"MFLI AC/DC readback mismatch: {actual_ac}")
         if actual_imp50 != requested_imp50:
-            raise RuntimeError(
-                "MFLI Signal Input 1 input impedance readback mismatch: "
-                f"expected {input_impedance}, imp50={actual_imp50}"
-            )
-        if not math.isclose(
-            actual_scaling,
-            input_scaling,
-            rel_tol=1e-9,
-            abs_tol=1e-12,
-        ):
-            raise RuntimeError(
-                "MFLI Signal Input 1 Scaling readback mismatch: "
-                f"expected {input_scaling:g}, readback {actual_scaling:g}"
-            )
+            raise RuntimeError(f'MFLI Signal Input 1 input impedance readback mismatch: expected {input_impedance}, imp50={actual_imp50}')
+        if not math.isclose(actual_scaling, input_scaling, rel_tol=1e-09, abs_tol=1e-12):
+            raise RuntimeError(f'MFLI Signal Input 1 Scaling readback mismatch: expected {input_scaling:g}, readback {actual_scaling:g}')
         if actual_harmonic != harmonic:
-            raise RuntimeError(
-                f"MFLI harmonic readback mismatch: requested {harmonic}, readback {actual_harmonic}"
-            )
+            raise RuntimeError(f'MFLI harmonic readback mismatch: requested {harmonic}, readback {actual_harmonic}')
         if actual_extref_harmonic != 1:
-            raise RuntimeError(
-                "MFLI external-reference PLL harmonic must be 1: "
-                f"readback {actual_extref_harmonic}"
-            )
+            raise RuntimeError(f'MFLI external-reference PLL harmonic must be 1: readback {actual_extref_harmonic}')
         if extref_enabled != 1:
-            raise RuntimeError(
-                f"MFLI {reference_source} external reference was not enabled successfully"
-            )
+            raise RuntimeError(f'MFLI {reference_source} external reference was not enabled successfully')
         if extref_adcselect != reference_adcselect:
-            raise RuntimeError(
-                "MFLI external reference input readback mismatch: "
-                f"expected {reference_source}({reference_adcselect}), "
-                f"readback {extref_adcselect}"
-            )
-        if not math.isclose(
-            actual_timeconstant,
-            timeconstant_s,
-            rel_tol=0.05,
-            abs_tol=1e-6,
-        ):
-            raise RuntimeError(
-                "MFLI time constant readback mismatch: "
-                f"requested {timeconstant_s:g} s, readback {actual_timeconstant:g} s"
-            )
+            raise RuntimeError(f'MFLI external reference input readback mismatch: expected {reference_source}({reference_adcselect}), readback {extref_adcselect}')
+        if not math.isclose(actual_timeconstant, timeconstant_s, rel_tol=0.05, abs_tol=1e-06):
+            raise RuntimeError(f'MFLI time constant readback mismatch: requested {timeconstant_s:g} s, readback {actual_timeconstant:g} s')
         if actual_filter_order != NONLOCAL_LOCKIN_FILTER_ORDER:
-            raise RuntimeError(
-                f"MFLI filter order readback mismatch: {actual_filter_order}"
-            )
+            raise RuntimeError(f'MFLI filter order readback mismatch: {actual_filter_order}')
         if not math.isfinite(actual_sample_rate) or actual_sample_rate < sample_rate_hz:
-            raise RuntimeError(
-                f"MFLI data transfer rate is insufficient: {actual_sample_rate:g} Sa/s"
-            )
+            raise RuntimeError(f'MFLI data transfer rate is insufficient: {actual_sample_rate:g} Sa/s')
         self.mfli_config = {
             "meter_type": "MFLI",
             "resource": self.mfli_device,
@@ -3309,39 +2747,23 @@ class NonLocalACController:
         if self.mfli_bridge is not None:
             sample = self.mfli_bridge.request("read")["sample"]
         else:
-            sample = self.mfli_daq.getSample(
-                f"/{self.mfli_device}/demods/"
-                f"{NONLOCAL_MFLI_DEMODULATOR}/sample"
-            )
+            sample = self.mfli_daq.getSample(f'/{self.mfli_device}/demods/{NONLOCAL_MFLI_DEMODULATOR}/sample')
             sample = dict(sample)
             try:
-                sample["device_status_flags"] = int(self.mfli_daq.getInt(
-                    f"/{self.mfli_device}/status/flags/binary"
-                ))
+                sample['device_status_flags'] = int(self.mfli_daq.getInt(f'/{self.mfli_device}/status/flags/binary'))
             except Exception:
                 sample["device_status_flags"] = None
             try:
-                sample["extref_locked"] = int(
-                    self.mfli_daq.getInt(
-                        f"/{self.mfli_device}/extrefs/"
-                        f"{NONLOCAL_MFLI_EXTREF_CHANNEL}/locked"
-                    )
-                )
+                sample['extref_locked'] = int(self.mfli_daq.getInt(f'/{self.mfli_device}/extrefs/{NONLOCAL_MFLI_EXTREF_CHANNEL}/locked'))
             except BaseException:
                 sample["extref_locked"] = None
             range_node = f"/{self.mfli_device}/sigins/0/range"
             max_node = f"/{self.mfli_device}/sigins/0/max"
             min_node = f"/{self.mfli_device}/sigins/0/min"
-            sample["input_range_v"] = float(
-                self.mfli_daq.getDouble(range_node)
-            )
+            sample['input_range_v'] = float(self.mfli_daq.getDouble(range_node))
             try:
-                sample["input_max_normalized"] = float(
-                    self.mfli_daq.getDouble(max_node)
-                )
-                sample["input_min_normalized"] = float(
-                    self.mfli_daq.getDouble(min_node)
-                )
+                sample['input_max_normalized'] = float(self.mfli_daq.getDouble(max_node))
+                sample['input_min_normalized'] = float(self.mfli_daq.getDouble(min_node))
                 self.mfli_daq.setDouble(max_node, 0.0)
                 self.mfli_daq.setDouble(min_node, 0.0)
             except BaseException:
@@ -3356,22 +2778,12 @@ class NonLocalACController:
         try:
             reported_frequency = self._mfli_scalar(sample, "frequency")
             candidates = (reported_frequency, reported_frequency / max(harmonic, 1))
-            reference_frequency = min(
-                candidates,
-                key=lambda value: abs(value - expected_frequency_hz),
-            )
+            reference_frequency = min(candidates, key=lambda value: abs(value - expected_frequency_hz))
         except RuntimeError:
             reference_frequency = float(expected_frequency_hz)
-        frequency_valid = math.isclose(
-            reference_frequency,
-            expected_frequency_hz,
-            rel_tol=5e-3,
-            abs_tol=0.1,
-        )
+        frequency_valid = math.isclose(reference_frequency, expected_frequency_hz, rel_tol=0.005, abs_tol=0.1)
         raw_extref_locked = sample.get("extref_locked")
-        extref_locked = (
-            None if raw_extref_locked is None else bool(round(float(raw_extref_locked)))
-        )
+        extref_locked = None if raw_extref_locked is None else bool(round(float(raw_extref_locked)))
         reference_valid = frequency_valid and extref_locked is not False
         try:
             flags = int(round(self._mfli_scalar(sample, "flags")))
@@ -3391,12 +2803,7 @@ class NonLocalACController:
         if flags:
             status_parts.append(f"LabOne flags={flags}")
         if extref_locked is False:
-            reference_source = str(
-                self.mfli_config.get(
-                    "reference_source",
-                    NONLOCAL_MFLI_DEFAULT_REFERENCE_INPUT,
-                )
-            )
+            reference_source = str(self.mfli_config.get('reference_source', NONLOCAL_MFLI_DEFAULT_REFERENCE_INPUT))
             status_parts.append(f"{reference_source} external reference not locked")
         elif extref_locked is None and frequency_valid:
             status_parts.append("LabOne 18.12 judges LOCK by reference-frequency convergence")
@@ -3409,11 +2816,7 @@ class NonLocalACController:
                 input_extrema.append(abs(self._mfli_scalar(sample, field)))
             except (RuntimeError, TypeError, ValueError):
                 pass
-        input_utilization = (
-            max(input_extrema)
-            if input_extrema
-            else min(1.0, abs(r) / max(input_range_v, 1e-30))
-        )
+        input_utilization = max(input_extrema) if input_extrema else min(1.0, abs(r) / max(input_range_v, 1e-30))
         return {
             "meter_type": "MFLI",
             "voltage": {"X": x, "Y": y, "R": r}.get(
@@ -3468,9 +2871,7 @@ class NonLocalACController:
             new_range = float(self.mfli_daq.getDouble(range_node))
             for suffix in ("max", "min"):
                 try:
-                    self.mfli_daq.setDouble(
-                        f"/{device}/sigins/0/{suffix}", 0.0
-                    )
+                    self.mfli_daq.setDouble(f'/{device}/sigins/0/{suffix}', 0.0)
                 except BaseException:
                     pass
         if not math.isfinite(old_range) or old_range <= 0:
@@ -3499,10 +2900,7 @@ class NonLocalACController:
         else:
             self.mfli_low_range_count = 0
         return ""
-    def read_stfmr_mfli(
-        self, expected_frequency_hz: float, *, auto_range: bool,
-        initial: bool = False, attempts: int = 0,
-    ) -> dict[str, object]:
+    def read_stfmr_mfli(self, expected_frequency_hz: float, *, auto_range: bool, initial: bool=False, attempts: int=0) -> dict[str, object]:
         sample = self.read_mfli(expected_frequency_hz)
         if not auto_range:
             return sample
@@ -3512,10 +2910,7 @@ class NonLocalACController:
         high = raw_valid and math.isfinite(utilization) and utilization >= 0.85
         if attempts >= 3:
             if overloaded or high or initial:
-                raise RuntimeError(
-                    "MFLI auto-range still overloaded or near full scale after 3 retries; the current point was not saved; "
-                    "please check the input signal and wiring"
-                )
+                raise RuntimeError('MFLI auto-range still overloaded or near full scale after 3 retries; the current point was not saved; please check the input signal and wiring')
             return sample
         if overloaded:
             action = self._run_mfli_autorange("STFMR input overload")
@@ -3540,21 +2935,10 @@ class NonLocalACController:
                 self._close_manager_if_unused()
                 return
             if daq is not None:
-                extref_demod = int(
-                    self.mfli_config.get(
-                        "extref_demodulator", NONLOCAL_MFLI_DEMODULATOR
-                    )
-                )
-                disable_nodes = [
-                    f"/{self.mfli_device}/extrefs/"
-                    f"{NONLOCAL_MFLI_EXTREF_CHANNEL}/enable",
-                    f"/{self.mfli_device}/demods/"
-                    f"{NONLOCAL_MFLI_DEMODULATOR}/enable",
-                ]
+                extref_demod = int(self.mfli_config.get('extref_demodulator', NONLOCAL_MFLI_DEMODULATOR))
+                disable_nodes = [f'/{self.mfli_device}/extrefs/{NONLOCAL_MFLI_EXTREF_CHANNEL}/enable', f'/{self.mfli_device}/demods/{NONLOCAL_MFLI_DEMODULATOR}/enable']
                 if extref_demod != NONLOCAL_MFLI_DEMODULATOR:
-                    disable_nodes.append(
-                        f"/{self.mfli_device}/demods/{extref_demod}/enable"
-                    )
+                    disable_nodes.append(f'/{self.mfli_device}/demods/{extref_demod}/enable')
                 for node in disable_nodes:
                     try:
                         daq.setInt(node, 0)
@@ -3634,11 +3018,7 @@ class STFMRScanRecorder:
     def event(self, name: str, **details) -> None:
         if self.closed:
             raise RuntimeError("STFMR log is closed")
-        record = {
-            "timestamp": datetime_module.datetime.now().astimezone().isoformat(timespec="milliseconds"),
-            "event": name,
-            **details,
-        }
+        record = {'timestamp': datetime_module.datetime.now().astimezone().isoformat(timespec='milliseconds'), 'event': name, **details}
         self.log_handle.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
         self._sync(self.log_handle)
     def append_point(self, row: dict[str, object]) -> None:
@@ -3751,8 +3131,7 @@ class GridSettings:
             raise ValueError('The 2D grid allows at most 20000 cells')
         if self.meter not in ('MFLI', 'SR830'):
             raise ValueError('Please select MFLI or SR830')
-        values = (self.fixed_current_a,self.voltage_limit_v,
-                  self.power_dbm,self.point_delay_s,self.field_settle_s,self.timeconstant_s)
+        values = (self.fixed_current_a, self.voltage_limit_v, self.power_dbm, self.point_delay_s, self.field_settle_s, self.timeconstant_s)
         if not all(math.isfinite(v) for v in values):
             raise ValueError('All parameters must be finite')
         if abs(self.fixed_current_a)>10:
@@ -3908,8 +3287,7 @@ class GridEngine:
                     with self.devices['smb'].lock:
                         self.check()
                         self.devices['smb'].instrument.write(f'LFO:FREQ {mod:.7g} Hz')
-                    self.event('cell_configured',microwave_index=fi,modulation_index=mi,
-                               microwave_ghz=carrier,modulation_hz=mod)
+                    self.event('cell_configured', microwave_index=fi, modulation_index=mi, microwave_ghz=carrier, modulation_hz=mod)
                     self.wait(self.settle_seconds(mod))
                     self.sample(mod,initial=True);self.wait(s.point_delay_s);self.sample(mod)
                     collected=[]
@@ -3937,15 +3315,13 @@ class GridEngine:
             export_errors=[]
             try:export_grid(self.rec.directory,self.s,self.cells)
             except BaseException as exc:export_errors.append(str(exc))
-            close_errors=self.rec.close(outcome,error=error,shutdown_errors=shutdown,export_errors=export_errors,
-                                        completed_cells=len(self.cells),outputs_off=not shutdown)
+            close_errors = self.rec.close(outcome, error=error, shutdown_errors=shutdown, export_errors=export_errors, completed_cells=len(self.cells), outputs_off=not shutdown)
             result=dict(outcome=outcome,error=error,shutdown_errors=shutdown,export_errors=export_errors,
                         close_errors=close_errors,directory=str(self.rec.directory),completed_cells=len(self.cells))
             self.emit('finished',result)
         return result
 def grid_values(settings,cells,key):
-    return [[cells.get((j,i),{}).get(key,math.nan) for i in range(len(settings.microwave_ghz))]
-            for j in range(len(settings.modulation_hz))]
+    return [[cells.get((j, i), {}).get(key, math.nan) for i in range(len(settings.microwave_ghz))] for j in range(len(settings.modulation_hz))]
 def heatmap_scene(width,height,settings,cells,key):
     values=grid_values(settings,cells,key)
     finite=[v for row in values for v in row if math.isfinite(v)]
@@ -3988,8 +3364,7 @@ def export_grid(directory,settings,cells):
             for mod,row in zip(settings.modulation_hz,grid_values(settings,cells,key)):
                 w.writerow([mod,*[v if math.isfinite(v) else '' for v in row]])
     with (directory/'cells.csv').open('w',encoding='utf-8-sig',newline='') as f:
-        fields=('microwave_index','modulation_index','microwave_frequency_ghz','modulation_frequency_hz',
-                'x_v','y_v','phase_deg','field_g','current_a','samples')
+        fields = ('microwave_index', 'modulation_index', 'microwave_frequency_ghz', 'modulation_frequency_hz', 'x_v', 'y_v', 'phase_deg', 'field_g', 'current_a', 'samples')
         w=csv.DictWriter(f,fieldnames=fields);w.writeheader();w.writerows(cells.values())
     (directory/'settings.json').write_text(json.dumps(asdict(settings),ensure_ascii=False,indent=2))
     if Image is None:raise RuntimeError('Matrix CSV saved; Pillow is missing, PNG not generated')
@@ -4031,8 +3406,7 @@ class DemoDevice:
     def read_sample(self,expected):
         f=self.bank.get('freq',1.);m=self.bank.get('mod',17.3);amp=2e-6*math.exp(-((f-2.0)/.6)**2)+1e-7
         angle=math.atan(m/80)+f/3;x=amp*math.cos(angle);y=amp*math.sin(angle)
-        return {'X':x,'Y':y,'R':amp,'phase_deg':math.degrees(angle),'reference_valid':True,
-                'reference_frequency_hz':expected,'input_overload':False,'input_range_v':.003}
+        return {'X': x, 'Y': y, 'R': amp, 'phase_deg': math.degrees(angle), 'reference_valid': True, 'reference_frequency_hz': expected, 'input_overload': False, 'input_range_v': 0.003}
     def read_stfmr_mfli(self,expected,**kw):return self.read_sample(expected)
 class MicrowaveTransportApp:
     def __init__(self,root,demo=False):
@@ -4308,10 +3682,7 @@ class MicrowaveTransportApp:
         if self.closing:return
         self.closing=True;self.stop();self.status.set('Switching the outputs off and closing the instrument connections\u2026')
 SUPER_ZURICH_MFLI_SERVERS=(('192.168.68.250',NONLOCAL_MFLI_SERVER_PORT),)
-ZURICH_MFLI_CHOICES={
-    'DEV4435 (Normal)':('dev4435',None),
-    'DEV4414 (Super)':('dev4414',SUPER_ZURICH_MFLI_SERVERS),
-}
+ZURICH_MFLI_CHOICES = {'DEV4435 (Normal)': ('dev4435', None), 'DEV4414 (Super)': ('dev4414', SUPER_ZURICH_MFLI_SERVERS)}
 def zurich_mfli_choice(text):
     text=str(text).strip()
     if text in ZURICH_MFLI_CHOICES:return ZURICH_MFLI_CHOICES[text]
@@ -4326,13 +3697,10 @@ def zurich_mfli_label(text):
 def zurich_choice_hint(device):
     device=zurich_mfli_choice(device)[0]
     if device=='dev4414':
-        return ('This is the Super Zurich, DEV4414. If MF Device Finder lists DEV4435 '
-                'instead, choose "DEV4435 (Normal)" in the MFLI list.')
+        return 'This is the Super Zurich, DEV4414. If MF Device Finder lists DEV4435 instead, choose "DEV4435 (Normal)" in the MFLI list.'
     if device=='dev4435':
-        return ('If MF Device Finder lists DEV4414 at 192.168.68.250 instead, that is the '
-                'Super Zurich: choose "DEV4414 (Super)" in the MFLI list.')
-    return ('The MFLI list offers the lab\'s two Zurich lock-ins: "DEV4435 (Normal)" and '
-            '"DEV4414 (Super)", the Super Zurich at 192.168.68.250.')
+        return 'If MF Device Finder lists DEV4414 at 192.168.68.250 instead, that is the Super Zurich: choose "DEV4414 (Super)" in the MFLI list.'
+    return 'The MFLI list offers the lab\'s two Zurich lock-ins: "DEV4435 (Normal)" and "DEV4414 (Super)", the Super Zurich at 192.168.68.250.'
 def create_zurich_chooser(parent,variable,*,match_chars=None,width=16):
     variable.set(zurich_mfli_label(variable.get()))
     chooser=ttk.Combobox(parent,textvariable=variable,values=tuple(ZURICH_MFLI_CHOICES),state='readonly',width=match_chars or width)

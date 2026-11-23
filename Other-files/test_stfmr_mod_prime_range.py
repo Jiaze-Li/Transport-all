@@ -594,7 +594,7 @@ class TableTests(NoWindows):
         with open(app.__file__, encoding="utf-8") as source:
             text = source.read()
         for name in ("stfmr_lockin_mod_start_var", "stfmr_lockin_mod_end_var"):
-            self.assertRegex(text, rf"self\.{name} = tk\.StringVar\(\s*value=f\"{{STFMR_LOCKIN_DEFAULT_LFO_HZ:g}}\"")
+            self.assertRegex(text, rf"self\.{name} = tk\.StringVar\(\s*value=f[\"']{{STFMR_LOCKIN_DEFAULT_LFO_HZ:g}}[\"']")
         self.assertEqual(f"{app.STFMR_LOCKIN_DEFAULT_LFO_HZ:g}", "317.3")   # user, 2026-10-17
         self.assertNotIn("stfmr_lockin_lfo_var", text, "every user of the old box was moved")
 

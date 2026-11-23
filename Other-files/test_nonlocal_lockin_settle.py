@@ -361,7 +361,8 @@ class SR830ReadTests(NoWindows):
         self.assertEqual(app.SR830_TIME_CONSTANTS_S[app.NONLOCAL_VI_SR830_TIME_CONSTANT_CODE], 1.0)
         with open(app.__file__, encoding="utf-8") as source:
             text = source.read()
-        self.assertIn('else (f"OFLT {NONLOCAL_VI_SR830_TIME_CONSTANT_CODE}", "OFSL 1")', text)
+        # Either quote style (the source was reformatted, 2026-11-23).
+        self.assertIn('else (f"OFLT {NONLOCAL_VI_SR830_TIME_CONSTANT_CODE}", "OFSL 1")', text.replace("'", '"'))
 
 
 # ------------------------------------------------------------- Gate-VI

@@ -200,7 +200,7 @@ class DefaultTests(Sweeps):
             text = source.read()
         for name, constant in (("stfmr_lockin_settle_var", "STFMR_LOCKIN_DEFAULT_SETTLE_S"),
                                ("stfmr_lockin_acquire_var", "STFMR_LOCKIN_DEFAULT_ACQUIRE_S")):
-            self.assertRegex(text, rf"self\.{name} = tk\.StringVar\(\s*value=f\"{{{constant}:g}}\"")
+            self.assertRegex(text, rf"self\.{name} = tk\.StringVar\(\s*value=f[\"']{{{constant}:g}}[\"']")
         for gone in ("stfmr_lockin_delay", "STFMR_LOCKIN_DEFAULT_DELAY_S", "STFMR_LOCKIN_SR830_SETTLE_TAUS",
                      "_stfmr_sr830_point_wait_s", "stfmr_lockin_point_wait_s", '"Wait/pt s:"'):
             self.assertNotIn(gone, text)

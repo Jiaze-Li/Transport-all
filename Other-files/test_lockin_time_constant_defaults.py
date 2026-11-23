@@ -66,7 +66,7 @@ class DefaultsAreOneSecond(NoWindows):
         for variable, constant in (("stfmr_lockin_mfli_timeconstant_var", "STFMR_LOCKIN_MFLI_TIME_CONSTANT_S"),
                                    ("nonlocal_mfli_tc_var", "NONLOCAL_MFLI_TIME_CONSTANT_S")):
             with self.subTest(box=variable):
-                self.assertRegex(text, rf"self\.{variable} = tk\.StringVar\(\s*value=f\"{{{constant}:g}}\"")
+                self.assertRegex(text, rf"self\.{variable} = tk\.StringVar\(\s*value=f[\"']{{{constant}:g}}[\"']")
                 self.assertEqual(f"{getattr(app, constant):g}", "1")
         self.assertRegex(text, r"self\.stfmr_lockin_sr830_time_constant_var = tk\.StringVar\(\s*"
                                r"value=STFMR_LOCKIN_SR830_DEFAULT_TIME_CONSTANT\s*\)")

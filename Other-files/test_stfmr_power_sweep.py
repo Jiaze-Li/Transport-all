@@ -116,7 +116,7 @@ class PowerListTests(NoWindows):
                                ("power_stop", "STFMR_LOCKIN_DEFAULT_POWER_STOP_DBM"),
                                ("power_step", "STFMR_LOCKIN_DEFAULT_POWER_STEP_DB")):
             self.assertRegex(text, rf"self\.stfmr_lockin_{name}_var = tk\.StringVar\(\s*"
-                                   rf"value=f\"{{{constant}:g}}\"")
+                                   rf"value=f[\"']{{{constant}:g}}[\"']")
         self.assertNotIn("stfmr_lockin_power_var", text, "every user of the old box was moved")
         self.assertEqual(levels("12", "12", "1"), (12.0,))
 

@@ -137,8 +137,7 @@ class Avtech:
         sign = 1 if amplitude_v > 0 else -1
         allowed = self.polarities
         if allowed is not None and sign not in allowed:
-            raise PulseError(f"this unit gives {'positive' if allowed == (1,) else 'negative'} "
-                             "pulses only (its polarity option); no pulse fired")
+            raise PulseError(f"this unit gives {('positive' if allowed == (1,) else 'negative')} pulses only (its polarity option); no pulse fired")
         failure = None
         fired = trigger_sent = False
         amplitude_read = width_read = math.nan
@@ -162,8 +161,7 @@ class Avtech:
                 raise RuntimeError(f"it took a width of {width_read:.4g} s for {width_s:.4g} s")
             self.write(f"volt:ampl {amplitude_v:.6g}")
             amplitude_read = self.number("volt:ampl?")
-            if not (amplitude_read * sign > 0
-                    and abs(amplitude_read - amplitude_v) <= max(0.02 * abs(amplitude_v), 0.5)):
+            if not (amplitude_read * sign > 0 and abs(amplitude_read - amplitude_v) <= max(0.02 * abs(amplitude_v), 0.5)):
                 raise RuntimeError(f"it took {amplitude_read:+g} V for {amplitude_v:+g} V (its polarity option?)")
             errors = self.errors()
             if errors:
@@ -190,9 +188,7 @@ class Avtech:
         except BaseException as error:
             others.append(f"its overload state could not be read: {error!r}")
             overload = True if overload else None
-        parts = ([("stopped (Ctrl+C)" if isinstance(failure, KeyboardInterrupt)
-                   else str(failure) or type(failure).__name__)]
-                 if failure is not None else [])
+        parts = ['stopped (Ctrl+C)' if isinstance(failure, KeyboardInterrupt) else str(failure) or type(failure).__name__] if failure is not None else []
         parts += [f"it reported {text}" for text in others]
         if problem is not None:
             parts.append(f"{problem}; CHECK THE GENERATOR")
@@ -307,16 +303,13 @@ def main(argv=None):
             return 1
         verified = True
         allowed = avtech.polarities
-        print("Polarity: " + ("not in the model name; each pulse's sign is checked" if allowed is None else
-                              {(1,): "positive only (-P)", (-1,): "negative only (-N)",
-                               (1, -1): "both (-PN)"}[allowed]))
+        print('Polarity: ' + ("not in the model name; each pulse's sign is checked" if allowed is None else {(1,): 'positive only (-P)', (-1,): 'negative only (-N)', (1, -1): 'both (-PN)'}[allowed]))
         if args.mode == "info":
             read_only(avtech)
             return 0
         if args.mode == "off":
             problem = avtech.off_problem()
-            print("Trigger on hold, output off (read back)." if problem is None
-                  else f"Output state unknown: {problem}. CHECK THE GENERATOR.")
+            print('Trigger on hold, output off (read back).' if problem is None else f'Output state unknown: {problem}. CHECK THE GENERATOR.')
             return 0 if problem is None else 3
         problem = avtech.off_problem()
         if problem is not None:
@@ -349,8 +342,7 @@ def main(argv=None):
             problem = avtech.off_problem()
         except BaseException as error:
             problem = f"the off sequence was interrupted ({error!r})"
-        print("\nStopped; output off (read back)." if problem is None
-              else f"\nStopped; output state unknown: {problem}. CHECK THE GENERATOR.")
+        print('\nStopped; output off (read back).' if problem is None else f'\nStopped; output state unknown: {problem}. CHECK THE GENERATOR.')
         return 3 if problem is not None else 1
     finally:
         try:
