@@ -428,6 +428,56 @@ class NestedTests(unittest.TestCase):
         self.assertEqual(captured, [(i, t, b) for i, t in enumerate((300,295,290), 1) for b in (-100,0,100)])
         self.assertNotIn(('off',), events)
 
+    def recording_stop(self, obj, events, stop_on_delay=False):
+        """The scan's stop event, recording each wait of a second or more
+        (the Wait s delay; the readback polls wait 0.5 s)."""
+        class Stop(threading.Event):
+            def wait(inner, timeout=None):
+                if timeout is not None and timeout >= 1:
+                    events.append(('delay', timeout))
+                    if stop_on_delay:
+                        inner.set()
+                        return True
+                return False
+        obj.ppms_field_scan_stop_event = Stop()
+
+    def test_field_temperature_waits_after_each_temperature(self):
+        """User, 2026-11-23: "Add a time input in the PPMS Field+Temperature
+        scan mode which delay the time after reach the temperature": after
+        each temperature is stable, Wait s, then that temperature's field
+        sweep."""
+        obj, motor, settings, events = self.harness()
+        settings.update(nested=dict(angle=(26.,), temperature=(300., 295.)), currents=(.001,),
+                        scan_mode="Field+Temperature", temperature_delay_s=120.0)
+        self.recording_stop(obj, events)
+        logged = []
+        obj.thread_log = logged.append
+        set_temperature = obj.ppms_environment_controller.set_temperature
+        obj.ppms_environment_controller.set_temperature = lambda target, *args: (
+            set_temperature(target, *args), events.append(('temperature', target)))
+        self.run_worker(obj, motor, settings)
+        order = [e for e in events if e[0] in ('temperature', 'delay', 'plane')]
+        self.assertEqual(order, [('temperature', 300.), ('delay', 120.0), ('plane', 26., 300.),
+                                 ('temperature', 295.), ('delay', 120.0), ('plane', 26., 295.)])
+        self.assertIn("Temperature 300 K reached; waiting 120 s before the scan at it", logged)
+        # No wait without the box (and in every other mode).
+        obj, motor, settings, events = self.harness()
+        settings.update(nested=dict(angle=(26.,), temperature=(300.,)), currents=(.001,), scan_mode="Field+Temperature")
+        self.recording_stop(obj, events)
+        self.run_worker(obj, motor, settings)
+        self.assertNotIn('delay', [e[0] for e in events])
+
+    def test_stop_during_the_wait_after_a_temperature(self):
+        obj, motor, settings, events = self.harness()
+        settings.update(nested=dict(angle=(26.,), temperature=(300., 295.)), currents=(.001,),
+                        scan_mode="Field+Temperature", temperature_delay_s=120.0)
+        self.recording_stop(obj, events, stop_on_delay=True)
+        with self.assertRaises(app.PPMSScanCancelled):
+            self.run_worker(obj, motor, settings)
+        self.assertNotIn('plane', [e[0] for e in events], "no field sweep after the Stop")
+        # As any Stop of a field-commanding scan: the field to 0 Oe, then the 6221 off.
+        self.assertEqual(events[-2:], [('zero',), ('off',)])
+
     def test_stop_prevents_next_plane_and_cleans(self):
         obj, motor, settings, events = self.harness()
         obj._ppms_field_scan_worker = lambda *args: obj.ppms_field_scan_stop_event.set()

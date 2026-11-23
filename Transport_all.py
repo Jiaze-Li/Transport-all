@@ -2458,6 +2458,7 @@ PPMS_QDINSTRUMENT_DLL_ENV = "MOKE_QDINSTRUMENT_DLL"
 PPMS_TEMPERATURE_MIN_K = 5.0
 PPMS_TEMPERATURE_MAX_K = 380.0
 PPMS_TEMPERATURE_LOW_BOUNDARY_K = 9.0
+PPMS_TEMPERATURE_DELAY_S = 0.0
 PPMS_TEMPERATURE_MAX_RATE_K_MIN = 10.0
 PPMS_TEMPERATURE_LOW_MAX_RATE_K_MIN = 1.0
 PPMS_FIELD_LIMIT_OE = 89_900.0
@@ -17766,6 +17767,11 @@ class CombinedControlApp:
             entry = ttk.Entry(temperature_range_frame, textvariable=var, width=6)
             entry.grid(row=0, column=2+2*i)
             self.ppms_control_widgets.append(entry)
+        self.ppms_temperature_delay_var = tk.StringVar(value=f"{PPMS_TEMPERATURE_DELAY_S:g}")
+        ttk.Label(temperature_range_frame, text="Wait s").grid(row=0, column=7, padx=(6, 0))
+        entry = ttk.Entry(temperature_range_frame, textvariable=self.ppms_temperature_delay_var, width=6)
+        entry.grid(row=0, column=8)
+        self.ppms_control_widgets.append(entry)
         self.ppms_frequency_scan_range = [tk.StringVar(value=f"{value:g}") for value in
                                           (NONLOCAL_FSCAN_START_HZ, NONLOCAL_FSCAN_STOP_HZ)]
         self.ppms_frequency_scan_note_var = tk.StringVar()
@@ -41857,6 +41863,12 @@ class CombinedControlApp:
             fixed_field = (values[0] if scan_field else outer_fields[0] if field_outer
                            else self._ppms_field_read_at_start())
             fixed_temp = temperatures[0] if temperatures is not None else number(self.ppms_temperature_target_var, "the fixed temperature on the left (K)")
+            temperature_delay_s = 0.0
+            if mode in ("Field+Temperature", "Angle+Temperature", "Current+Temperature"):
+                temperature_delay_s = number(self.ppms_temperature_delay_var,
+                                             "wait after each temperature is reached (Wait s)")
+                if not 0 <= temperature_delay_s <= 86400:
+                    raise ValueError("The wait after each temperature (Wait s) must be within 0–86400 s")
             fixed_angle = values[0] if mode in ("Angle", "Angle+Temperature", "Angle+Field") else number(self.ppms_motor_target_var, "the fixed angle on the left (°)")
             start_oe, end_oe = ((values[0], values[-1]) if scan_field else (outer_fields[0], outer_fields[-1])
                                 if field_outer else (fixed_field, fixed_field))
@@ -41950,6 +41962,7 @@ class CombinedControlApp:
             transport_settings["scan_mode"] = mode
             transport_settings["acquisition_s"] = acquisition_s
             transport_settings["temperature_rate"] = temp_rate
+            transport_settings["temperature_delay_s"] = temperature_delay_s
             transport_settings["temperature_approach"] = self._ppms_temperature_approach_code(self.ppms_temperature_approach_var.get())
             slowdown = float(self.ppms_motor_speed_var.get())
             if not slowdown.is_integer() or not 0 <= slowdown <= 14:
@@ -42011,6 +42024,7 @@ class CombinedControlApp:
             for _angle in ((None,) if mode == "Angle+Temperature" else nested["angle"]):
                 for temperature in nested["temperature"]:
                     estimated_seconds += abs(temperature - previous_temperature) / temp_rate * 60.0
+                    estimated_seconds += temperature_delay_s
                     previous_temperature = temperature
         estimate_text = self._format_scan_duration(estimated_seconds)
         rotation_note = ""
@@ -42027,6 +42041,9 @@ class CombinedControlApp:
         settle_s, slowest_tc_s, slowest_meter = max(pass_settles, key=lambda item: item[0])
         settle_text = ppms_lockin_settle_text(stable_s, settle_s, slowest_tc_s, slowest_meter)
         settle_line = f"Wait before each reading: {settle_text}"
+        if temperature_delay_s:
+            settle_line = (f"Wait after each temperature is stable: {self._format_scan_duration(temperature_delay_s)}, "
+                           "then the scan at it\n" + settle_line)
         later = sorted({settle for settle, _tc, _meter in pass_settles} - {settle_s})
         if later:
             settle_line += ("; harmonic passes with fewer lock-ins wait "
@@ -42520,6 +42537,14 @@ class CombinedControlApp:
                     return (abs(measured-target) <= .1
                         and str(data['temperature_status']).strip().lower() in accepted)
                 wait_until(temperature_ready, 14400, "temperature")
+            delay = float(settings.get("temperature_delay_s", 0.0) or 0.0)
+            if delay > 0:
+                self.thread_log(f"Temperature {temperature:g} K reached; waiting {delay:g} s before the scan at it")
+                status = self.__dict__.get("ppms_field_scan_status_var")
+                if status is not None:
+                    self.post_ui(lambda: status.set(f"{temperature:g} K reached; waiting {delay:g} s"))
+                if stop.wait(delay) or self.closing:
+                    raise PPMSScanCancelled("Scan stopped during the wait after the temperature")
         temperature_outer = settings.get("scan_mode") == "Angle+Temperature"
         continuous_current = settings.get('scan_mode') in ('Current', 'Current+Temperature')
         current_source_started = False

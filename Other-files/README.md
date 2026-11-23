@@ -1,5 +1,18 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## PPMS: Wait s after each outer temperature (user, 2026-11-23)
+
+- **Request:** "Add a time input in the PPMS Field+Temperature scan mode which delay the time after reach the
+  temperature."
+- **The box** "Wait s" at the end of the "Outer temperature K: Start / End / Step" row (`ppms_temperature_delay_var`,
+  start-up 0 = no wait, `PPMS_TEMPERATURE_DELAY_S`). The row is shared, so it applies to Field+Temperature,
+  Angle+Temperature and Current+Temperature alike; 0 to 86400 s.
+- **When:** after each temperature is reached and stable (the usual check, unchanged), the scan waits Wait s, then
+  runs the field sweep (or angles, currents) at that temperature. The log and the status line say so; Stop during
+  the wait ends the scan as any Stop does. The time estimate and the Yes/No count it; the run log has
+  `scan.temperature_delay_s`.
+- Not run on the instruments.
+
 ## Switch scan plots: volts, R, and X / Y against time over each reading (user, 2026-11-22)
 
 - **Request:** "after the 10mA 6221 current pulse, the 6221 is set to 1.5mA continuous and the SR830 read the
