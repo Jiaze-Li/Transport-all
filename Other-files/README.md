@@ -9,8 +9,14 @@
   window). Nothing in the settings or scan box is cut off any more, Wait s included. Wide enough (2000 px), the page
   is as before. `CombinedControlApp._ppms_arrange_by_width`; the harmonic rows now sit in their own frame
   (`ppms_settings_panel`), the rest of the settings in another.
-- Still cut at 1101 px, as before: the right end of the instrument rows (SR830 Disconnect / status) and of the
-  MultiVu row (connection status). Plots are shorter there, since the scan box takes its own row.
+- Instrument rows (user, 2026-11-23: "fix the instrument rows clipping at 1101 px too", chose "tighter rows"): when
+  the two columns of instruments do not fit, they stay two columns and the same height, but tighter: "6221:" /
+  "2400:" for "Keithley 6221:" / "Keithley 2400:", address boxes 13 (Keithleys) and 12 (SR830s) characters wide (the
+  address scrolls inside the box), status words of at most 8 letters ("Online" / "Offline" for connected / not
+  connected, "Done" for pass complete; Not read, Warning, Locked, Updating as before), smaller gaps; the Zurich row
+  says "Ref." and its button "Connect" (same action as "Connect / apply settings"). `_ppms_tighten_instruments`.
+- Still cut at 1101 px: the right end of the MultiVu row (part of Read now and its connection status). Plots are
+  shorter there, since the scan box takes its own row.
 
 ## Wrapped statements joined, two unused definitions removed (user, 2026-11-23)
 

@@ -14434,7 +14434,8 @@ class CombinedControlApp:
             cell = ttk.Frame(instruments)
             cell.grid(row=cell_row, column=cell_column, sticky="ew", padx=2)
             row = 0
-            ttk.Label(cell, text=f'{labels[key]}:').grid(row=row, column=0, sticky='e', pady=2)
+            name = ttk.Label(cell, text=f'{labels[key]}:')
+            name.grid(row=row, column=0, sticky='e', pady=2)
             if key in PPMS_SR830_KEYS:
                 entry = ttk.Combobox(cell, textvariable=self.ppms_resource_vars[key], values=PPMS_SR830_RESOURCE_OPTIONS, state='readonly', width=16)
             else:
@@ -14447,13 +14448,12 @@ class CombinedControlApp:
             disconnect_button.grid(row=row, column=4, padx=2, pady=2)
             self.ppms_device_connect_buttons[key] = connect_button
             self.ppms_device_disconnect_buttons[key] = disconnect_button
-            self._create_connection_indicator(cell, f'ppms_{key}').grid(row=row, column=5, padx=(8, 1), pady=2)
-            ttk.Label(
-                cell,
-                textvariable=(self._ppms_compact_status(self.ppms_xy_vars[key])
-                              if key in PPMS_SR830_KEYS else self.ppms_device_connection_vars[key]),
-                width=13,
-            ).grid(row=row, column=6, sticky="w", padx=(1, 8), pady=2)
+            lamp = self._create_connection_indicator(cell, f'ppms_{key}')
+            lamp.grid(row=row, column=5, padx=(8, 1), pady=2)
+            shown = self._ppms_compact_status(self.ppms_xy_vars[key]) if key in PPMS_SR830_KEYS else self.ppms_device_connection_vars[key]
+            status = ttk.Label(cell, textvariable=shown, width=13)
+            status.grid(row=row, column=6, sticky="w", padx=(1, 8), pady=2)
+            self.__dict__.setdefault('ppms_instrument_cells', {})[key] = (name, f'{labels[key]}:', entry, lamp, status, shown)
         macro_row = ttk.Frame(instruments)
         macro_row.grid(row=2, column=0, columnspan=2, sticky="e")
         self.ppms_macro_row = macro_row
@@ -14706,12 +14706,15 @@ class CombinedControlApp:
                 if available <= 1:
                     return
                 one, inset = harm_width(), self._pair_inset(control)
-                wide = available >= max(instruments.winfo_reqwidth(), inset + left.winfo_reqwidth() + one) + 6 + scan.winfo_reqwidth()
+                instr = state['instr'] if state.get('tight') else instruments.winfo_reqwidth()
+                state['instr'] = instr
+                wide = available >= max(instr, inset + left.winfo_reqwidth() + one) + 6 + scan.winfo_reqwidth()
                 columns = 0 if wide else 2 if available >= inset + 2 * one else 1
+                tight = not wide and available < instr
                 window = content.winfo_toplevel().winfo_width()
             except (tk.TclError, ValueError):
                 return
-            if state.get('columns') == columns:
+            if (state.get('columns'), state.get('tight')) == (columns, tight):
                 return
             now, guard = time.monotonic(), state.setdefault('guard', [None, 0.0, 0])
             if guard[0] != window or now - guard[1] > 1.0:
@@ -14719,7 +14722,9 @@ class CombinedControlApp:
             guard[2] += 1
             if guard[2] > PAIR_FLIP_LIMIT and 'columns' in state:
                 return
-            state['columns'] = columns
+            if bool(state.get('tight')) != tight:
+                self._ppms_tighten_instruments(tight)
+            state['columns'], state['tight'] = columns, tight
             content.columnconfigure(0, weight=2 if wide else 0)
             instruments.grid_configure(columnspan=1 if wide else 2)
             control.grid_configure(columnspan=1 if wide else 2)
@@ -14731,6 +14736,24 @@ class CombinedControlApp:
         for widget in (content, scan):
             widget.bind('<Configure>', place, add='+')
         place()
+    def _ppms_tighten_instruments(self, tight: bool) -> None:
+        short, words = self.__dict__.setdefault('ppms_short_status_vars', {}), {'Not connected': 'Offline', 'Connected': 'Online', 'Pass complete': 'Done'}
+        for key, (name, text, entry, lamp, status, shown) in self.__dict__.get('ppms_instrument_cells', {}).items():
+            sr830 = key in PPMS_SR830_KEYS
+            if tight and key not in short:
+                compact, short[key] = shown if sr830 else self._ppms_compact_status(shown), tk.StringVar()
+                refresh = lambda *_args, c=compact, s=short[key]: s.set(words.get(c.get(), c.get()))
+                compact.trace_add('write', refresh)
+                refresh()
+            name.configure(text=f'{key}:' if tight and not sr830 else text)
+            entry.configure(width=(12 if sr830 else 13) if tight else (16 if sr830 else 18))
+            lamp.grid_configure(padx=(3, 1) if tight else (8, 1))
+            status.configure(width=8 if tight else 13, textvariable=short[key] if tight else shown)
+            status.grid_configure(padx=(1, 3) if tight else (1, 8))
+        label, button = self.__dict__.get('ppms_zurich_reference_label'), self.__dict__.get('zurich_connect_button')
+        if label is not None and button is not None:
+            label.configure(text='Ref.' if tight else 'Reference')
+            button.configure(text='Connect' if tight else 'Connect / apply settings', width=8 if tight else '')
     def _ppms_scan_mode_defaults(self) -> dict:
         defaults = {"Temperature": ("300", "280", "5", "K"), "Field": ("0", "1000", "100", "Oe"), "Field+Temperature": ("0", "1000", "100", "Oe"), "Angle": ("0", "360", "5", "°"), "Current": ("0.01", "1", "0.01", "mA RMS")}
         defaults["Field"] = defaults["Field+Temperature"] = (*getattr(self, "ppms_default_field_range", ("0", "1000", "100")), "Oe")
@@ -35803,7 +35826,8 @@ class PPMSPanel(CombinedControlApp):
                 extra = 0
             entry.grid(row=0, column=(9 if column == 5 else 1) if compact else column, padx=(0, extra) if compact else (3, 3 + extra))
             self.zurich_entries.append(entry)
-        ttk.Label(row, text="Ref." if compact else "Reference").grid(row=0, column=6 if compact else 2, padx=(4, 2))
+        self.ppms_zurich_reference_label = ttk.Label(row, text="Ref." if compact else "Reference")
+        self.ppms_zurich_reference_label.grid(row=0, column=6 if compact else 2, padx=(4, 2))
         self.zurich_reference_combo = ttk.Combobox(row, textvariable=self.zurich_reference, values=tuple(NONLOCAL_MFLI_REFERENCE_INPUTS), state='readonly', width=12)
         self.zurich_reference_combo.grid(row=0, column=7 if compact else 3)
         ttk.Label(row, text="TC (s)").grid(row=0, column=8 if compact else 4, padx=(4, 2))

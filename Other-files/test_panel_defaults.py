@@ -1234,7 +1234,11 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
         box goes under the settings with the live readings beside it, and
         the lock-in harmonic rows under the settings' own rows: nothing in
         either box past the page's edge, Wait s included, whatever the
-        resize history.  At 2000 px the page is as before."""
+        resize history.  The instrument rows (user, 2026-11-23: "fix the
+        instrument rows clipping at 1101 px too", chose tighter rows) keep
+        their two columns with "6221:", narrower address boxes and short
+        status words, nothing past the edge.  At 2000 px the page is as
+        before."""
         panel, tab = self.panel, self.panel.ppms_tab
         harm = panel.ppms_settings_panel
         left = next(w for w in harm.master.winfo_children() if w is not harm)
@@ -1247,15 +1251,18 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
                 self.choose("Field+Temperature", width)
             with self.subTest(history=history):
                 edge = right(tab)
-                pending, over = [settings, self.scan], []
+                pending, over = [settings, self.scan, panel.ppms_instruments_frame], []
                 while pending:
                     widget = pending.pop()
                     pending.extend(widget.winfo_children())
                     if widget.winfo_ismapped() and right(widget) > edge + 1:
                         over.append(widget)
                 self.assertEqual(over, [], "widgets past the page's right edge")
-                for widget in (wait, panel.zurich_harmonic_combo, live):
+                for widget in (wait, panel.zurich_harmonic_combo, live, panel.zurich_disconnect_button, *panel.ppms_device_disconnect_buttons.values()):
                     self.assertTrue(widget.winfo_ismapped())
+                name, _text, _entry, _lamp, status, _shown = panel.ppms_instrument_cells["6221"]
+                self.assertEqual(str(name.cget("text")), "Keithley 6221:" if history[-1] == LAB_WIDE else "6221:")
+                self.assertEqual(status.getvar(str(status.cget("textvariable"))), "Not connected" if history[-1] == LAB_WIDE else "Offline")
                 if history[-1] == LAB_WIDE:
                     self.assertGreaterEqual(self.scan.winfo_rootx(), right(settings))
                     self.assertLessEqual(abs(self.scan.winfo_rooty() - settings.winfo_rooty()), 2)
