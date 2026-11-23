@@ -272,7 +272,7 @@ class SwitchPageTests(unittest.TestCase):
         Angle+Field, where the pulse row and the time row are off screen."""
         panel = ete.build_page(kepco=False)
         self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))
-        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Field+Angle", "Switch"))
+        self.assertEqual(app.RTE_SCAN_MODES[-3:], ("Field+Angle", "Switch", "Switch2"))
         self.assertEqual(panel.rte_start_button.parent.parent.options["text"], "Scan")
         self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
         self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field"][0])

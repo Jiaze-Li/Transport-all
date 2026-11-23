@@ -356,10 +356,11 @@ def main():
                     print(f"       screenshot: {screenshot(root, tab, shot)}")
                     if name == "SHHV & Switch":
                         # The page with its Switch mode and its Field+Angle
-                        # mode chosen (user, 2026-11-22), then back on the
-                        # mode it had.
+                        # mode chosen (user, 2026-11-22), and Switch2, the
+                        # Avtech's (user, 2026-11-23), then back on the mode
+                        # it had.
                         panel, was = app.rte_panel, app.rte_panel.ppms_simple_mode.get()
-                        for mode in ("Switch", "Field+Angle"):
+                        for mode in ("Switch", "Switch2", "Field+Angle"):
                             panel.ppms_simple_mode.set(mode)
                             panel._rte_mode_changed()
                             shot = args.shots / (f"SHHV-Switch_{mode.replace('+', '-')}-mode_"

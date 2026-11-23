@@ -1,5 +1,32 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Switch2: the Switch scan with the Avtech's pulses (user, 2026-11-23)
+
+- **Request:** "add switch2 scan in the SHHV & Switch module which use the Avtech in stead of 6221. You can refer to
+  CIDWM module to learn the avtech pulse generator settings."
+- "Switch2" is the last mode of the SHHV & Switch page's Scan box. Everything is Switch's (the outer "Outer field G:"
+  list, Round trip, Loops, Settle s, Acquire s 30, the 6221's read current, the lock-ins, X and Y vs time, the trace
+  CSV) except the pulse: at each point the 6221's output is switched off (and read back off), then the Avtech gives
+  the point's pulse(s), then the read current goes on again, settles and is read.
+- The pulse is the CIDWM page's (`AvtechPulserController.pulse_train` / `single_pulse`): trigger on hold, output off
+  read back, delay 0, width and amplitude written and read back, output on, one immediate trigger, then hold and the
+  output off read back; several pulses a point are 1 s apart (`AVTECH_PULSE_GAP_S`). 0 V sends no pulse. An overload
+  (output protection tripped) or a pulse error stops the scan; Stop between pulses switches the output off.
+- Scan box in Switch2: "Pulses V:" (signed amplitudes in V in the order typed, each within ±100 V; start-up text
+  -100, -90, … 100) and the row "Avtech  Width ns [50]  Pulses [1]" (1 ns – 5 µs; 1 – 10000). A unit whose model name
+  says -P or -N refuses the other sign at Start, before anything is sent.
+- Measurement instruments: a new "Avtech" row under the Zurich MFLI's (the page's own controller, owner SHHV; the
+  start-up address is the CIDWM page's, GPIB0::8::INSTR, the same as SR830-1 here: type the Avtech's real address).
+  The Avtech cannot be connected on both pages at once (one VISA owner per address).
+- CSV columns: `pulse_amplitude_v`, `pulse_width_ns`, `pulse_count`, `avtech_amplitude_read_v`, `avtech_width_read_ns`,
+  `avtech_pulses_sent`, `avtech_overload` (no `pulse_current_ma`); the pulse plots' x axis is "Avtech pulse amplitude
+  (V)". `settings.json` has `plan.unit` "V (Avtech pulse)" and `pulse.source` "Avtech" with its address and identity.
+- At the end (completed, stopped or failed) the Avtech's output is switched off and read back first, then the 6221
+  and the magnet are zeroed: "Completed; Avtech, KEPCO and 6221 zeroed".
+- The 6221 and the lock-ins stay wired to the sample while the Avtech fires (the 6221's output is off, not
+  disconnected). Not yet run on the instruments or checked on an oscilloscope.
+- Tests: `test_switch2_avtech.py` (the page's real controller on `test_avtech_pulser`'s simulated generator).
+
 ## Switch: typed pulse currents, Acquire s 30 (user, 2026-11-23)
 
 - **Requests:** "change the switch current pulse input like the outer field, use the text input pls."; "set the default

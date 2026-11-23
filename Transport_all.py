@@ -2225,7 +2225,7 @@ RTE_TRANSPORT_CURRENT_RMS_MA = 1.5
 RTE_DEFAULT_SCAN_MODE = 'Angle+Field'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 FIELD_ANGLE_SCAN_MODE = 'Field+Angle'
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, 'Switch')
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, 'Switch', 'Switch2')
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Current')
 RTE_STAGE_MODES = (*RTE_ANGLE_MODES, FIELD_ANGLE_SCAN_MODE)
 RTE_FIELD_SWEEP_MODES = ('Field', FIELD_ANGLE_SCAN_MODE)
@@ -2234,15 +2234,18 @@ RTE_FIELD_ACQUISITION_S = 2.0
 SWITCH_ACQUISITION_S = 30.0
 FIELD_ANGLE_DEFAULT_ANGLES = '0, 45, 90'
 SWITCH_SCAN_MODE = 'Switch'
+SWITCH2_SCAN_MODE = 'Switch2'
+SWITCH_MODES = (SWITCH_SCAN_MODE, SWITCH2_SCAN_MODE)
 RTE_TAB_TITLE = 'SHHV & Switch'
 RTE_LIVE_BESIDE_PAD_PX = 10
-RTE_FIELD_OUTER_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
-RTE_FIELD_LIST_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
+RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
+RTE_FIELD_LIST_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_SCAN_ROWS_LAST_COLUMN = 14
 SWITCH_DEFAULT_PULSES_MA = ', '.join(str(value) for value in range(-20, 21))
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
+SWITCH2_DEFAULT_PULSES_V = ', '.join(str(value) for value in range(-100, 101, 10))
 RTE_APPLY_PULSE_DEFAULT_MA = 10.0
 RTE_TRANSPORT_COMPLIANCE_V = 100.0
 SWITCH_TIME_ROW_TITLE = 'X and Y vs time'
@@ -2258,6 +2261,8 @@ RTE_OUTER_ROWS = {
                           index_column='outer_current_index'),
     SWITCH_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
                            index_column='outer_field_index', listed=True),
+    SWITCH2_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
+                            index_column='outer_field_index', listed=True),
     FIELD_ANGLE_SCAN_MODE: dict(label='Outer stage °:', defaults=(FIELD_ANGLE_DEFAULT_ANGLES,),
                                 index_column='outer_angle_index', listed=True),
 }
@@ -37105,7 +37110,7 @@ class NewmarkNSCA1Controller:
         self.logger(f'{self.owner_scope} {self.label}: zero set here (was {newmark_angle_text(before, self.steps_per_degree)}, PX {before})')
         return before
 def rte_scan_plan(mode, start, end, step, loops=1, round_trip=True, max_current_a=STFMR_KEPCO_MAX_CURRENT_A, supply='KEPCO', values=None):
-    if mode not in ('Field', 'Current', 'Angle', SWITCH_SCAN_MODE):
+    if mode not in ('Field', 'Current', 'Angle', *SWITCH_MODES):
         raise ValueError('SHHV supports only Field, Current and Angle scans')
     nodes = tuple(values) if values is not None else tuple(ppms_scan_axis(float(start), float(end), float(step)))
     if mode == SWITCH_SCAN_MODE:
@@ -37113,6 +37118,10 @@ def rte_scan_plan(mode, start, end, step, loops=1, round_trip=True, max_current_
         outside = [v for v in nodes if abs(v) > limit_ma]
         if outside:
             raise ValueError(f'6221 pulse currents must stay within +/-{limit_ma:g} mA; {outside[0]:g} mA is outside')
+    if mode == SWITCH2_SCAN_MODE:
+        outside = [v for v in nodes if abs(v) > AVTECH_MAX_AMPLITUDE_V]
+        if outside:
+            raise ValueError(f'Avtech pulse amplitudes must stay within +/-{AVTECH_MAX_AMPLITUDE_V:g} V; {outside[0]:g} V is outside')
     if mode == 'Field' and any(abs(v) > max_current_a for v in nodes):
         raise ValueError(f'{supply} sweep current must stay within +/-{max_current_a:g} A')
     if mode == 'Angle':
@@ -37177,22 +37186,24 @@ def rte_outer_angle_list_plan(text):
 def rte_outer_angles_text(values, limit=12):
     shown = ', '.join(f'{value:+g}' for value in values[:limit])
     return f"{shown}{', ...' if len(values) > limit else ''}°"
-def rte_pulse_list(text):
+def rte_pulse_list(text, box='Pulses mA', what='pulse currents', unit='mA', example='-10, -5, 0, 5, 10'):
     parts = [part for part in re.split(r'[,;\s]+', str(text).strip()) if part]
     if not parts:
-        raise ValueError('Pulses mA: type the pulse currents in mA in the order to scan, e.g. -10, -5, 0, 5, 10')
+        raise ValueError(f'{box}: type the {what} in {unit} in the order to scan, e.g. {example}')
     if len(parts) > RTE_OUTER_LIST_MAX:
-        raise ValueError(f'Pulses mA: at most {RTE_OUTER_LIST_MAX} pulse currents ({len(parts)} typed)')
+        raise ValueError(f'{box}: at most {RTE_OUTER_LIST_MAX} {what} ({len(parts)} typed)')
     values = []
     for part in parts:
         try:
             value = float(part)
         except ValueError:
-            raise ValueError(f'Pulses mA: "{part}" is not a number') from None
+            raise ValueError(f'{box}: "{part}" is not a number') from None
         if not math.isfinite(value):
-            raise ValueError(f'Pulses mA: "{part}" is not a finite number')
+            raise ValueError(f'{box}: "{part}" is not a finite number')
         values.append(value + 0.0)
     return tuple(values)
+def rte_pulse_axis(mode):
+    return 'avtech' if mode == SWITCH2_SCAN_MODE else 'pulse'
 def rte_outer_values_text(values, limit=12, unit='G'):
     shown = ', '.join(f'{value:+g}' for value in values[:limit])
     return f"{shown}{', ...' if len(values) > limit else ''} {unit}"
@@ -37217,15 +37228,20 @@ def rte_outer_step_of(row):
     return float(value), f'{value:{form}} {unit}'
 RTE_STATUS_WIDEST_EXAMPLE = "Stopped; outputs held unless OFF was requested; stage stopped at -359.999°"
 def rte_outputs_text(results, check=True, supply='KEPCO'):
+    names = ("6221", supply)
     if results:
         six = results.get("6221", "")
-        results = {"6221": six if six == "zeroed" else "zero FAILED", supply: results.get("kepco", "")}
-    return scan_end_outputs_text(results, ("6221", supply), check=check, together=f"{supply} and 6221")
+        avtech = {"Avtech": results["avtech"]} if "avtech" in results else {}
+        results = {**avtech, "6221": six if six == "zeroed" else "zero FAILED", supply: results.get("kepco", "")}
+        names = (*avtech, *names)
+    return scan_end_outputs_text(results, names, check=check, together=f"{supply} and 6221" if len(names) == 2 else f"Avtech, {supply} and 6221")
 RTE_FAILED_STATUS_CHARS = 64
 def rte_unconfirmed_outputs(results, supply='KEPCO') -> list[str]:
     if not results:
         return ["6221", supply]
     failed = [] if results.get("6221") == "zeroed" else ["6221"]
+    if results.get("avtech", "zeroed") not in ("zeroed", "not connected"):
+        failed.insert(0, "Avtech")
     if results.get("kepco") not in ("zeroed", "not connected"):
         failed.append(supply)
     return failed
@@ -37246,6 +37262,7 @@ RTE_SCAN_NOTES = {
     'Angle+Current': 'Angle+Current: Stage °; outer: 6221 mA',
     'Field+Angle': 'Field+Angle: KEPCO A; outer: stage °',
     SWITCH_SCAN_MODE: 'Switch: 6221 pulse mA; outer: field G',
+    SWITCH2_SCAN_MODE: 'Switch2: Avtech pulse V; outer: field G',
 }
 def rte_angle_not_started_text(reason, mode='Angle'):
     text = short_status_error(reason, 44 - (len(mode) - len('Angle'))).rstrip('; ') if isinstance(reason, BaseException) else reason
@@ -37293,6 +37310,7 @@ class RTEPanel(PPMSPanel):
             'gauss': STFMRGauss475Controller(self.thread_log),
             'newmark': NewmarkNSCA1Controller(self.thread_log),
             'lakeshore': LakeShoreMagnetSupplyController(self.thread_log, '643', owner_scope=self.ppms_page_name),
+            'avtech': AvtechPulserController(self.thread_log),
         }
         self.rte_magnet_choice = MAGNET_SUPPLY_KEPCO
         self.rte_magnet_rate_a_s = LAKESHORE_DEFAULT_RATE_A_S
@@ -37307,6 +37325,7 @@ class RTEPanel(PPMSPanel):
         self.rte_controllers['gauss'].owner_scope = self.ppms_page_name
         self.rte_controllers['kepco'].owner_scope = self.ppms_page_name
         self.rte_controllers['newmark'].owner_scope = self.ppms_page_name
+        self.rte_controllers['avtech'].owner_scope = self.ppms_page_name
         self.rte_controllers['newmark'].share_stop_record(self._newmark_stage_ownership())
         self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: X, Y, phase vs measured field / excitation current / sample angle / pulse current')
         self.ppms_transport_current_var.set(f'{RTE_TRANSPORT_CURRENT_RMS_MA:g}')
@@ -37339,7 +37358,7 @@ class RTEPanel(PPMSPanel):
         self._refresh_ppms2_plot_layout()
         self._update_ppms_control_ui()
     def _rte_time_row_shown(self):
-        return self.__dict__.get('ppms_plot_axis') == 'pulse'
+        return self.__dict__.get('ppms_plot_axis') in ('pulse', 'avtech')
     def _rte_plot_axis_changed(self):
         if self.__dict__.get('rte_time_frame') is not None and self._rte_time_row_shown() != self.__dict__.get('rte_time_row_on', False):
             self._refresh_ppms2_plot_layout()
@@ -37512,6 +37531,20 @@ class RTEPanel(PPMSPanel):
             self._create_connection_indicator(group, 'ppms_' + key).grid(row=device_row, column=4, padx=3)
             status = self._ppms_compact_status(self.ppms_xy_vars[key]) if key in PPMS_SR830_KEYS else self.ppms_device_connection_vars[key]
             ttk.Label(group, textvariable=status, width=13).grid(row=device_row, column=5, sticky='w')
+        self.rte_resources['avtech'] = tk.StringVar(value=AVTECH_DEFAULT_RESOURCE)
+        self.rte_connections['avtech'] = tk.StringVar(value='Not connected')
+        group = ttk.Frame(instruments)
+        group.grid(row=4, column=0, sticky='w', padx=0)
+        ttk.Label(group, text='Avtech', width=13).grid(row=0, column=0, sticky='w')
+        entry = ttk.Entry(group, textvariable=self.rte_resources['avtech'], width=18)
+        entry.grid(row=0, column=1)
+        connect = ttk.Button(group, text='Connect', width=8, command=lambda: self._rte_connect('avtech'))
+        connect.grid(row=0, column=2)
+        disconnect = ttk.Button(group, text='Disconnect', width=10, command=lambda: self._rte_disconnect('avtech'))
+        disconnect.grid(row=0, column=3)
+        self._create_connection_indicator(group, 'rte_avtech').grid(row=0, column=4, padx=3)
+        ttk.Label(group, textvariable=self.rte_connections['avtech'], width=13).grid(row=0, column=5, sticky='w')
+        self.rte_connection_widgets['avtech'] = (entry, connect, disconnect)
         self.rte_resources['newmark'] = tk.StringVar(value='auto')
         self.rte_connections['newmark'] = tk.StringVar(value='Not connected')
         ttk.Label(rack, text='Motor', width=13).grid(row=4, column=0, sticky='w')
@@ -37672,6 +37705,9 @@ class RTEPanel(PPMSPanel):
             if i < 3:
                 self.rte_range_widgets += [name, entry]
         self.rte_switch_pulses_var = tk.StringVar(value=SWITCH_DEFAULT_PULSES_MA)
+        self.rte_switch2_pulses_var = tk.StringVar(value=SWITCH2_DEFAULT_PULSES_V)
+        self.rte_avtech_width_ns = tk.StringVar(value=f'{AVTECH_DEFAULT_WIDTH_NS:g}')
+        self.rte_avtech_count = tk.StringVar(value=str(SWITCH_DEFAULT_PULSE_COUNT))
         pulses = ttk.Entry(scan_rows, textvariable=self.rte_switch_pulses_var, width=6)
         self.rte_switch_pulse_list_widgets = [ttk.Label(scan_rows, text='Pulses mA:'), pulses]
         self.rte_switch_pulse_list_widgets[0].grid(row=0, column=1, columnspan=2, sticky='e', padx=(4, 0))
@@ -37872,7 +37908,7 @@ class RTEPanel(PPMSPanel):
                     stacked = getattr(controls, '_pair_side_by_side', None) is False
                     room = scan.winfo_width() - self._pair_inset(scan)
                     widths = [widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options in zip(widgets, beside_options)]
-                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') and self.ppms_simple_mode.get() != SWITCH_SCAN_MODE else sum(widths)
+                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') and self.ppms_simple_mode.get() not in SWITCH_MODES else sum(widths)
                     rows_width = scan_rows_width(outer_row=False)
                     beside = stacked and room > 1 and room >= rows_width + beside_width
                 except (tk.TclError, ValueError):
@@ -37948,7 +37984,7 @@ class RTEPanel(PPMSPanel):
         mode = self.ppms_simple_mode.get()
         current = mode == 'Current'
         angle = mode in RTE_ANGLE_MODES
-        switch = mode == SWITCH_SCAN_MODE
+        switch = mode in SWITCH_MODES
         self.rte_round_trip.set(mode in RTE_FIELD_SWEEP_MODES or switch)
         defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else () if switch else RTE_FIELD_DEFAULT_RANGE
         for variable, value in zip(self.ppms_simple_range, defaults):
@@ -37964,26 +38000,38 @@ class RTEPanel(PPMSPanel):
         self._rte_show_pulse_row(mode)
         self._rte_show_outer_row(mode)
         if not self.ppms_field_scan_rows:
-            self.ppms_plot_axis = 'current' if current else 'angle' if angle else 'pulse' if switch else 'field'
+            self.ppms_plot_axis = 'current' if current else 'angle' if angle else rte_pulse_axis(mode) if switch else 'field'
             self._rte_plot_axis_changed()
     def _rte_show_pulse_row(self, mode):
-        for widget in self.__dict__.get('rte_pulse_widgets') or ():
-            if mode == SWITCH_SCAN_MODE:
+        widgets = self.__dict__.get('rte_pulse_widgets') or ()
+        for widget in widgets:
+            if mode in SWITCH_MODES:
                 widget.grid()
             else:
                 widget.grid_remove()
+        if mode in SWITCH_MODES and len(widgets) == 5:
+            avtech = mode == SWITCH2_SCAN_MODE
+            for widget, label in zip(widgets[:2] + widgets[3:4], ('Avtech', 'Width ns', 'Pulses') if avtech else ('6221 write', 'Pulse µs', 'Pulses')):
+                widget.configure(text=label)
+            for widget, variable in zip(widgets[2::2], (self.rte_avtech_width_ns, self.rte_avtech_count) if avtech else (self.rte_pulse_width_us, self.rte_pulse_count)):
+                widget.configure(textvariable=variable)
     def _rte_show_scan_units(self, mode):
         name = self._rte_supply_label()
-        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '' if mode == SWITCH_SCAN_MODE else f'{name} A')
+        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '' if mode in SWITCH_MODES else f'{name} A')
         for widget in self.__dict__.get('rte_range_widgets') or ():
-            widget.grid_remove() if mode == SWITCH_SCAN_MODE else widget.grid()
-        for widget in self.__dict__.get('rte_switch_pulse_list_widgets') or ():
-            widget.grid() if mode == SWITCH_SCAN_MODE else widget.grid_remove()
+            widget.grid_remove() if mode in SWITCH_MODES else widget.grid()
+        pulse_list = self.__dict__.get('rte_switch_pulse_list_widgets') or ()
+        for widget in pulse_list:
+            widget.grid() if mode in SWITCH_MODES else widget.grid_remove()
+        if mode in SWITCH_MODES and len(pulse_list) == 2:
+            avtech = mode == SWITCH2_SCAN_MODE
+            pulse_list[0].configure(text='Pulses V:' if avtech else 'Pulses mA:')
+            pulse_list[1].configure(textvariable=self.rte_switch2_pulses_var if avtech else self.rte_switch_pulses_var)
         note = self.__dict__.get('rte_scan_note')
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
     def _rte_outer_list_beside(self):
-        return self.__dict__.get('rte_outer_switch_beside_options' if self.ppms_simple_mode.get() == SWITCH_SCAN_MODE else 'rte_outer_list_beside_options') or []
+        return self.__dict__.get('rte_outer_switch_beside_options' if self.ppms_simple_mode.get() in SWITCH_MODES else 'rte_outer_list_beside_options') or []
     def _rte_shown_outer_set(self):
         for widgets, beside in ((self.__dict__.get('rte_outer_widgets') or [],
                                  self.__dict__.get('rte_outer_beside_options') or []),
@@ -38251,6 +38299,16 @@ class RTEPanel(PPMSPanel):
                     self._rte_dialog(f'{self.ppms_page_name} {controller.label}', 'Connected. ' + ' '.join(notes), show=messagebox.showwarning)
             self._rte_submit(lambda: controller.connect(resource), supply_connected)
             return
+        if key == 'avtech':
+            controller = self.rte_controllers[key]
+            def avtech_connected(identity):
+                self.rte_connections[key].set('Connected')
+                allowed = controller.polarities
+                polarity = ("polarity not in its model name: each pulse's sign is checked" if allowed is None else
+                            {(1,): 'positive pulses only (-P)', (-1,): 'negative pulses only (-N)'}.get(allowed, 'both polarities (-PN)'))
+                self.thread_log(f'{self.ppms_page_name} Avtech: {identity} | trigger on hold, output off (read back) | {polarity}')
+            self._rte_submit(lambda: controller.connect(resource), avtech_connected)
+            return
         self._rte_submit(lambda: self.rte_controllers[key].connect(resource), lambda identity: self.rte_connections[key].set('Connected'))
     def _rte_disconnect(self, key):
         if key == 'lakeshore':
@@ -38271,6 +38329,22 @@ class RTEPanel(PPMSPanel):
                 if failure is not None:
                     raise failure
             self._rte_submit(disconnect_supply, supply_disconnected)
+            return
+        if key == 'avtech':
+            controller = self.rte_controllers[key]
+            def disconnect_avtech():
+                try:
+                    controller.disconnect()
+                except Exception as error:
+                    if controller.connected:
+                        raise
+                    return error
+                return None
+            def avtech_disconnected(failure):
+                self.rte_connections[key].set('Not connected' if failure is None else 'Check output')
+                if failure is not None:
+                    raise failure
+            self._rte_submit(disconnect_avtech, avtech_disconnected)
             return
         if key == 'newmark':
             stage = self.rte_controllers[key]
@@ -38757,14 +38831,17 @@ class RTEPanel(PPMSPanel):
             self._rte_capture_zurich()
             mode = self.ppms_simple_mode.get()
             angle = mode in RTE_ANGLE_MODES
-            switch = mode == SWITCH_SCAN_MODE
+            switch = mode in SWITCH_MODES
+            avtech = mode == SWITCH2_SCAN_MODE
             field_angle = mode == FIELD_ANGLE_SCAN_MODE
             turns = mode in RTE_STAGE_MODES
             supply = self._rte_supply()
+            typed_pulses = (rte_pulse_list(self.rte_switch2_pulses_var.get(), 'Pulses V', 'pulse amplitudes', 'V', '-100, -50, 0, 50, 100') if avtech
+                            else rte_pulse_list(self.rte_switch_pulses_var.get()) if switch else None)
             plan = rte_scan_plan('Angle' if angle else 'Field' if field_angle else mode,
                                  *(v.get() for v in self.ppms_simple_range),
                                  self.ppms_field_scan_loop_var.get(), self.rte_round_trip.get(),
-                                 supply.max_current_a(), supply.label, rte_pulse_list(self.rte_switch_pulses_var.get()) if switch else None)
+                                 supply.max_current_a(), supply.label, typed_pulses)
             if not self.rte_controllers['gauss'].connected:
                 raise ValueError('Connect LS475 for measured-field recording')
             if mode in RTE_FIELD_SWEEP_MODES and not supply.connected:
@@ -38811,7 +38888,7 @@ class RTEPanel(PPMSPanel):
                     if last and not last.get('at_setpoint', False):
                         raise ValueError(f'The {supply.label} is not at its setpoint (still ramping, or a ramp was stopped): wait for it, or Apply its current or ramp it to 0 A, then start')
             settings = self._ppms_direct_transport_settings()
-            pulse = self._rte_switch_pulse_settings(plan, settings) if switch else None
+            pulse = self._rte_avtech_pulse_settings(plan) if avtech else self._rte_switch_pulse_settings(plan, settings) if switch else None
             for value in [value for _, _, value in plan] if mode == 'Current' else outer if mode == 'Angle+Current' else ():
                 validate_ppms_transport_scan_settings(value, settings['frequency_hz'], settings['compliance_v'],
                     settings['harmonic_a'], settings['harmonic_b'], settings['active_lockins'],
@@ -38837,7 +38914,8 @@ class RTEPanel(PPMSPanel):
                            f'constant of {slowest_meter}, then Settle s {stable:g} s)' if slowest_tc_s
                            else f'{stable:g} s (Settle s)')
             least_s = sum(((stable + SWITCH_READ_SETTLE_TAUS * tc + duration) * per_pass + duration for _settle, tc, _meter in pass_settles))
-            least_s += (per_pass * len(passes) * (2.0 * pulse['width_s'] * pulse['count'] + SWITCH_PULSE_DONE_MARGIN_S)
+            pulse_s = (pulse['count'] - 1) * pulse['gap_s'] if avtech else 2.0 * pulse['width_s'] * pulse['count']
+            least_s += (per_pass * len(passes) * (pulse_s + SWITCH_PULSE_DONE_MARGIN_S)
                         + len(passes) * len(outer) * STFMR_FIELD_SETTLE_REQUIRED_SAMPLES * RTE_FIELD_SETTLE_POLL_S)
         if outer and angle:
             angles = [target for _loop, _point, target in plan] * (len(outer) * len(passes))
@@ -38899,7 +38977,15 @@ class RTEPanel(PPMSPanel):
         try:
             run_settings = self._rte_run_settings(mode, plan, passes, settings, limit, field_current, stable, duration, pass_settles, settle_s, typed, outer=outer)
             run_settings['magnet_supply'] = self._rte_magnet_settings(supply, mode, ramp_rate, ramp_s)
-            if switch:
+            if avtech:
+                run_settings['pulse'] = dict(
+                    source='Avtech', resource=self.rte_controllers['avtech'].resource_name,
+                    identity=self.rte_controllers['avtech'].identity, width_s=pulse['width_s'], count=pulse['count'],
+                    gap_s=pulse['gap_s'], amplitudes_v='the plan', load='50 ohm (the Avtech needs it)',
+                    shape="one Avtech pulse per trigger, delay 0, width and amplitude read back before each (the CIDWM page's pulse)",
+                    order='read current off (6221 output off), Avtech pulse(s), its output read back off, read current on again, settle, read',
+                    read_settle_s=switch_settle_s, read_settle_time_constants=SWITCH_READ_SETTLE_TAUS)
+            elif switch:
                 run_settings['pulse'] = dict(
                     width_s=pulse['width_s'], count=pulse['count'], compliance_v=pulse['compliance_v'],
                     currents_ma='the plan', shape='unipolar: a 50 % square of period 2 x width with offset I/2, '
@@ -38933,7 +39019,7 @@ class RTEPanel(PPMSPanel):
             self.ppms_live_csv_path, self.ppms_live_csv_fields = path, None
             self.ppms_field_scan_running = True
             self.ppms_active_scan_mode = mode
-            self.ppms_plot_axis = 'field' if mode in RTE_FIELD_SWEEP_MODES else 'angle' if angle else 'pulse' if switch else 'current'
+            self.ppms_plot_axis = 'field' if mode in RTE_FIELD_SWEEP_MODES else 'angle' if angle else rte_pulse_axis(mode) if switch else 'current'
             self.ppms_plot_angle_range = (min((p[2] for p in plan)), max((p[2] for p in plan))) if angle else None
             self.ppms_plot_addresses = {key: self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name) for key in settings['active_lockins']}
             self.ppms_field_scan_rows = []
@@ -38969,7 +39055,9 @@ class RTEPanel(PPMSPanel):
                                if outer and angle else
                                f'; fields as typed: {rte_outer_values_text(outer, 50)} (± '
                                f'{self.rte_scan_field_tolerance_g:g} G); at each, {len(plan)} pulses from '
-                               f'{plan[0][2]:+g} mA ({pulse["width_s"] * 1e6:g} µs x {pulse["count"]}), each read '
+                               + (f'{plan[0][2]:+g} V (Avtech, {pulse["width_s"] * 1e9:g} ns x {pulse["count"]}), each read '
+                                  if avtech else f'{plan[0][2]:+g} mA ({pulse["width_s"] * 1e6:g} µs x {pulse["count"]}), each read ')
+                               + 
                                f'with {settings["current_rms_ma"]:g} mA RMS' if switch else
                                f'; stage angles as typed: {rte_outer_angles_text(outer, 50)} ({len(outer)} steps); at '
                                f'each, {len(plan)} {supply.label} currents from {plan[0][2]:+g} A' if field_angle else '')
@@ -39003,7 +39091,7 @@ class RTEPanel(PPMSPanel):
                     points_saved=len(self.ppms_field_scan_rows), status=status, outputs=results,
                     **({'stage': self.rte_stage_where or 'stage not moved'} if turns else {}))
                 zeroing = ('At the end: ' + '; '.join(f'{name} {results[key]}' for name, key in
-                                                      (('6221', '6221'), (supply.label, 'kepco')))
+                                                      (('Avtech', 'avtech'), ('6221', '6221'), (supply.label, 'kepco')) if key in results)
                            if results else f'At the end: the 6221 and the {supply.label} were not confirmed zeroed')
                 if not self.closing and not self.rte_closed:
                     if outcome == 'error':
@@ -39011,7 +39099,7 @@ class RTEPanel(PPMSPanel):
                         unconfirmed = rte_unconfirmed_outputs(results, supply.label)
                         check = f"\n\nCHECK IT: {' and '.join(unconfirmed)} not confirmed at zero." if unconfirmed else ''
                         self._rte_dialog(f'{self.ppms_page_name} scan', f'{detail}\n\n{zeroing}{check}')
-                    elif not results or 'FAILED' in f"{results['6221']} {results['kepco']}":
+                    elif not results or 'FAILED' in ' '.join(map(str, results.values())):
                         self._rte_dialog(f'{self.ppms_page_name} outputs', f'The scan {outcome}, but an output was not confirmed at zero: CHECK IT.\n\n{zeroing}')
                 self.ppms_field_scan_running = False
                 if not self.closing and not self.rte_closed:
@@ -39116,7 +39204,80 @@ class RTEPanel(PPMSPanel):
         for _loop, _point, value in plan:
             checked = Keithley6221Controller._validate(value * 1e-3, width_s, compliance_v, count)
         return dict(width_s=checked[1], compliance_v=checked[2], count=checked[3])
+    def _rte_avtech_pulse_settings(self, plan):
+        controller = self.rte_controllers['avtech']
+        if not controller.connected:
+            raise ValueError('Connect the Avtech (the "Avtech" row of the measurement instruments) for a Switch2 scan: it gives the pulses')
+        try:
+            width_s = float(self.rte_avtech_width_ns.get()) / 1e9
+        except (TypeError, ValueError, tk.TclError):
+            raise ValueError('Width ns must be a number') from None
+        width_s = AvtechPulserController.validate_width(width_s)
+        count = AvtechPulserController.validate_count(str(self.rte_avtech_count.get()))
+        allowed = controller.polarities
+        for _loop, _point, value in plan:
+            if value == 0:
+                continue
+            AvtechPulserController.validate(value, width_s)
+            if allowed is not None and (1 if value > 0 else -1) not in allowed:
+                raise ValueError(f"This Avtech gives {'positive' if allowed == (1,) else 'negative'} pulses only (its polarity option): "
+                                 f"{value:+g} V cannot be sent. Type pulses of that sign only in Pulses V (0 V sends no pulse)")
+        return dict(source='Avtech', width_s=width_s, count=count, gap_s=AVTECH_PULSE_GAP_S)
+    def _rte_switch2_question(self, plan, outer, passes, limit, pulse, settings, settle_text, least_text, ramp_text=''):
+        name, terms = self._rte_supply_label(), self._rte_magnet_terms(limit)
+        tolerance = self.__dict__.get('rte_scan_field_tolerance_g', MAGNET_FIELD_SET_DEFAULT_TOLERANCE_G)
+        amplitudes = [value for _loop, _point, value in plan]
+        loops = plan[-1][0]
+        per_loop = len(plan) // loops
+        trip = ' and back' if self.rte_round_trip.get() else ''
+        gap = f', {pulse["gap_s"]:g} s apart' if pulse['count'] > 1 else ''
+        return (f'Switch2 scan (Avtech pulses).\n\n'
+                f'Field, the OUTER loop: {len(outer)} fields in the order typed: {rte_outer_values_text(outer)}, each within '
+                f'±{tolerance:g} G on the LS475, the {name} current found as Set field finds it ({terms}) and then held for that '
+                "field's whole pulse loop.\n\n"
+                f'Avtech pulse amplitude, the INNER loop: {per_loop} pulses a loop in the order typed, '
+                f'{rte_outer_values_text(amplitudes[:(per_loop + 1) // 2 if trip else per_loop], unit="V")}{trip}, {loops} loop(s). '
+                f'Largest {max(abs(value) for value in amplitudes):g} V into the 50 Ω load.\n\n'
+                f'Each point: the 6221 read current off (its output OFF); {pulse["count"]} Avtech pulse(s) of '
+                f'{pulse["width_s"] * 1e9:g} ns at the point\'s amplitude{gap}, each with its width and amplitude read back '
+                'and its output read back off after it (0 V sends no pulse; an overload stops the scan); then the read current '
+                f'on again, {settings["current_rms_ma"]:g} mA RMS at {settings["frequency_hz"]:g} Hz, {settle_text} of settling, '
+                'and the lock-ins read.\n\n'
+                f'{len(outer)} fields x {len(plan)} pulses x {len(passes)} harmonic pass(es) = '
+                f'{len(outer) * len(plan) * len(passes)} points.'
+                + (f' Each of the {len(passes)} harmonic passes runs the whole scan, its pulses again.' if len(passes) > 1 else '')
+                + f' The scan takes at least {least_text}.{ramp_text}\n\n'
+                'The 6221 and the lock-ins stay wired to the sample while the Avtech fires (the 6221 output is off, not '
+                'disconnected). The pulse has not been checked on an oscilloscope by this program.\n\n'
+                f'When the scan ends (completed, stopped or failed) the Avtech output is switched off and read back, then the '
+                f'6221 and the {name} are zeroed. The stage is not moved.\n\nStart the scan?')
+    def _rte_avtech_pulse(self, amplitude_v, pulse):
+        self._rte_wait(0)
+        self._rte_zero_6221_after_scan()
+        result = dict(pulse_amplitude_v=amplitude_v, pulse_width_ns=round(pulse['width_s'] * 1e9, 6), pulse_count=pulse['count'],
+                      avtech_amplitude_read_v='', avtech_width_read_ns='', avtech_pulses_sent=0, avtech_overload='no pulse')
+        if amplitude_v == 0:
+            return result
+        self._rte_wait(0)
+        try:
+            sent = self.rte_controllers['avtech'].pulse_train(amplitude_v, pulse['width_s'], pulse['count'], gap_s=pulse['gap_s'],
+                                                             stop_event=self.ppms_field_scan_stop_event)
+        except AvtechPulseError as error:
+            self._rte_log('pulse_failed', pulse_amplitude_v=amplitude_v, fired=bool(error.fired), pulses_sent=getattr(error, 'pulses_done', ''),
+                          overload=error.overload, error=str(error))
+            raise RuntimeError(f'Avtech pulse {amplitude_v:+g} V: {error}') from error
+        result.update(avtech_amplitude_read_v=sent['amplitude_v'], avtech_width_read_ns=round(sent['width_s'] * 1e9, 6),
+                      avtech_pulses_sent=sent['pulses'], avtech_overload=bool(sent['overload']))
+        if sent['overload']:
+            self._rte_log('pulse_overload', **result)
+            raise RuntimeError(f"The Avtech's output protection tripped at {amplitude_v:+g} V (overload: a short or too-low load "
+                               'impedance); the scan stopped with its output off')
+        if sent['stopped']:
+            raise PPMSScanCancelled(f"{self.ppms_page_name} stopped during the Avtech pulses ({sent['pulses']}/{sent['count']} sent); its output read back off")
+        return result
     def _rte_switch_question(self, plan, outer, passes, limit, pulse, settings, settle_text, least_text, ramp_text=''):
+        if pulse.get('source') == 'Avtech':
+            return self._rte_switch2_question(plan, outer, passes, limit, pulse, settings, settle_text, least_text, ramp_text)
         name, terms = self._rte_supply_label(), self._rte_magnet_terms(limit)
         tolerance = self.__dict__.get('rte_scan_field_tolerance_g', MAGNET_FIELD_SET_DEFAULT_TOLERANCE_G)
         currents = [value for _loop, _point, value in plan]
@@ -39222,7 +39383,7 @@ class RTEPanel(PPMSPanel):
                 f'{peak_a * 1e3:.3g} mA peak, Compliance V {compliance_v:g} V): the sample and leads are above about '
                 f'{compliance_v / peak_a:.3g} Ω. Lower the read current or raise Compliance V; the scan is stopped and '
                 'the outputs zeroed')
-    def _rte_switch_keep_trace(self, progress, pulse_ma, row, trace):
+    def _rte_switch_keep_trace(self, progress, pulse_ma, row, trace, unit='mA'):
         started = self.ppms_field_scan_started_at
         harmonics = {key[len('sr830_'):-len('_harmonic')]: value for key, value in row.items() if key.startswith('sr830_') and key.endswith('_harmonic')}
         entry = dict(index=progress, pulse_ma=pulse_ma, harmonics=harmonics, times=[at - started for at, _values in trace], values=[values for _at, values in trace])
@@ -39231,7 +39392,7 @@ class RTEPanel(PPMSPanel):
         if recorder is None or self.__dict__.get('rte_switch_trace_failed'):
             return
         path = recorder.directory / f'{recorder.csv_path.stem}_trace.csv'
-        point = f'#{progress} {pulse_ma:+g} mA'
+        point = f'#{progress} {pulse_ma:+g} {unit}'
 
         def quantity(name, read=''):
             address, channel = name[len('sr830_'):-len('_x_v')], name[-3].upper()
@@ -39415,9 +39576,9 @@ class RTEPanel(PPMSPanel):
         return dict(
             program=Path(__file__).name, app_version=APP_VERSION, python_version=sys.version,
             file_name=typed_name, mode=mode,
-            plan=dict(**(dict(typed=box(state.get('rte_switch_pulses_var'))) if mode == SWITCH_SCAN_MODE else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
+            plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var' if mode == SWITCH2_SCAN_MODE else 'rte_switch_pulses_var'))) if mode in SWITCH_MODES else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
                       unit='A (KEPCO)' if mode in RTE_FIELD_SWEEP_MODES else 'deg (stage)' if mode in RTE_ANGLE_MODES
-                      else 'mA (6221 pulse)' if mode == SWITCH_SCAN_MODE else 'mA RMS (6221)',
+                      else 'mA (6221 pulse)' if mode == SWITCH_SCAN_MODE else 'V (Avtech pulse)' if mode == SWITCH2_SCAN_MODE else 'mA RMS (6221)',
                       loops=loops, round_trip=bool(box(round_trip)) if round_trip is not None else None,
                       points=len(plan), points_per_loop=len(plan) // loops,
                       harmonic_passes=len(passes),
@@ -39429,9 +39590,9 @@ class RTEPanel(PPMSPanel):
                 unit='G (LS475 target)', tolerance_g=state.get('rte_scan_field_tolerance_g'),
                 steps=len(outer), values=list(outer),
                 order='outer first, in the order typed; '
-                + ('the pulse loop inner' if mode == SWITCH_SCAN_MODE else 'the angle sweep inner'),
+                + ('the pulse loop inner' if mode in SWITCH_MODES else 'the angle sweep inner'),
                 current='found for each field as Set field finds it, then left there for its '
-                + ('pulse loop' if mode == SWITCH_SCAN_MODE else 'angle sweep'))}
+                + ('pulse loop' if mode in SWITCH_MODES else 'angle sweep'))}
                if outer and mode in RTE_FIELD_LIST_MODES else
                {'outer': dict(
                 typed=box(state['rte_outer_ranges'][mode][0]) if 'rte_outer_ranges' in state else None,
@@ -39460,7 +39621,7 @@ class RTEPanel(PPMSPanel):
                              compliance_v=settings['compliance_v'],
                              note='the plan gives the currents' if mode == 'Current'
                              else 'the outer loop gives the currents' if mode == 'Angle+Current'
-                             else 'the read current, on after each pulse' if mode == SWITCH_SCAN_MODE else ''),
+                             else 'the read current, on after each pulse' if mode in SWITCH_MODES else ''),
             kepco=(dict(current_a=field_current, voltage_limit_v=limit, held=True)
                    if mode in ('Angle', 'Angle+Current')
                    else dict(current_a='the plan', voltage_limit_v=limit) if mode in RTE_FIELD_SWEEP_MODES
@@ -39551,13 +39712,20 @@ class RTEPanel(PPMSPanel):
             if supply.controller is None or not supply.connected:
                 return 'not connected'
             supply.zero()
-        results = zero_scan_outputs((('6221', self._rte_zero_6221_after_scan), ('kepco', kepco_off)))
-        self._rte_log('outputs_zeroed', **{'6221': results['6221'], 'kepco': results['kepco']}, **{'magnet_supply': supply.name} if supply.lakeshore else {})
-        self.thread_log(f"{self.ppms_page_name} scan end: 6221 {results['6221']}; {supply.label} {results['kepco']}")
+        steps = [('6221', self._rte_zero_6221_after_scan), ('kepco', kepco_off)]
+        avtech = self.rte_controllers.get('avtech')
+        if self.__dict__.get('ppms_active_scan_mode') == SWITCH2_SCAN_MODE and avtech is not None:
+            steps.insert(0, ('avtech', lambda: avtech.switch_off() if avtech.connected else 'not connected'))
+        results = zero_scan_outputs(steps)
+        self._rte_log('outputs_zeroed', **results, **{'magnet_supply': supply.name} if supply.lakeshore else {})
+        self.thread_log(f"{self.ppms_page_name} scan end: " + (f"Avtech output off {results['avtech']}; " if 'avtech' in results else '')
+                        + f"6221 {results['6221']}; {supply.label} {results['kepco']}")
         def show():
             if self.rte_closed or self.closing:
                 return
             magnet_line = f'{supply.label}: at 0 A (zeroed)' if supply.lakeshore else 'KEPCO: zeroed and output OFF'
+            if results.get('avtech', 'zeroed') not in ('zeroed', 'not connected') and avtech is not None and avtech.connected:
+                self.rte_connections['avtech'].set('Check output')
             for name, key, text in (('rte_drive_live', 'kepco', magnet_line), ('ppms_current_live_var', '6221', 'OFF / 0 mA')):
                 line = self.__dict__.get(name)
                 if line is not None and results[key] == 'zeroed':
@@ -39596,7 +39764,8 @@ class RTEPanel(PPMSPanel):
         stage_failure = False
         drift_noted = False
         angle = mode in RTE_ANGLE_MODES
-        switch = mode == SWITCH_SCAN_MODE
+        switch = mode in SWITCH_MODES
+        avtech = mode == SWITCH2_SCAN_MODE
         pulse = self.__dict__.get('rte_switch_pulse') if switch else None
         pulse_columns = {}
         field_angle = mode == FIELD_ANGLE_SCAN_MODE
@@ -39680,7 +39849,7 @@ class RTEPanel(PPMSPanel):
                             field_failure = True
                             raise
                         self._rte_log_check()
-                    pulse_columns = self._rte_switch_pulse(target, pulse)
+                    pulse_columns = self._rte_avtech_pulse(target, pulse) if avtech else self._rte_switch_pulse(target, pulse)
                     self._rte_log('pulse', index=progress, step_index=step_index, loop=loop, point=point, **pulse_columns)
                     self._rte_log_check()
                     self._rte_switch_read_on(point_settings)
@@ -39735,7 +39904,7 @@ class RTEPanel(PPMSPanel):
                 try:
                     before = self._rte_read_field()
                 except Exception:
-                    field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, SWITCH_SCAN_MODE)
+                    field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, *SWITCH_MODES)
                     raise
                 self.ppms_sample_trace = [] if switch else None
                 try:
@@ -39750,10 +39919,10 @@ class RTEPanel(PPMSPanel):
                 try:
                     measured = self._rte_read_field()
                 except Exception:
-                    field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, SWITCH_SCAN_MODE)
+                    field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, *SWITCH_MODES)
                     raise
                 drift_g = measured - before
-                if (mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, SWITCH_SCAN_MODE) and not drift_noted
+                if (mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, *SWITCH_MODES) and not drift_noted
                         and abs(drift_g) > max(STFMR_FIELD_SETTLE_ABS_TOLERANCE_G,
                                                abs(before) * STFMR_FIELD_SETTLE_REL_TOLERANCE)):
                     drift_noted = True
@@ -39769,7 +39938,7 @@ class RTEPanel(PPMSPanel):
                     harmonic_pass=settings.get('harmonic_pass', 1),
                     elapsed_s=time.monotonic() - self.ppms_field_scan_started_at,
                     kepco_programmed_current_a=supply.programmed_current_a(),
-                    kepco_voltage_limit_v=(limit if mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, SWITCH_SCAN_MODE)
+                    kepco_voltage_limit_v=(limit if mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, *SWITCH_MODES)
                                            and not supply.lakeshore else ''),
                     measured_field_g=measured, **stage_columns, stable_s=stable,
                     first_point_windows=windows, warmup_s=(windows - 1) * duration,
@@ -39795,11 +39964,11 @@ class RTEPanel(PPMSPanel):
                 if self.ppms_field_scan_rows:
                     row = dict.fromkeys(self.ppms_field_scan_rows[0], '') | row
                 if switch and trace is not None:
-                    self._rte_switch_keep_trace(progress, target, row, trace)
+                    self._rte_switch_keep_trace(progress, target, row, trace, 'V' if avtech else 'mA')
                 self._append_ppms_live_csv(row)
                 self.ppms_field_scan_rows.append(row)
                 self.post_ui(lambda data=dict(row), progress=progress: self._rte_show_point(data, progress))
-                x_column = 'measured_field_g' if field_sweep else 'stage_angle_deg' if angle else 'pulse_current_ma' if switch else '6221_current_rms_ma'
+                x_column = 'measured_field_g' if field_sweep else 'stage_angle_deg' if angle else 'pulse_amplitude_v' if avtech else 'pulse_current_ma' if switch else '6221_current_rms_ma'
                 self._rte_log('point_saved', index=progress, harmonic_pass=settings.get('harmonic_pass', 1),
                               loop=loop, point=point, target=target, x_column=x_column, x=row[x_column],
                               field_before_g=before, field_after_g=measured, field_drift_g=drift_g,
@@ -39869,7 +40038,8 @@ class RTEPanel(PPMSPanel):
             self.ppms_field_scan_stop_event.set()
             self._rte_log('stop_requested', button='Stop')
             label = self.__dict__.get('rte_scan_supply_label', 'KEPCO')
-            self.ppms_field_scan_status_var.set(f'Stopping; completed CSV points kept; {label} and 6221 zeroed next')
+            avtech = 'Avtech off, ' if self.__dict__.get('ppms_active_scan_mode') == SWITCH2_SCAN_MODE else ''
+            self.ppms_field_scan_status_var.set(f'Stopping; completed CSV points kept; {avtech}{label} and 6221 zeroed next')
             self.ppms_field_scan_stop_button.configure(state='disabled')
     def _redraw_ppms_transport_plot(self):
         canvases = self.__dict__.get('ppms_harmonic_canvases', {})
@@ -39877,9 +40047,10 @@ class RTEPanel(PPMSPanel):
         axis = self.__dict__.get('ppms_plot_axis', 'field')
         x_key, x_label = {'field': ('measured_field_g', 'Measured magnetic field (G)'),
                           'angle': ('stage_angle_deg', 'Sample angle (°)'),
-                          'pulse': ('pulse_current_ma', '6221 pulse current (mA)')}.get(
+                          'pulse': ('pulse_current_ma', '6221 pulse current (mA)'),
+                          'avtech': ('pulse_amplitude_v', 'Avtech pulse amplitude (V)')}.get(
                               axis, ('6221_current_rms_ma', 'Applied AC current (mA RMS)'))
-        pulse_axis = axis == 'pulse'
+        pulse_axis = axis in ('pulse', 'avtech')
         by_order = {}
         for (order, channel), canvas in canvases.items():
             if not (pulse_axis and channel == 'theta'):

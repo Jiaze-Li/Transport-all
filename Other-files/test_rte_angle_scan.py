@@ -1930,10 +1930,10 @@ class AnglePageTests(unittest.TestCase):
         self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHHV")
         self.assertIsNone(panel.rte_controllers["newmark"].dll, "no DLL is loaded before Connect")
         combo = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_simple_mode)
-        # Angle+Field after Angle+Field (user, 2026-11-17); Switch last
-        # (user, 2026-11-22).
+        # Angle+Field after Angle+Field (user, 2026-11-17); Switch (user,
+        # 2026-11-22) and Switch2, the Avtech's (user, 2026-11-23), last.
         self.assertEqual(combo.options["values"],
-                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Switch"))
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Switch", "Switch2"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3068,13 +3068,13 @@ class OuterListTests(unittest.TestCase):
         self.assertIn("Angle+Field", app.RTE_ANGLE_MODES)
         # The Switch scan steps the magnet too (user, 2026-11-21); it is the
         # SHHV page's last mode since 2026-11-22 and turns no stage.
-        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Switch"))
-        self.assertEqual(app.RTE_SCAN_MODES[-1], "Switch")
+        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Switch", "Switch2"))
+        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Switch", "Switch2"))
         self.assertNotIn("Switch", app.RTE_ANGLE_MODES)
         # Since 2026-11-22 it has the name of the first Angle+Field (a range
         # of supply currents), which is gone (user: "delete the old
         # Angle+Field, change Angle+Field to Angle+Field").
-        self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2")])
+        self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2") and mode != "Switch2"])
         # The Angle mode alone is not offered (user, 2026-11-22: "delete the
         # only angle scan in SHHV & Switch module"); its sweep is still the
         # inner loop of the two outer-loop angle modes.
