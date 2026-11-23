@@ -368,6 +368,17 @@ def main():
                         panel.ppms_simple_mode.set(was)
                         panel._rte_mode_changed()
                         root.update()
+                    if name == "PPMS":
+                        # The page with Field+Temperature chosen: its outer
+                        # temperature row with Wait s (user, 2026-11-23).
+                        panel, was = app.ppms_panel, app.ppms_panel.ppms_simple_mode.get()
+                        for mode in ("Field+Temperature", was):
+                            panel.ppms_simple_mode.set(mode)
+                            panel.ppms_scan_mode_combo.event_generate("<<ComboboxSelected>>")
+                            root.update()
+                            if mode != was:
+                                shot = args.shots / f"PPMS_Field-Temperature-mode_{root.winfo_width()}px.png"
+                                print(f"       screenshot: {screenshot(root, tab, shot)}")
         finally:
             app.closing = True
             app.safe_close_hardware()
