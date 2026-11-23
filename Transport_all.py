@@ -14695,7 +14695,7 @@ class CombinedControlApp:
             if not cells:
                 for widget in harm.grid_slaves():
                     info = widget.grid_info()
-                    cells[widget] = (int(info['row']), int(info['column']), sum(int(float(str(v))) for v in widget.tk.splitlist(info.get('padx', 0))))
+                    cells[widget] = (int(info['row']), int(info['column']), sum(int(float(str(v))) for v in (lambda pad: pad if isinstance(pad, (tuple, list)) else str(pad).split())(info.get('padx', 0))))
             widths = {}
             for widget, (_row, column, padx) in cells.items():
                 widths[column] = max(widths.get(column, 0), widget.winfo_reqwidth() + padx)
