@@ -938,8 +938,10 @@ class SHHVConnectionColumnsTests(unittest.TestCase):
 
     def test_the_pulses_box_reaches_the_scan_box_edge(self):
         """User, 2026-11-23: the Switch mode's "Pulses mA:" box "as longer
-        as possible": it runs to the Scan box's right edge, or up to the
-        outer field row when that row sits beside it."""
+        as possible": it runs to the Scan box's right edge; when the outer
+        field row sits beside the scan rows (1101 px), in Switch mode its
+        label is beside its own box on the second row, under the Pulses
+        box, not above it."""
         panel = self.app.rte_panel
         was = panel.ppms_simple_mode.get()
         panel.ppms_simple_mode.set("Switch")
@@ -952,11 +954,13 @@ class SHHVConnectionColumnsTests(unittest.TestCase):
                     scan = entry.master.master
                     self.assertTrue(entry.winfo_ismapped())
                     right = entry.winfo_rootx() + entry.winfo_width()
+                    self.assertGreaterEqual(right, scan.winfo_rootx() + scan.winfo_width() - 16)
+                    label, box = (widget for widget, _options in panel.rte_outer_list_widgets)
+                    self.assertTrue(label.winfo_ismapped() and box.winfo_ismapped())
+                    self.assertGreaterEqual(label.winfo_rooty(), entry.winfo_rooty() + entry.winfo_height())
                     if panel.rte_outer_place == "beside":
-                        label = panel.rte_outer_list_widgets[0][0]
-                        self.assertLessEqual(right, label.winfo_rootx())
-                    else:
-                        self.assertGreaterEqual(right, scan.winfo_rootx() + scan.winfo_width() - 16)
+                        self.assertEqual((int(label.grid_info()["row"]), int(box.grid_info()["row"])), (1, 1))
+                        self.assertGreater(box.winfo_rootx(), label.winfo_rootx())
                     self.assertLessEqual(right, scan.winfo_rootx() + scan.winfo_width())
         finally:
             panel.ppms_simple_mode.set(was)

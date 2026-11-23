@@ -37726,6 +37726,7 @@ class RTEPanel(PPMSPanel):
         self.rte_edit_widgets.append((self.rte_outer_list_entry, 'normal'))
         self.rte_outer_list_widgets = [(list_label, dict(row=3, column=0, sticky='e', padx=0)), (self.rte_outer_list_entry, dict(row=3, column=1, columnspan=6, padx=(4, 2), sticky='ew'))]
         self.rte_outer_list_beside_options = [dict(row=0, column=7, sticky='w', padx=(6, 0)), dict(row=1, column=7, columnspan=7, padx=(6, 2), sticky='ew')]
+        self.rte_outer_switch_beside_options = [dict(row=1, column=7, sticky='e', padx=(6, 0)), dict(row=1, column=8, columnspan=6, padx=(4, 2), sticky='ew')]
         for widget, options in self.rte_outer_list_widgets:
             widget.grid(**options)
             widget.grid_remove()
@@ -37871,7 +37872,7 @@ class RTEPanel(PPMSPanel):
                     stacked = getattr(controls, '_pair_side_by_side', None) is False
                     room = scan.winfo_width() - self._pair_inset(scan)
                     widths = [widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options in zip(widgets, beside_options)]
-                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') else sum(widths)
+                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') and self.ppms_simple_mode.get() != SWITCH_SCAN_MODE else sum(widths)
                     rows_width = scan_rows_width(outer_row=False)
                     beside = stacked and room > 1 and room >= rows_width + beside_width
                 except (tk.TclError, ValueError):
@@ -37898,7 +37899,6 @@ class RTEPanel(PPMSPanel):
                 self.rte_outer_place = place
                 for (widget, under), options in zip(widgets, beside_options):
                     widget.grid_configure(**(options if beside else under))
-                self._rte_place_pulse_list()
             outer_guard = {}
             self.rte_arrange_outer_row = arrange_outer_row
             controls.bind('<Configure>', arrange_outer_row, add='+')
@@ -37979,19 +37979,16 @@ class RTEPanel(PPMSPanel):
             widget.grid_remove() if mode == SWITCH_SCAN_MODE else widget.grid()
         for widget in self.__dict__.get('rte_switch_pulse_list_widgets') or ():
             widget.grid() if mode == SWITCH_SCAN_MODE else widget.grid_remove()
-        self._rte_place_pulse_list()
         note = self.__dict__.get('rte_scan_note')
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
-    def _rte_place_pulse_list(self):
-        widgets = self.__dict__.get('rte_switch_pulse_list_widgets')
-        if widgets and isinstance(widgets[1], tk.Widget) and widgets[1].winfo_manager() == 'grid':
-            widgets[1].grid_configure(columnspan=4 if self.__dict__.get('rte_outer_place') == 'beside' else RTE_SCAN_ROWS_LAST_COLUMN - 2)
+    def _rte_outer_list_beside(self):
+        return self.__dict__.get('rte_outer_switch_beside_options' if self.ppms_simple_mode.get() == SWITCH_SCAN_MODE else 'rte_outer_list_beside_options') or []
     def _rte_shown_outer_set(self):
         for widgets, beside in ((self.__dict__.get('rte_outer_widgets') or [],
                                  self.__dict__.get('rte_outer_beside_options') or []),
                                 (self.__dict__.get('rte_outer_list_widgets') or [],
-                                 self.__dict__.get('rte_outer_list_beside_options') or [])):
+                                 self._rte_outer_list_beside())):
             if widgets and any(widget.winfo_manager() == 'grid' for widget, _options in widgets):
                 return widgets, beside
         return None
@@ -38011,7 +38008,7 @@ class RTEPanel(PPMSPanel):
                 variable.set(value)
         self.rte_outer_label.set(row['label'].replace('KEPCO', self._rte_supply_label()))
         if row.get('listed'):
-            widgets, beside_set = list_widgets, self.__dict__.get('rte_outer_list_beside_options')
+            widgets, beside_set = list_widgets, self._rte_outer_list_beside()
             entry = self.__dict__.get('rte_outer_list_entry')
             if entry is not None:
                 entry.configure(textvariable=variables[0])
