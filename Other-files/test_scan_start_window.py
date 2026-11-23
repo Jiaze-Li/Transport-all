@@ -45,13 +45,24 @@ class ScanStartWindowTests(unittest.TestCase):
             seen["weight"] = tkinter.font.Font(root=top, name=str(shown.cget("font")), exists=True).actual("weight")
             seen["buttons"] = [str(w.cget("text")) for w in widgets if w.winfo_class() == "TButton"]
             if press == "Escape":
+                top.focus_force()
+                top.update()
                 top.event_generate("<Escape>")
             else:
                 next(w for w in widgets if w.winfo_class() == "TButton" and str(w.cget("text")) == press).invoke()
 
+        def watchdog():
+            # A key that never arrives must not hang the run: close the
+            # window and fail.
+            for top in [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)]:
+                seen["error"] = AssertionError(f"{press}: the window was still open after 5 s")
+                top.destroy()
+
         self.root.after(300, answer)
+        guard = self.root.after(5300, watchdog)
         result = app.ask_scan_start_window(self.root, "SHHV scan", "Switch scan.\n\nField, the OUTER loop: ...",
                                            "at least 48 min 43 s", warning)
+        self.root.after_cancel(guard)
         if "error" in seen:
             raise seen["error"]
         return result, seen
