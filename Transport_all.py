@@ -2238,6 +2238,7 @@ RTE_TAB_TITLE = 'SHHV & Switch'
 RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
 RTE_FIELD_LIST_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
+RTE_SCAN_ROWS_LAST_COLUMN = 14
 SWITCH_DEFAULT_PULSES_MA = ', '.join(str(value) for value in range(-20, 21))
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
@@ -37649,7 +37650,8 @@ class RTEPanel(PPMSPanel):
         scan.grid(row=0, column=1, sticky='nsew', padx=(6, 0))
         scan.columnconfigure(0, weight=1)
         scan_rows = ttk.Frame(scan)
-        scan_rows.grid(row=0, column=0, sticky='nw')
+        scan_rows.grid(row=0, column=0, sticky='new')
+        scan_rows.columnconfigure(RTE_SCAN_ROWS_LAST_COLUMN, weight=1)
         self.ppms_simple_mode = tk.StringVar(value='Current')
         self.ppms_simple_range = [tk.StringVar(value=v) for v in ('0.01', '1', '0.01')]
         self.rte_scan_units = tk.StringVar(value='6221 mA RMS')
@@ -37673,7 +37675,7 @@ class RTEPanel(PPMSPanel):
         pulses = ttk.Entry(scan_rows, textvariable=self.rte_switch_pulses_var, width=6)
         self.rte_switch_pulse_list_widgets = [ttk.Label(scan_rows, text='Pulses mA:'), pulses]
         self.rte_switch_pulse_list_widgets[0].grid(row=0, column=1, columnspan=2, sticky='e', padx=(4, 0))
-        pulses.grid(row=0, column=3, columnspan=4, padx=2, sticky='ew')
+        pulses.grid(row=0, column=3, columnspan=RTE_SCAN_ROWS_LAST_COLUMN - 2, padx=2, sticky='ew')
         for widget in self.rte_switch_pulse_list_widgets:
             widget.grid_remove()
         self.rte_edit_widgets.append((pulses, 'normal'))
@@ -37896,6 +37898,7 @@ class RTEPanel(PPMSPanel):
                 self.rte_outer_place = place
                 for (widget, under), options in zip(widgets, beside_options):
                     widget.grid_configure(**(options if beside else under))
+                self._rte_place_pulse_list()
             outer_guard = {}
             self.rte_arrange_outer_row = arrange_outer_row
             controls.bind('<Configure>', arrange_outer_row, add='+')
@@ -37976,9 +37979,14 @@ class RTEPanel(PPMSPanel):
             widget.grid_remove() if mode == SWITCH_SCAN_MODE else widget.grid()
         for widget in self.__dict__.get('rte_switch_pulse_list_widgets') or ():
             widget.grid() if mode == SWITCH_SCAN_MODE else widget.grid_remove()
+        self._rte_place_pulse_list()
         note = self.__dict__.get('rte_scan_note')
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
+    def _rte_place_pulse_list(self):
+        widgets = self.__dict__.get('rte_switch_pulse_list_widgets')
+        if widgets and isinstance(widgets[1], tk.Widget) and widgets[1].winfo_manager() == 'grid':
+            widgets[1].grid_configure(columnspan=4 if self.__dict__.get('rte_outer_place') == 'beside' else RTE_SCAN_ROWS_LAST_COLUMN - 2)
     def _rte_shown_outer_set(self):
         for widgets, beside in ((self.__dict__.get('rte_outer_widgets') or [],
                                  self.__dict__.get('rte_outer_beside_options') or []),

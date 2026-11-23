@@ -9,6 +9,8 @@
   back through the list; Loops repeats it. Start-up text: -20, -19, … 20 (the old -20 to 20 step 1). Each value within
   ±105 mA, at most 1000. Other modes keep Start / End / Step. `rte_pulse_list`, `rte_scan_plan(values=…)`; the run's
   `settings.json` keeps the typed text under `plan.typed`.
+- The "Pulses mA:" box runs to the Scan box's right edge (user, 2026-11-23: "make this text input longer … as longer as
+  possible"), or up to the outer field row when that row sits beside it in a wide window (`_rte_place_pulse_list`).
 - Acquire s starts at 30 s when Switch is chosen (`SWITCH_ACQUISITION_S`), unless a value of your own is in the box.
 
 ## Scan-start windows show only the expected time (user, 2026-11-23)

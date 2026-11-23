@@ -936,6 +936,33 @@ class SHHVConnectionColumnsTests(unittest.TestCase):
         self.assertEqual(int(panel.zurich_harmonic_combo.grid_info()["row"]), 3)
         self.assertFalse(hasattr(self.app, "switch_panel"))
 
+    def test_the_pulses_box_reaches_the_scan_box_edge(self):
+        """User, 2026-11-23: the Switch mode's "Pulses mA:" box "as longer
+        as possible": it runs to the Scan box's right edge, or up to the
+        outer field row when that row sits beside it."""
+        panel = self.app.rte_panel
+        was = panel.ppms_simple_mode.get()
+        panel.ppms_simple_mode.set("Switch")
+        panel._rte_mode_changed()
+        try:
+            for width in (lab_window(self.app)[0], LAB_WIDE):
+                self.show(width)
+                with self.subTest(width=width):
+                    entry = panel.rte_switch_pulse_list_widgets[1]
+                    scan = entry.master.master
+                    self.assertTrue(entry.winfo_ismapped())
+                    right = entry.winfo_rootx() + entry.winfo_width()
+                    if panel.rte_outer_place == "beside":
+                        label = panel.rte_outer_list_widgets[0][0]
+                        self.assertLessEqual(right, label.winfo_rootx())
+                    else:
+                        self.assertGreaterEqual(right, scan.winfo_rootx() + scan.winfo_width() - 16)
+                    self.assertLessEqual(right, scan.winfo_rootx() + scan.winfo_width())
+        finally:
+            panel.ppms_simple_mode.set(was)
+            panel._rte_mode_changed()
+            self.root.update()
+
 
 class ReviewFixWidgetTests(unittest.TestCase):
     """Widgets and texts changed by the review of the merged areas (review,
