@@ -1251,18 +1251,19 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
                 self.choose("Field+Temperature", width)
             with self.subTest(history=history):
                 edge = right(tab)
-                pending, over = [settings, self.scan, panel.ppms_instruments_frame], []
+                pending, over = [settings, self.scan, panel.ppms_instruments_frame, panel.ppms_backend_combo.master], []
                 while pending:
                     widget = pending.pop()
                     pending.extend(widget.winfo_children())
                     if widget.winfo_ismapped() and right(widget) > edge + 1:
                         over.append(widget)
                 self.assertEqual(over, [], "widgets past the page's right edge")
-                for widget in (wait, panel.zurich_harmonic_combo, live, panel.zurich_disconnect_button, *panel.ppms_device_disconnect_buttons.values()):
+                for widget in (wait, panel.zurich_harmonic_combo, live, panel.zurich_disconnect_button, *panel.ppms_device_disconnect_buttons.values(), panel.ppms_read_button, panel.ppms_environment_lamp):
                     self.assertTrue(widget.winfo_ismapped())
                 name, _text, _entry, _lamp, status, _shown = panel.ppms_instrument_cells["6221"]
                 self.assertEqual(str(name.cget("text")), "Keithley 6221:" if history[-1] == LAB_WIDE else "6221:")
                 self.assertEqual(status.getvar(str(status.cget("textvariable"))), "Not connected" if history[-1] == LAB_WIDE else "Offline")
+                self.assertEqual(panel.ppms_connection_shown_var.get(), "Not connected" if history[-1] == LAB_WIDE else "Offline")
                 if history[-1] == LAB_WIDE:
                     self.assertGreaterEqual(self.scan.winfo_rootx(), right(settings))
                     self.assertLessEqual(abs(self.scan.winfo_rooty() - settings.winfo_rooty()), 2)

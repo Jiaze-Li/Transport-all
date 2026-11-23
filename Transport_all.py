@@ -14182,7 +14182,8 @@ class CombinedControlApp:
         self.ppms_backend_combo = ttk.Combobox(environment, textvariable=self.ppms_backend_var, values=(PPMS_QDINSTRUMENT_BACKEND, PPMS_MULTIPYVU_BACKEND), state='readonly', width=20)
         self.ppms_backend_combo.grid(row=0, column=1, padx=(0, 8), sticky="w")
         self.ppms_backend_combo.bind('<<ComboboxSelected>>', self._on_ppms_backend_changed, add='+')
-        ttk.Label(environment, text="PPMS IP:").grid(row=0, column=2, sticky="w")
+        self.ppms_host_label = ttk.Label(environment, text="PPMS IP:")
+        self.ppms_host_label.grid(row=0, column=2, sticky="w")
         self.ppms_host_entry = ttk.Combobox(environment, textvariable=self.ppms_host_var, values=PPMS_HOST_CHOICES, width=16)
         self.ppms_host_entry.grid(row=0, column=3, padx=(0, 8), sticky="w")
         ttk.Label(environment, text="Port:").grid(row=0, column=4, sticky="w")
@@ -14194,8 +14195,18 @@ class CombinedControlApp:
         self.ppms_disconnect_button.grid(row=0, column=7, padx=2)
         self.ppms_read_button = ttk.Button(environment, text='Read now', command=self.read_ppms_environment_once, state='disabled')
         self.ppms_read_button.grid(row=0, column=8, padx=(8, 2))
-        self._create_connection_indicator(environment, 'ppms_environment').grid(row=0, column=9, padx=(8, 1))
-        ttk.Label(environment, textvariable=self.ppms_connection_var).grid(row=0, column=10, sticky='w')
+        self.ppms_environment_lamp = self._create_connection_indicator(environment, 'ppms_environment')
+        self.ppms_environment_lamp.grid(row=0, column=9, padx=(8, 1))
+        self.ppms_connection_shown_var = tk.StringVar(value=self.ppms_connection_var.get())
+        def shown(*_args) -> None:
+            text = self.ppms_connection_var.get()
+            self.ppms_connection_shown_var.set({'Not connected': 'Offline', 'Connected': 'Online'}.get(text, text) if self.__dict__.get('ppms_rows_tight') else text)
+        if hasattr(self.ppms_connection_var, 'trace_add'):
+            self.ppms_connection_var.trace_add('write', shown)
+        self.ppms_connection_shown = shown
+        status = ttk.Label(environment, width=1)
+        status.grid(row=0, column=10, sticky='ew')
+        show_trimmed(status, self.ppms_connection_shown_var)
         metrics_outer = ttk.LabelFrame(content, text="Live readings", padding=3)
         self.ppms_metrics_frame = metrics_outer
         metrics_outer.grid_propagate(False)
@@ -14723,7 +14734,7 @@ class CombinedControlApp:
             if guard[2] > PAIR_FLIP_LIMIT and 'columns' in state:
                 return
             if bool(state.get('tight')) != tight:
-                self._ppms_tighten_instruments(tight)
+                self._ppms_tighten_rows(tight)
             state['columns'], state['tight'] = columns, tight
             content.columnconfigure(0, weight=2 if wide else 0)
             instruments.grid_configure(columnspan=1 if wide else 2)
@@ -14736,7 +14747,15 @@ class CombinedControlApp:
         for widget in (content, scan):
             widget.bind('<Configure>', place, add='+')
         place()
-    def _ppms_tighten_instruments(self, tight: bool) -> None:
+    def _ppms_tighten_rows(self, tight: bool) -> None:
+        self.ppms_rows_tight = tight
+        self.ppms_host_label.configure(text='IP:' if tight else 'PPMS IP:')
+        for widget, wide, narrow in ((self.ppms_backend_combo, 20, 18), (self.ppms_host_entry, 16, 14), (self.ppms_port_entry, 7, 6)):
+            widget.configure(width=narrow if tight else wide)
+            widget.grid_configure(padx=(0, 3) if tight else (0, 8))
+        self.ppms_read_button.grid_configure(padx=(3, 2) if tight else (8, 2))
+        self.ppms_environment_lamp.grid_configure(padx=(3, 1) if tight else (8, 1))
+        self.ppms_connection_shown()
         short, words = self.__dict__.setdefault('ppms_short_status_vars', {}), {'Not connected': 'Offline', 'Connected': 'Online', 'Pass complete': 'Done'}
         for key, (name, text, entry, lamp, status, shown) in self.__dict__.get('ppms_instrument_cells', {}).items():
             sr830 = key in PPMS_SR830_KEYS
@@ -21085,7 +21104,7 @@ class CombinedControlApp:
         self.magnet_scan_progress.grid(row=0, column=0, sticky="ew", padx=(0, 7))
         ttk.Label(progress_row, textvariable=self.magnet_scan_eta_var, foreground=THEME_COLORS['accent'], font=(self.ui_font_family, self.ui_small_font_size, 'bold')).grid(row=0, column=1, sticky='e')
         scan_path_label = ttk.Label(scan_box, text='Path: start→end→start; both KEPCOs to 0 A at every end (done, stop, error).', foreground='#9a4d00', wraplength=420)
-        scan_path_label.grid(row=3, column=0, sticky="w", pady=(2, 0))
+        scan_path_label.grid(row=3, column=0, sticky="ew", pady=(2, 0))
         scan_folder_label = ttk.Label(scan_box, textvariable=self.magnet_image_directory_var, foreground='#555555', wraplength=350)
         scan_folder_label.grid(row=4, column=0, sticky="w", pady=(2, 0))
         scan_wrap = {"width": None}

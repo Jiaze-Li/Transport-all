@@ -15,8 +15,12 @@
   address scrolls inside the box), status words of at most 8 letters ("Online" / "Offline" for connected / not
   connected, "Done" for pass complete; Not read, Warning, Locked, Updating as before), smaller gaps; the Zurich row
   says "Ref." and its button "Connect" (same action as "Connect / apply settings"). `_ppms_tighten_instruments`.
-- Still cut at 1101 px: the right end of the MultiVu row (part of Read now and its connection status). Plots are
-  shorter there, since the scan box takes its own row.
+- MultiVu row (user, 2026-11-23: "fix the MultiVu row clipping at 1101 px too"), tightened with the instrument rows:
+  "IP:" for "PPMS IP:", narrower Interface / IP / Port boxes, smaller gaps, "Online" / "Offline"; its status line
+  is now cut with "…" to the room left at any width instead of running off the window. `_ppms_tighten_rows`.
+- MOKE magnet: the orange "Path: start→end→start; …" line was already shown in full on two lines; the label now
+  spans its box, so the layout check (which flagged it as cut) sees that.
+- Plots are shorter at 1101 px, since the PPMS scan box takes its own row.
 
 ## Wrapped statements joined, two unused definitions removed (user, 2026-11-23)
 
