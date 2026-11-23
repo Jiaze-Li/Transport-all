@@ -1,5 +1,21 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Scan-start windows show only the expected time (user, 2026-11-23)
+
+- **Request:** "all this scan start window, only tell me the scan expected time is Okay and make the required time
+  bold and red."
+- Every scan's Yes/No window before the run folder (SHHV & Switch in all modes, PPMS, STFMR lock-in scan, STFMR FMR
+  scan and fixed-field frequency sweep, MOKE current scan, MOKE-24, CIDWM pulse sign scan, Non-local VI, 2400-IV and
+  6221-IV) now says only "Expected scan time:", the time in bold red (1.4 x the normal size), and "Is this time OK?
+  Start the scan?" with Yes / No (Enter = Yes, Escape or closing the window = No). `ask_scan_start`,
+  `CombinedControlApp._ask_scan_start`.
+- Kept above the time, in red, because they are hazards: MOKE-24's high-voltage and near-OVP warnings, 2400-IV's
+  HIGH VOLTAGE line, PPMS's "the sample rotator turns more than 30° first".
+- The long explanation (loops, settle times, what is zeroed at the end, the oscilloscope note …) is no longer shown;
+  the code still builds it and the tests still check it (they answer the window through `messagebox.askyesno`). MOKE-24
+  had no time in its window: it now shows the same per-point estimate as its Remaining readout.
+- Other Yes/No windows (stage fixes, Apply pulse, large PPMS rotation, Close) are unchanged.
+
 ## PPMS page in a narrow window: scan box under the settings (user, 2026-11-23)
 
 - **Request:** "fix the PPMS scan box clipping at 1101 px".

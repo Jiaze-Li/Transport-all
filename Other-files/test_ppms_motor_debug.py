@@ -14,6 +14,12 @@ app = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = app
 spec.loader.exec_module(app)
 
+# The scan-start window (user, 2026-11-23: only the expected time, bold red)
+# is a modal Toplevel; the tests answer it through messagebox.askyesno, as
+# before, and so still see the whole question that goes to the log.
+app.ask_scan_start_window = app.ask_scan_start
+app.ask_scan_start = lambda parent, title, question, expected, warning="", **options: app.messagebox.askyesno(title, question, parent=parent, **options)
+
 
 class Type:
     def __init__(self, name, enum=False, ref=False):

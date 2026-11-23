@@ -469,6 +469,7 @@ class EstimateTests(unittest.TestCase):
         a.moke_hardware_parameter_snapshot.return_value = {}
         a._snapshot_variable = C._snapshot_variable
         a._format_scan_duration = C._format_scan_duration
+        a._ask_scan_start = types.MethodType(C._ask_scan_start, a)
         recorder = mock.Mock(directory=Path("MOKE_run"))
         with mock.patch.object(app, "begin_scan_run", return_value=recorder), \
                 mock.patch.object(app.messagebox, "askyesno", return_value=True) as asked, \

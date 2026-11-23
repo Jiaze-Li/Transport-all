@@ -272,6 +272,7 @@ class MagnetStartTests(Folder):
         a.moke_hardware_parameter_snapshot.return_value = {}
         a._snapshot_variable = C._snapshot_variable
         a._format_scan_duration = C._format_scan_duration
+        a._ask_scan_start = types.MethodType(C._ask_scan_start, a)
         a._scan_run_parent = C._scan_run_parent
         a.magnet_csv_directory = self.folder
         a.closing = False

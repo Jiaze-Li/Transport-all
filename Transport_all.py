@@ -1964,6 +1964,48 @@ def zurich_choice_hint(device: str) -> str:
     if device == NONLOCAL_MFLI_DEVICE:
         return 'If MF Device Finder lists DEV4414 at 192.168.68.250 instead, that is the Super Zurich: choose "DEV4414 (Super)" in the page\'s Zurich list.'
     return 'The page\'s Zurich list offers the lab\'s two MFLIs: "DEV4435 (Normal)" and "DEV4414 (Super)", the Super Zurich at 192.168.68.250.'
+def ask_scan_start(parent, title, question, expected, warning='', **_options) -> bool:
+    top = tk.Toplevel(parent)
+    top.title(title)
+    top.transient(parent)
+    top.resizable(False, False)
+    body = ttk.Frame(top, padding=18)
+    body.grid(row=0, column=0, sticky='nsew')
+    base = tkfont.nametofont('TkDefaultFont')
+    size = int(base.cget('size'))
+    big = base.copy()
+    big.configure(weight='bold', size=round(size * 1.4))
+    row = 0
+    if warning:
+        ttk.Label(body, text=warning, foreground='#b00020', wraplength=460, justify='left').grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 12))
+        row = 1
+    ttk.Label(body, text='Expected scan time:').grid(row=row, column=0, columnspan=2, sticky='w')
+    ttk.Label(body, text=expected, foreground='#d00000', font=big).grid(row=row + 1, column=0, columnspan=2, sticky='w', pady=(4, 12))
+    ttk.Label(body, text='Is this time OK? Start the scan?').grid(row=row + 2, column=0, columnspan=2, sticky='w', pady=(0, 14))
+    answer = [False]
+    def close(value: bool) -> None:
+        answer[0] = value
+        top.grab_release()
+        top.destroy()
+    yes = ttk.Button(body, text='Yes', width=10, command=lambda: close(True))
+    yes.grid(row=row + 3, column=0, sticky='e', padx=(0, 8))
+    ttk.Button(body, text='No', width=10, command=lambda: close(False)).grid(row=row + 3, column=1, sticky='w')
+    body.columnconfigure(0, weight=1)
+    top.protocol('WM_DELETE_WINDOW', lambda: close(False))
+    top.bind('<Escape>', lambda _event: close(False))
+    top.bind('<Return>', lambda _event: close(True))
+    top.ask_scan_start_font = big
+    top.update_idletasks()
+    try:
+        x = parent.winfo_rootx() + max(0, (parent.winfo_width() - top.winfo_reqwidth()) // 2)
+        y = parent.winfo_rooty() + max(0, (parent.winfo_height() - top.winfo_reqheight()) // 3)
+        top.geometry(f'+{x}+{y}')
+    except tk.TclError:
+        pass
+    yes.focus_set()
+    top.grab_set()
+    top.wait_window()
+    return answer[0]
 def show_trimmed(label, variable) -> None:
     if not isinstance(label, tk.Widget):
         label.configure(textvariable=variable)
@@ -17159,9 +17201,7 @@ class CombinedControlApp:
             angle_line = angle_plan['text'] + (f'; the stage is at {known_deg:+.3f}° now' if known_deg is not None else '')
             estimate_scale = f'; about {self._stfmr_lockin_duration_text(estimate)}' if estimate >= 120.0 else ''
             fixed_current = self.stfmr_lockin_points_per_loop == 1
-            if not messagebox.askyesno(
-                "STFMR scan",
-                f"Microwave: {frequencies_ghz[0]:g} → {frequencies_ghz[-1]:g} GHz, "
+            if not self._ask_scan_start("STFMR scan", f"Microwave: {frequencies_ghz[0]:g} → {frequencies_ghz[-1]:g} GHz, "
                 f"{len(frequencies_ghz)} frequencies\n"
                 + f"{modulation_text}\n"
                 + f"{power_text}\n"
@@ -17191,9 +17231,7 @@ class CombinedControlApp:
                 + f"At the end (completed, stopped or failed) the {name} is zeroed and the SMB100A RF "
                 "switched off. The run folder and file name are asked next.\n"
                 + (f"Start now, turn the stage and enable the {name} and SMB100A outputs?"
-                   if angle_plan["used"] else f"Start now and enable the {name} and SMB100A outputs?"),
-                parent=self.root,
-            ):
+                   if angle_plan["used"] else f"Start now and enable the {name} and SMB100A outputs?"), f'at least {self._format_scan_duration(estimate)}', parent=self.root):
                 return
             if self.closing or self.stfmr_lockin_closed:
                 return
@@ -19407,10 +19445,7 @@ class CombinedControlApp:
         name = self._stfmr_supply_label()
         mixed_source_ports = bool(set(selected) & {'S11', 'S21'} and set(selected) & {'S12', 'S22'})
         source_note = '\nMixed source-port parameters: the PNA switches the source port sequentially at each field point.' if mixed_source_ports else ''
-        if not messagebox.askyesno(
-            "Start STFMR FMR scan",
-            (
-                f"PNA: {frequencies[0] / 1e9:g} → "
+        if not self._ask_scan_start("Start STFMR FMR scan", f"PNA: {frequencies[0] / 1e9:g} → "
                 f"{frequencies[-1] / 1e9:g} GHz, {len(frequencies)} frequencies\n"
                 f"PNA stimulus power: {power_dbm:g} dBm\n"
                 f"Current: {currents[0]:g} → {currents[-1]:g} A, {len(currents)} points\n"
@@ -19422,10 +19457,7 @@ class CombinedControlApp:
                 + (f" ({ramp_s:.0f} s of LS648 ramps at {supply.rate_a_s:g} A/s)" if supply.lakeshore else "")
                 + f"{source_note}\n\nAt the end (completed, stopped or failed) the {name} is "
                 + ("ramped to 0 A" if supply.lakeshore else "zeroed and turned off")
-                + " and the PNA RF switched off. The run folder and file name are asked next."
-            ),
-            parent=self.root,
-        ):
+                + " and the PNA RF switched off. The run folder and file name are asked next.", f'at least {self._format_scan_duration(estimated)}', parent=self.root):
             return
         settings = self._stfmr_fmr_settings(
             "fmr", selected, frequencies, power_dbm, limit,
@@ -19738,10 +19770,7 @@ class CombinedControlApp:
         estimated = (2 + iterations) * settle + len(frequencies) * 0.25
         if supply.lakeshore:
             estimated += (2 + iterations) * (MAGNET_FIELD_ZERO_MAX_STEP_A / supply.rate_a_s + LAKESHORE_SETPOINT_OVERHEAD_S)
-        if not messagebox.askyesno(
-            "Start fixed-field frequency sweep",
-            (
-                f"Target field: {target_field:+g} G (tolerance ±{tolerance:g} G)\n"
+        if not self._ask_scan_start("Start fixed-field frequency sweep", f"Target field: {target_field:+g} G (tolerance ±{tolerance:g} G)\n"
                 f"PNA: {frequencies[0] / 1e9:g} → "
                 f"{frequencies[-1] / 1e9:g} GHz, {len(frequencies)} points\n"
                 f"PNA stimulus power: {power_dbm:g} dBm\n"
@@ -19752,10 +19781,7 @@ class CombinedControlApp:
                 + f"\n\nThe program adjusts the {name} current in small steps using 475 feedback. At the end "
                 f"(completed, stopped or failed) the {name} is "
                 + ("ramped to 0 A" if supply.lakeshore else "zeroed and turned off")
-                + " and the PNA RF switched off. The run folder and file name are asked next."
-            ),
-            parent=self.root,
-        ):
+                + " and the PNA RF switched off. The run folder and file name are asked next.", f'at most about {self._format_scan_duration(estimated)}', parent=self.root):
             return
         settings = self._stfmr_fmr_settings(
             "frequency", selected, frequencies, power_dbm, voltage_limit,
@@ -24509,6 +24535,8 @@ class CombinedControlApp:
         except RuntimeError as error:
             raise ValueError(str(error)) from error
         return sequence, settle_s, collect_s, key
+    def _ask_scan_start(self, title, question, expected, warning='', **options) -> bool:
+        return ask_scan_start(options.pop('parent', self.root), title, question, expected, warning, **options)
     @staticmethod
     def _format_scan_duration(seconds: float) -> str:
         total_seconds = max(0, int(math.ceil(float(seconds))))
@@ -24602,7 +24630,7 @@ class CombinedControlApp:
             f"back, and the {other_label.lower()} KEPCO is sent 0 A.\n"
             "Next: the folder for the run (its live CSV and log), then an optional file name."
         )
-        if not messagebox.askyesno('MOKE current scan', summary, icon='warning', parent=self.root):
+        if not self._ask_scan_start('MOKE current scan', summary, self._format_scan_duration(estimated_total_seconds), icon='warning', parent=self.root):
             abort_scan_preparation("Magnet current scan cancelled; continuous reading resumed")
             return
         settings = {
@@ -25647,7 +25675,7 @@ class CombinedControlApp:
             )
         if max_abs_v > 42.0:
             summary = '⚠ High-voltage scan: confirm the wiring, probes, sample and shielding meet high-voltage safety requirements.\n\n' + summary
-        if not messagebox.askyesno('MOKE-24 scan', summary, icon='warning', parent=self.root):
+        if not self._ask_scan_start('MOKE-24 scan', summary, f'about {self._format_scan_duration(len(sequence) * (max(settle_s + collect_s, camera_average_block_s(getattr(self.camera_window, "latest_frame", None))) + 0.25))}', warning=summary.split('About to run')[0].strip(), icon='warning', parent=self.root):
             return
         settings = {
             "software.version": APP_VERSION,
@@ -26552,9 +26580,7 @@ class CombinedControlApp:
             pulse_text = f"{len(signs)} Avtech pulses of {settings['amplitude_v']:g} V, {settings['width_s'] * 1000000000.0:g} ns (50 Ω load)"
         else:
             pulse_text = f"{len(signs)} pulses of {settings['current_ma']:g} mA, {settings['width_s'] * 1000000.0:g} us, compliance {settings['compliance_v']:g} V"
-        if not messagebox.askyesno(
-            "Start the CIDWM pulse sign scan?",
-            f"{pulse_text}\n"
+        if not self._ask_scan_start("Start the CIDWM pulse sign scan?", f"{pulse_text}\n"
             f"Signs: {shown}\n"
             f"After each pulse: wait {settings['wait_s']:g} s, then for a camera frame whose processed "
             "image holds only frames taken after the pulse; save its display (8-bit PNG), its raw "
@@ -26563,10 +26589,7 @@ class CombinedControlApp:
             "The scan makes a run folder, with the images, the live CSV and the log, in the folder "
             f"you choose next (then an optional file name). The {name} is switched off after each pulse; "
             "at every end (completed, stopped or failed) the 6221 and the Avtech are switched off, "
-            "read back.",
-            icon="warning",
-            parent=self.root,
-        ):
+            "read back.", f'about {self._format_scan_duration(estimate)}', icon="warning", parent=self.root):
             return
         parameters = {'pulse_source': name, 'pulses': len(signs), 'signs_pattern': settings['signs_text'], 'signs': ''.join(('+' if sign > 0 else '-' for sign in signs))}
         if source == "avtech":
@@ -28118,9 +28141,7 @@ class CombinedControlApp:
         frequencies = settings["frequencies"]
         points = len(settings["voltage_scan"])
         loops = int(settings.get("loops", 1))
-        if not messagebox.askyesno(
-            "Non-local VI scan",
-            f"Pulses: {settings['start_voltage_v']:g} → "
+        if not self._ask_scan_start("Non-local VI scan", f"Pulses: {settings['start_voltage_v']:g} → "
             f"{settings['stop_voltage_v']:g} → "
             f"{settings['start_voltage_v']:g} V, "
             + (
@@ -28151,10 +28172,7 @@ class CombinedControlApp:
                 "Confirm the interlock wiring and the Trigger Link, then start?"
                 if settings["output_mode"] == "AC"
                 else "Confirm the interlock wiring, the 2182A and the DC current direction, then start?"
-            ),
-            icon="warning",
-            parent=self.root,
-        ):
+            ), self._format_scan_duration(settings['estimated_s']), icon="warning", parent=self.root):
             return
         recorder = self._nonlocal_begin_run('gate', 'Select the folder for the Gate-VI run folder', self.nonlocal_vi_output_directory, self._nonlocal_vi_run_settings(settings))
         if recorder is None:
@@ -29754,9 +29772,8 @@ class CombinedControlApp:
         source = settings["source"]
         model = self.nonlocal_vi_2410_controller.model
         high_voltage = source["range_v"] > KEITHLEY_LOW_SOURCE_RANGE_V
-        if not messagebox.askyesno(
-            "Start the 2400-IV sweep?",
-            f"Keithley {model}: "
+        high_voltage_text = (f"HIGH VOLTAGE: up to {source['max_abs_v']:g} V on the {source['range_v']:g} V range; " + (f"no hardware OVP below the {model}'s {source['ovp_v']:g} V maximum." if source["ovp_none"] else f"hardware OVP {source['ovp_v']:g} V.")) if high_voltage else ""
+        if not self._ask_scan_start("Start the 2400-IV sweep?", f"Keithley {model}: "
             f"{settings['start_v']:g} V → {settings['end_v']:g} V in {settings['step_v']:g} V steps, "
             f"{total} points, {settings['settle_s']:g} s settle\n"
             + (
@@ -29766,20 +29783,10 @@ class CombinedControlApp:
             )
             + f"Current limit: {settings['current_limit_a']:g} A\n"
             f"Estimated time: about {estimate}"
-            + (
-                f"\n\nHIGH VOLTAGE: up to {source['max_abs_v']:g} V on the {source['range_v']:g} V range; "
-                + (
-                    f"no hardware OVP below the {model}'s {source['ovp_v']:g} V maximum."
-                    if source["ovp_none"] else f"hardware OVP {source['ovp_v']:g} V."
-                )
-                if high_voltage else ""
-            )
+            + (f"\n\n{high_voltage_text}" if high_voltage else "")
             + "\n\nNext: the folder and an optional file name for the run folder (live CSV and "
             "log). At every end (completed, stopped or failed) the Keithley and the 6221 are "
-            "zeroed and read back.",
-            icon="warning" if high_voltage else "question",
-            parent=self.root,
-        ):
+            "zeroed and read back.", f'about {estimate}', warning=high_voltage_text, icon="warning" if high_voltage else "question", parent=self.root):
             return
         settings["started"] = datetime_module.datetime.now().isoformat(timespec="seconds")
         parameters = {
@@ -30368,9 +30375,7 @@ class CombinedControlApp:
                         f"{LOCKIN_SETTLE_TAUS:g} × the slowest TC, or Settle s); set 12 dB/oct "
                         "on its front panel, or raise Settle s\n"
                     )
-        if not messagebox.askyesno(
-            "Start the 6221-IV scan?",
-            f"6221 sine {settings['start_ma']:g} → {settings['end_ma']:g} mA RMS in "
+        if not self._ask_scan_start("Start the 6221-IV scan?", f"6221 sine {settings['start_ma']:g} → {settings['end_ma']:g} mA RMS in "
             f"{settings['step_ma']:g} mA steps"
             + (", round trip" if settings["round_trip"] else "")
             + f", {settings['loops']} loop(s): {points} points"
@@ -30386,9 +30391,7 @@ class CombinedControlApp:
             f"Estimated time: about {estimate}\n\n"
             "Next: the folder and an optional file name for the run folder (live CSV and "
             "log). At every end (completed, stopped or failed) the 6221 and the Keithley are "
-            "zeroed and read back.",
-            parent=self.root,
-        ):
+            "zeroed and read back.", f'about {estimate}', parent=self.root):
             return
         settings["started"] = datetime_module.datetime.now().isoformat(timespec="seconds")
         parameters = {key: value for key, value in settings.items() if key not in {'plan', 'lockin_configs', 'mfli_config', 'passes', 'orders', 'measured'}}
@@ -33100,17 +33103,12 @@ class CombinedControlApp:
         else:
             field_end = f"the field is not commanded (the CSV's target_field_oe is the field read now, {fixed_field:g} Oe)"
         end_line = f'\n\nAt every end (completed, stopped or failed) the 6221 is switched off and read back as off. The temperature and the angle stay where the scan left them; {field_end}.'
-        if not messagebox.askyesno(
-            "PPMS scan time estimate",
-            f"Scan mode: {mode}\n{frequency_line}Measurement points: {total}\n{settle_line}\n"
+        if not self._ask_scan_start("PPMS scan time estimate", f"Scan mode: {mode}\n{frequency_line}Measurement points: {total}\n{settle_line}\n"
             f"Estimated duration: about {estimate_text}\n\n"
             "This is an estimate; the actual duration may grow with instrument settling and rotation waits."
             + rotation_note
             + end_line
-            + "\n\nContinue to choose the run folder and start the scan?",
-            icon="warning" if rotation_note else "question",
-            parent=self.root,
-        ):
+            + "\n\nContinue to choose the run folder and start the scan?", f'about {estimate_text}', warning=rotation_note.strip(), icon="warning" if rotation_note else "question", parent=self.root):
             return
         try:
             run_settings = self._ppms_run_settings(mode, sequence, rate_oe_s, stable_s, approach, transport_settings, pass_settles, settle_s, estimated_seconds, fixed_field, field_commanded)
@@ -38828,21 +38826,19 @@ class RTEPanel(PPMSPanel):
         if angle:
             first, last = plan[0][2], max((p[2] for p in plan), key=lambda value: abs(value - plan[0][2]))
         if switch:
-            if not messagebox.askyesno(f'{self.ppms_page_name} scan', self._rte_switch_question(plan, outer, passes, limit, pulse, settings, settle_text, least_text, ramp_text), parent=self.root):
+            if not self._ask_scan_start(f'{self.ppms_page_name} scan', self._rte_switch_question(plan, outer, passes, limit, pulse, settings, settle_text, least_text, ramp_text), f'at least {least_text}', parent=self.root):
                 return
         elif field_angle:
-            if not messagebox.askyesno(f'{self.ppms_page_name} {mode} scan', self._rte_field_angle_question(plan, outer, passes, limit, settle_text, least_text, turning, ramp_text), parent=self.root):
+            if not self._ask_scan_start(f'{self.ppms_page_name} {mode} scan', self._rte_field_angle_question(plan, outer, passes, limit, settle_text, least_text, turning, ramp_text), f'at least {least_text}', parent=self.root):
                 return
         elif outer:
-            if not messagebox.askyesno(f'{self.ppms_page_name} {mode} scan', self._rte_outer_question(
+            if not self._ask_scan_start(f'{self.ppms_page_name} {mode} scan', self._rte_outer_question(
                     mode, plan, outer, passes, limit, field_current, settle_text, least_text,
-                    len(angles), turning, ramp_text), parent=self.root):
+                    len(angles), turning, ramp_text), f'at least {least_text}', parent=self.root):
                 return
         if mode == 'Angle':
             trip = ', round trip' if self.rte_round_trip.get() else ''
-            if not messagebox.askyesno(
-                    f'{self.ppms_page_name} Angle scan',
-                    f'Angle scan from {first:g}° to {last:g}° (step {abs(float(self.ppms_simple_range[2].get())):g}°'
+            if not self._ask_scan_start(f'{self.ppms_page_name} Angle scan', f'Angle scan from {first:g}° to {last:g}° (step {abs(float(self.ppms_simple_range[2].get())):g}°'
                     f'{trip}): {len(plan)} angles x {len(passes)} harmonic pass(es) = {len(plan) * len(passes)} '
                     'points.\n\n'
                     f'Each angle waits {settle_text} before it is read; the scan takes at least {least_text}.'
@@ -38853,8 +38849,7 @@ class RTEPanel(PPMSPanel):
                     'stays where the scan left it.\n\n'
                     'The Newmark stage turns the SAMPLE HOLDER with its wires attached, at '
                     f'{NEWMARK_SPEED_DEG_S:g}°/s, to each angle counted from the stage zero (absolute moves, all '
-                    f'within ±{NEWMARK_CABLE_LIMIT_DEG:g}° of it). Can the wires follow?\n\nStart the scan?',
-                    parent=self.root):
+                    f'within ±{NEWMARK_CABLE_LIMIT_DEG:g}° of it). Can the wires follow?\n\nStart the scan?', f'at least {least_text}', parent=self.root):
                 return
         folder = filedialog.askdirectory(parent=self.root, title=f'{self.ppms_page_name} live CSV folder')
         if not folder:
