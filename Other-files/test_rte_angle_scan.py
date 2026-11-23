@@ -1923,9 +1923,13 @@ class AnglePageTests(unittest.TestCase):
         # The page starts on the user's Angle+Field scan (2026-11-17; Angle
         # from 2026-11-16).
         self.assertEqual(panel.rte_scan_note.get(), "Angle+Field: Stage °; outer: field G")
-        self.assertIs(note.parent.parent, scan)
+        # The note is the scan box's own, shown in the notes row (or beside
+        # Start / Stop when there is room, user, 2026-11-23).
+        self.assertIs(note.parent, scan)
+        notes = note.grid_options["in_"]
+        self.assertIs(notes.parent, scan)
         self.assertEqual((rows.grid_options["row"], panel.ppms_field_scan_progress.parent.grid_options["row"],
-                          note.parent.grid_options["row"]), (0, 1, 2))
+                          notes.grid_options["row"], note.grid_options["row"]), (0, 1, 2, 1))
         self.assertIsInstance(panel.rte_controllers["newmark"], app.NewmarkNSCA1Controller)
         self.assertEqual(panel.rte_controllers["newmark"].owner_scope, "SHHV")
         self.assertIsNone(panel.rte_controllers["newmark"].dll, "no DLL is loaded before Connect")

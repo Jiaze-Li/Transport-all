@@ -401,6 +401,40 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             self.three_plot_rows(panel)
             self.root.update()
 
+    def test_the_switch_plots_are_drawn_in_the_1101_px_window(self):
+        """User, 2026-11-23: "fix the Switch2 plots at 1101 px too".  Switch
+        and Switch2 at the default (SR830-1 at 2): the X and Y plots and the
+        X and Y vs time row keep 55 px in the 1101 px window.  The pulse row
+        (Avtech / 6221 write, Width ns / Pulse µs, Pulses) goes beside the
+        outer field box and the mode note beside Start / Stop / Round trip,
+        where there is room; Switch2's Avtech row is shown."""
+        panel = self.a.rte_panel
+        was = panel.ppms_simple_mode.get()
+        try:
+            panel.ppms_lockin_selection["zurich"].set(False)
+            panel.zurich_harmonic.set(app.RTE_ZURICH_DEFAULT_HARMONICS)
+            panel._apply_ppms2_zurich_harmonic()
+            self.root.geometry(f"1101x{CI_SHOT_HEIGHT}+0+0")
+            for mode in ("Switch", "Switch2"):
+                panel.ppms_simple_mode.set(mode)
+                panel._rte_mode_changed()
+                for _ in range(3):
+                    self.root.update()
+                shown = [c for c in (*panel.ppms_harmonic_canvases.values(), *panel.rte_time_canvases.values()) if c.winfo_ismapped()]
+                print(f"SHHV {mode} plots at {self.root.winfo_width()}x{self.root.winfo_height()} px: "
+                      f"{sorted(c.winfo_height() for c in shown)} px tall; pulse row {panel.rte_pulse_place}, note {panel.rte_note_place}")
+                with self.subTest(mode=mode):
+                    self.assertEqual(len(shown), 4, "X, Y and X, Y vs time")
+                    self.assertEqual((panel.rte_pulse_place, panel.rte_note_place), ("beside", "beside"))
+                    self.assertEqual(panel.rte_avtech_row.winfo_ismapped(), mode == "Switch2")
+                    for canvas in shown:
+                        self.assertGreaterEqual(canvas.winfo_height(), 55, "Increase the window height")
+        finally:
+            panel.ppms_simple_mode.set(was)
+            panel._rte_mode_changed()
+            self.three_plot_rows(panel)
+            self.root.update()
+
     def test_the_outer_row_costs_no_height_in_the_1101_px_window(self):
         """The outer row of Angle+Field (the start-up scan from 2026-10-19 to
         2026-11-16, user) and Angle+Current: beside the main row in the 1101 px window,

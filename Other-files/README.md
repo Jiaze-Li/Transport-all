@@ -27,6 +27,11 @@
 - The 6221 and the lock-ins stay wired to the sample while the Avtech fires (the 6221's output is off, not
   disconnected). Not yet run on the instruments or checked on an oscilloscope.
 - Tests: `test_switch2_avtech.py` (the page's real controller on `test_avtech_pulser`'s simulated generator).
+- 1101 px window (user, 2026-11-23: "fix the Switch2 plots at 1101 px too"): where the Scan box has the room (the
+  stacked layout), the pulse row (Avtech / 6221 write, Width ns / Pulse µs, Pulses) sits beside the "Outer field G:"
+  box and the mode note ("Switch2: Avtech pulse V; outer: field G", every mode's) beside Start / Stop / Round trip, so
+  Switch and Switch2 keep their X, Y and X, Y vs time plots at 55 px or more (GitHub test
+  `test_the_switch_plots_are_drawn_in_the_1101_px_window`). At 2000 px nothing moves.
 
 ## Switch: typed pulse currents, Acquire s 30 (user, 2026-11-23)
 

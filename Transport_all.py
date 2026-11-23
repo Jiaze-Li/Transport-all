@@ -37729,7 +37729,8 @@ class RTEPanel(PPMSPanel):
         self.ppms_field_scan_save_button.grid(row=2, column=3, columnspan=2, sticky='ew')
         self.rte_outer_ranges = {mode: [tk.StringVar(value=v) for v in row['defaults']] for mode, row in RTE_OUTER_ROWS.items()}
         self.rte_pulse_widgets = [ttk.Label(scan_rows, text='6221 write')]
-        self.rte_pulse_widgets[0].grid(row=4, column=0)
+        self.rte_pulse_widgets[0].grid(row=4, column=0, sticky='', padx=0)
+        self.rte_pulse_under_options = [dict(row=4, column=0, sticky='', padx=0)] + [options for i in range(2) for options in (dict(row=4, column=1 + 2 * i, sticky='e', padx=(4, 0)), dict(row=4, column=2 + 2 * i, sticky='ew', padx=2))]
         for i, (label, variable) in enumerate((('Pulse µs', self.rte_pulse_width_us), ('Pulses', self.rte_pulse_count))):
             name = ttk.Label(scan_rows, text=label)
             name.grid(row=4, column=1 + 2*i, sticky='e', padx=(4, 0))
@@ -37787,7 +37788,9 @@ class RTEPanel(PPMSPanel):
         scan_notes.columnconfigure(0, weight=1)
         ttk.Label(scan_notes, textvariable=self.ppms_transport_status_var, width=1, wraplength=0).grid(row=0, column=0, sticky='ew')
         self.rte_scan_note = tk.StringVar(value=RTE_SCAN_NOTES['Current'])
-        ttk.Label(scan_notes, textvariable=self.rte_scan_note, width=40).grid(row=1, column=0, sticky='w')
+        note_label = ttk.Label(scan, textvariable=self.rte_scan_note, width=40)
+        note_under = dict(in_=scan_notes, row=1, column=0, columnspan=1, sticky='w', padx=0)
+        note_label.grid(**note_under)
         if laid_out:
             controls_gap = 6
             self._arrange_pair_by_width(body, params, lockins_line, gap=0, stack_gap=4, right_width=lambda: lockins.winfo_reqwidth())
@@ -37799,11 +37802,12 @@ class RTEPanel(PPMSPanel):
                 return pad[0] + (pad[1] if len(pad) > 1 else pad[0]) + 2 * numbers(info.get('ipadx', 0))[0]
             def scan_rows_width(outer_row=True):
                 under = {str(widget): options for widget, options in (*self.rte_outer_widgets, *self.__dict__.get('rte_outer_list_widgets', ()))}
+                pulse_under = {str(widget): options for widget, options in zip(self.rte_pulse_widgets, self.rte_pulse_under_options)}
                 widths, spans = [0] * 7, []
                 for widget in scan_rows.grid_slaves():
-                    if not outer_row and str(widget) in under:
+                    if (not outer_row and str(widget) in under) or widget is note_label:
                         continue
-                    info = under.get(str(widget)) or widget.grid_info()
+                    info = pulse_under.get(str(widget)) or under.get(str(widget)) or widget.grid_info()
                     column, span = int(info['column']), int(info.get('columnspan', 1))
                     need = widget.winfo_reqwidth() + grid_padx(info)
                     if span == 1:
@@ -37818,7 +37822,7 @@ class RTEPanel(PPMSPanel):
                     self.rte_scan_rows_columns = widths
                 return sum(widths)
             def scan_stacked_width():
-                return self._pair_inset(scan) + max(scan_rows_width(), scan_status.winfo_reqwidth(), scan_notes.winfo_reqwidth())
+                return self._pair_inset(scan) + max(scan_rows_width(), scan_status.winfo_reqwidth(), scan_notes.winfo_reqwidth(), note_label.winfo_reqwidth())
             def settings_without_block():
                 return self._pair_inset(settings) + params.winfo_reqwidth() + lockins.winfo_reqwidth()
             self._arrange_pair_by_width(controls, settings, scan, gap=controls_gap, stack_gap=4, right_width=scan_stacked_width, left_width=settings_without_block)
@@ -37942,6 +37946,45 @@ class RTEPanel(PPMSPanel):
             controls.bind('<Configure>', arrange_outer_row, add='+')
             scan.bind('<Configure>', arrange_outer_row, add='+')
             scan_rows.bind('<Configure>', arrange_outer_row, add='+')
+            pulse_beside = [dict(row=3, column=7, sticky='e', padx=(12, 0)), dict(row=3, column=8, sticky='e', padx=(6, 0)), dict(row=3, column=9, sticky='ew', padx=2),
+                            dict(row=3, column=10, sticky='e', padx=(4, 0)), dict(row=3, column=11, sticky='ew', padx=2)]
+            note_beside = dict(in_=scan_rows, row=2, column=7, columnspan=RTE_SCAN_ROWS_LAST_COLUMN - 6, sticky='e', padx=(12, 2))
+            beside_guard = {}
+            def arrange_beside_rows(_event=None):
+                pulse_widgets = self.rte_pulse_widgets
+                try:
+                    stacked = getattr(controls, '_pair_side_by_side', None) is False
+                    room = scan.winfo_width() - self._pair_inset(scan)
+                    rows_width = scan_rows_width()
+                    pulse_shown = pulse_widgets[0].winfo_manager() == 'grid'
+                    pulse_need = sum(widget.winfo_reqwidth() + grid_padx(options) for widget, options in zip(pulse_widgets, pulse_beside))
+                    pulse = stacked and room > 1 and self.rte_outer_place == 'under' and room >= rows_width + pulse_need
+                    note = stacked and room > 1 and room >= rows_width + note_label.winfo_reqwidth() + 14
+                except (tk.TclError, ValueError):
+                    return
+                window_width = scan.winfo_toplevel().winfo_width()
+                if beside_guard.get('window') != window_width:
+                    beside_guard.update(window=window_width, since=time.monotonic(), flips=0)
+                if beside_guard['flips'] > PAIR_FLIP_LIMIT:
+                    pulse = note = False
+                changed = False
+                if pulse_shown and self.__dict__.get('rte_pulse_place', 'under') != ('beside' if pulse else 'under'):
+                    self.rte_pulse_place = 'beside' if pulse else 'under'
+                    for widget, options in zip(pulse_widgets, pulse_beside if pulse else self.rte_pulse_under_options):
+                        widget.grid_configure(**options)
+                    changed = True
+                if self.__dict__.get('rte_note_place', 'under') != ('beside' if note else 'under'):
+                    self.rte_note_place = 'beside' if note else 'under'
+                    note_label.grid_configure(**(note_beside if note else note_under))
+                    self._stfmr_lockin_raise(note_label, scan_rows if note else scan_notes)
+                    changed = True
+                if changed:
+                    if time.monotonic() - beside_guard['since'] > 1.0:
+                        beside_guard.update(since=time.monotonic(), flips=0)
+                    beside_guard['flips'] += 1
+            self.rte_arrange_beside_rows = arrange_beside_rows
+            for widget in (controls, scan, scan_rows):
+                widget.bind('<Configure>', arrange_beside_rows, add='+')
         self.ppms_plot_frame = ttk.LabelFrame(outer, text=f'{self.ppms_page_name} measurement', padding=2)
         self.ppms_plot_frame.grid(row=4, column=0, sticky='nsew')
         self.ppms_transport_plot_frames = {}
@@ -38022,6 +38065,12 @@ class RTEPanel(PPMSPanel):
                 widget.grid()
             else:
                 widget.grid_remove()
+        arrange = self.__dict__.get('rte_arrange_beside_rows')
+        if arrange is not None:
+            try:
+                self.root.after_idle(arrange)
+            except (tk.TclError, AttributeError):
+                pass
         if mode in SWITCH_MODES and len(widgets) == 5:
             avtech = mode == SWITCH2_SCAN_MODE
             for widget, label in zip(widgets[:2] + widgets[3:4], ('Avtech', 'Width ns', 'Pulses') if avtech else ('6221 write', 'Pulse µs', 'Pulses')):
