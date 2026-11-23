@@ -1,5 +1,17 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## PPMS page in a narrow window: scan box under the settings (user, 2026-11-23)
+
+- **Request:** "fix the PPMS scan box clipping at 1101 px".
+- When the page is too narrow for the settings box and the scan box side by side (the 1101 px window the program
+  opens with), the scan box goes under the settings box with the live readings beside it, and the four lock-in
+  harmonic rows (SR830-1/2/3, Zurich) go under the settings' own rows, two per row (one per row in a still narrower
+  window). Nothing in the settings or scan box is cut off any more, Wait s included. Wide enough (2000 px), the page
+  is as before. `CombinedControlApp._ppms_arrange_by_width`; the harmonic rows now sit in their own frame
+  (`ppms_settings_panel`), the rest of the settings in another.
+- Still cut at 1101 px, as before: the right end of the instrument rows (SR830 Disconnect / status) and of the
+  MultiVu row (connection status). Plots are shorter there, since the scan box takes its own row.
+
 ## Wrapped statements joined, two unused definitions removed (user, 2026-11-23)
 
 - **Request:** "can you try to optimize the whole script to make its length as short as possible but not affect

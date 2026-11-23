@@ -1191,10 +1191,9 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
         self.assertFalse(frame.winfo_ismapped())
 
     def test_the_box_is_no_wider_and_nothing_sticks_out(self):
-        """At 2000 px nothing in the scan box sticks out of it, in any mode.
-        The 1101 px window already cuts the box's right-hand cells in every
-        mode (gui_checks notes it); there the new modes cut no more than
-        Field and Current+Temperature do."""
+        """Nothing in the scan box sticks out of it, in any mode, at 2000 px
+        and (since the box moves under the settings there, user 2026-11-23)
+        in the 1101 px window."""
         tab = self.panel.ppms_tab
         sizes, overs = {}, {}
         for width in (1101, LAB_WIDE):
@@ -1213,8 +1212,7 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
                         if widget.winfo_ismapped():
                             over = max(over, widget.winfo_rootx() + widget.winfo_width() - box_right)
                     overs[(width, mode)] = over
-                    if width == LAB_WIDE:
-                        self.assertLessEqual(over, 1, "something sticks out of the scan box at 2000 px")
+                    self.assertLessEqual(over, 1, f"something sticks out of the scan box at {width} px")
             with self.subTest(width=width):
                 self.assertLessEqual(sizes[(width, "Frequency")][0], sizes[(width, "Field")][0])
                 self.assertLessEqual(sizes[(width, "Frequency+Current")][0], sizes[(width, "Current+Temperature")][0])
@@ -1229,6 +1227,45 @@ class ScanBoxFrequencyModeTests(unittest.TestCase):
                 self.assertLessEqual(abs(sizes[(width, "Angle+Field")][1]
                                          - sizes[(width, "Current+Temperature")][1]), 2)
                 self.assertLessEqual(overs[(width, "Angle+Field")], overs[(width, "Current+Temperature")], overs)
+
+    def test_narrow_window_puts_the_scan_box_under_the_settings(self):
+        """User, 2026-11-23: "fix the PPMS scan box clipping at 1101 px".
+        Too narrow for the settings and the scan box side by side, the scan
+        box goes under the settings with the live readings beside it, and
+        the lock-in harmonic rows under the settings' own rows: nothing in
+        either box past the page's edge, Wait s included, whatever the
+        resize history.  At 2000 px the page is as before."""
+        panel, tab = self.panel, self.panel.ppms_tab
+        harm = panel.ppms_settings_panel
+        left = next(w for w in harm.master.winfo_children() if w is not harm)
+        settings, live = harm.master.master, panel.ppms_metrics_frame
+        wait = next(w for w in panel.ppms_control_widgets if str(w.cget("textvariable")) == str(panel.ppms_temperature_delay_var))
+        right = lambda w: w.winfo_rootx() + w.winfo_width()
+        bottom = lambda w: w.winfo_rooty() + w.winfo_height()
+        for history in ((LAB_WIDE,), (1101,), (1101, LAB_WIDE), (LAB_WIDE, 1101), (900, 1101), (900, LAB_WIDE)):
+            for width in history:
+                self.choose("Field+Temperature", width)
+            with self.subTest(history=history):
+                edge = right(tab)
+                pending, over = [settings, self.scan], []
+                while pending:
+                    widget = pending.pop()
+                    pending.extend(widget.winfo_children())
+                    if widget.winfo_ismapped() and right(widget) > edge + 1:
+                        over.append(widget)
+                self.assertEqual(over, [], "widgets past the page's right edge")
+                for widget in (wait, panel.zurich_harmonic_combo, live):
+                    self.assertTrue(widget.winfo_ismapped())
+                if history[-1] == LAB_WIDE:
+                    self.assertGreaterEqual(self.scan.winfo_rootx(), right(settings))
+                    self.assertLessEqual(abs(self.scan.winfo_rooty() - settings.winfo_rooty()), 2)
+                    self.assertLess(bottom(live), self.scan.winfo_rooty())
+                    self.assertGreater(panel.zurich_harmonic_combo.winfo_rootx(), right(left))
+                else:
+                    self.assertGreaterEqual(self.scan.winfo_rooty(), bottom(settings))
+                    self.assertGreaterEqual(live.winfo_rootx(), right(self.scan))
+                    self.assertLessEqual(abs(live.winfo_rooty() - self.scan.winfo_rooty()), 2)
+                    self.assertGreaterEqual(panel.zurich_harmonic_combo.winfo_rooty(), bottom(left))
 
 
 # Named to sort last: unittest runs a module's classes in name order, and this

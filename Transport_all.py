@@ -14499,8 +14499,13 @@ class CombinedControlApp:
             child.grid_remove()
         control.configure(text="PPMS settings", padding=3)
         panel = ttk.Frame(control)
-        self.ppms_settings_panel = panel
         panel.grid(row=0, column=0, sticky="nw")
+        left = ttk.Frame(panel)
+        left.grid(row=0, column=0, sticky="nw")
+        harm = self.ppms_settings_panel = ttk.Frame(panel)
+        harm.grid(row=0, column=1, sticky="ns")
+        for row in range(4):
+            harm.rowconfigure(row, weight=1)
         control.columnconfigure(0, weight=2, uniform="")
         control.columnconfigure(1, weight=1, uniform="")
         control.columnconfigure(2, weight=0, uniform="")
@@ -14511,10 +14516,10 @@ class CombinedControlApp:
         safety_text = "Sample, ranges, wiring and motor clearance confirmed safe; no other program in control, MultiVu stays operable"
         safety_font = tkfont.nametofont("TkDefaultFont", root=self.root)
         ttk.Style(self.root).configure('PPMSSafety.TCheckbutton', wraplength=safety_font.measure(safety_text) // 2 + safety_font.measure('0') * 6)
-        ttk.Checkbutton(panel, text=safety_text, style="PPMSSafety.TCheckbutton", variable=self.ppms_control_safety_var, command=self._update_ppms_control_ui).grid(row=0, column=0, columnspan=10, sticky="w")
+        ttk.Checkbutton(left, text=safety_text, style="PPMSSafety.TCheckbutton", variable=self.ppms_control_safety_var, command=self._update_ppms_control_ui).grid(row=0, column=0, columnspan=10, sticky="w")
         def entry(row, col, label, variable):
-            ttk.Label(panel, text=label).grid(row=row, column=col, sticky="e", padx=(0 if col == 0 else 8, 0))
-            widget = ttk.Entry(panel, textvariable=variable, width=6)
+            ttk.Label(left, text=label).grid(row=row, column=col, sticky="e", padx=(0 if col == 0 else 8, 0))
+            widget = ttk.Entry(left, textvariable=variable, width=6)
             widget.grid(row=row, column=col+1, sticky="ew", padx=2, pady=1)
             self.ppms_control_widgets.append(widget)
             target_mode = {'T K': 'Temperature', 'H Oe': 'Field', 'Angle °': 'Angle', 'I mA RMS': 'Current', 'f Hz': 'Frequency'}.get(label)
@@ -14522,7 +14527,7 @@ class CombinedControlApp:
                 self.ppms_scan_target_widgets.setdefault(target_mode, []).append(widget)
             return widget
         def button(row, col, label, command):
-            widget = ttk.Button(panel, text=label, command=command, width=8)
+            widget = ttk.Button(left, text=label, command=command, width=8)
             widget.grid(row=row, column=col, padx=2)
             self.ppms_control_widgets.append(widget)
             target_mode = {"Set T": "Temperature", "Set H": "Field", "Move": "Angle", "Set I": "Current"}.get(label)
@@ -14545,27 +14550,27 @@ class CombinedControlApp:
         entry(3, 0, "I mA RMS", self.ppms_transport_current_var)
         entry(3, 2, "f Hz", self.ppms_transport_frequency_var)
         button(3, 4, "Set I", self._ppms_set_current_direct)
-        ttk.Button(panel, text="I off", command=self.ppms_sources_off, width=8).grid(row=3, column=5, columnspan=2, padx=2, sticky="e")
+        ttk.Button(left, text="I off", command=self.ppms_sources_off, width=8).grid(row=3, column=5, columnspan=2, padx=2, sticky="e")
         entry(3, 7, "Comp. V", self.ppms_transport_compliance_var)
         self.ppms_lockin_choice_widgets = []
         for row, key in enumerate(PPMS_SR830_KEYS, 0):
             col, label, var = 13, f"{PPMS_SR830_LABELS[key]} harm.", self._ppms_harmonic_var(key)
-            ttk.Label(panel, text=label).grid(row=row, column=col, sticky="e", padx=(12, 3))
-            widget = ttk.Combobox(panel, values=PPMS_HARMONIC_CHOICES, textvariable=var, state="readonly", width=7)
+            ttk.Label(harm, text=label).grid(row=row, column=col, sticky="e", padx=(12, 3))
+            widget = ttk.Combobox(harm, values=PPMS_HARMONIC_CHOICES, textvariable=var, state="readonly", width=7)
             widget.bind('<<ComboboxSelected>>', lambda event, k=key: self._ppms_apply_selected_harmonic(k))
             self.ppms_lockin_choice_widgets.append((widget, 'readonly'))
             widget.grid(row=row, column=col+1, sticky="ew")
             self.ppms_control_widgets.append(widget)
-            select = ttk.Checkbutton(panel, text='Measure', variable=self.ppms_lockin_selection[key], command=lambda: self._refresh_ppms2_plot_layout() if isinstance(self, PPMS2Panel) else None)
+            select = ttk.Checkbutton(harm, text='Measure', variable=self.ppms_lockin_selection[key], command=lambda: self._refresh_ppms2_plot_layout() if isinstance(self, PPMS2Panel) else None)
             select.grid(row=row, column=17, padx=3)
             self.ppms_control_widgets.append(select)
             self.ppms_lockin_choice_widgets.append((select, 'normal'))
-            self._create_connection_indicator(panel, f"ppms_ref_{key}")
+            self._create_connection_indicator(harm, f"ppms_ref_{key}")
             if not hasattr(self, "ppms_sr830_status_vars"):
                 self.ppms_sr830_status_vars = {}
             self.ppms_sr830_status_vars[key] = tk.StringVar(value="Not read")
             self.ppms_sr830_range_vars[key] = tk.StringVar(value="Autorange ON")
-            ttk.Label(panel, textvariable=self.ppms_sr830_range_vars[key], width=16).grid(row=row, column=18, sticky='w', padx=(6, 0))
+            ttk.Label(harm, textvariable=self.ppms_sr830_range_vars[key], width=16).grid(row=row, column=18, sticky='w', padx=(6, 0))
         scan.grid(row=3, column=1, columnspan=1, sticky="nsew", padx=(6, 0), pady=(0, 2))
         scan.configure(text="PPMS scan", padding=3)
         for child in scan.winfo_children():
@@ -14682,6 +14687,50 @@ class CombinedControlApp:
                 child.grid_configure(row=2, column=0, rowspan=1, columnspan=1, sticky="w", padx=2)
         plot.configure(text="SR830-1 / SR830-2 / SR830-3: X, Y, θ vs scan variable")
         plot.master.rowconfigure(3, weight=1, minsize=220)
+        if isinstance(control, tk.Widget):
+            self._ppms_arrange_by_width(control.master, instruments, self.ppms_metrics_frame, control, scan, left, harm)
+    def _ppms_arrange_by_width(self, content, instruments, metrics, control, scan, left, harm):
+        cells, state = {}, {}
+        def harm_width() -> int:
+            if not cells:
+                for widget in harm.grid_slaves():
+                    info = widget.grid_info()
+                    cells[widget] = (int(info['row']), int(info['column']), sum(int(float(str(v))) for v in widget.tk.splitlist(info.get('padx', 0))))
+            widths = {}
+            for widget, (_row, column, padx) in cells.items():
+                widths[column] = max(widths.get(column, 0), widget.winfo_reqwidth() + padx)
+            return sum(widths.values())
+        def place(_event=None) -> None:
+            try:
+                available = content.winfo_width()
+                if available <= 1:
+                    return
+                one, inset = harm_width(), self._pair_inset(control)
+                wide = available >= max(instruments.winfo_reqwidth(), inset + left.winfo_reqwidth() + one) + 6 + scan.winfo_reqwidth()
+                columns = 0 if wide else 2 if available >= inset + 2 * one else 1
+                window = content.winfo_toplevel().winfo_width()
+            except (tk.TclError, ValueError):
+                return
+            if state.get('columns') == columns:
+                return
+            now, guard = time.monotonic(), state.setdefault('guard', [None, 0.0, 0])
+            if guard[0] != window or now - guard[1] > 1.0:
+                guard[:] = [window, now, 0]
+            guard[2] += 1
+            if guard[2] > PAIR_FLIP_LIMIT and 'columns' in state:
+                return
+            state['columns'] = columns
+            content.columnconfigure(0, weight=2 if wide else 0)
+            instruments.grid_configure(columnspan=1 if wide else 2)
+            control.grid_configure(columnspan=1 if wide else 2)
+            metrics.grid_configure(row=1 if wide else 4)
+            scan.grid_configure(row=3 if wide else 4, column=1 if wide else 0, padx=(6, 0) if wide else 0)
+            harm.grid_configure(row=0 if wide else 1, column=1 if wide else 0, sticky='ns' if wide else 'w', pady=0 if wide else (4, 0))
+            for widget, (row, column, _padx) in cells.items():
+                widget.grid_configure(row=row // 2 if columns == 2 else row, column=column + 6 * (row % 2) if columns == 2 else column)
+        for widget in (content, scan):
+            widget.bind('<Configure>', place, add='+')
+        place()
     def _ppms_scan_mode_defaults(self) -> dict:
         defaults = {"Temperature": ("300", "280", "5", "K"), "Field": ("0", "1000", "100", "Oe"), "Field+Temperature": ("0", "1000", "100", "Oe"), "Angle": ("0", "360", "5", "°"), "Current": ("0.01", "1", "0.01", "mA RMS")}
         defaults["Field"] = defaults["Field+Temperature"] = (*getattr(self, "ppms_default_field_range", ("0", "1000", "100")), "Oe")
