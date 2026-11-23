@@ -20,7 +20,7 @@ from typing import Callable
 # The English dialogs (Tk's own message boxes and file dialogs) it shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 05cd44614c57…
+# Copied from Transport_all.py, SHA-256 868ba41878f6…
 import ctypes
 
 

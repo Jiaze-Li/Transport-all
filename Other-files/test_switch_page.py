@@ -85,8 +85,9 @@ class SwitchScan(ete.EndToEnd):
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
             panel.ppms_simple_mode.set("Switch")
             panel._rte_mode_changed()
-        for variable, value in zip(panel.ppms_simple_range, span):
-            variable.set(value)
+        # The pulses as typed in "Pulses mA:" (user, 2026-11-23: "change the
+        # switch current pulse input like the outer field").
+        panel.rte_switch_pulses_var.set(", ".join(f"{value:g}" for value in app.ppms_scan_axis(*map(float, span))))
         panel.rte_outer_ranges["Switch"][0].set(fields)
         panel.rte_pulse_width_us.set(width)
         panel.rte_pulse_count.set(pulses)
@@ -287,12 +288,18 @@ class SwitchPageTests(unittest.TestCase):
             # the time row; the 6221 and lock-in boxes are not touched.
             panel.ppms_simple_mode.set("Switch")
             panel._rte_mode_changed()
-            self.assertEqual([v.get() for v in panel.ppms_simple_range], ["-20", "20", "1"])
+            self.assertEqual(panel.rte_switch_pulses_var.get(), ", ".join(str(v) for v in range(-20, 21)))
+            self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {False})
+            self.assertEqual(panel.rte_switch_pulse_list_widgets[0].options["text"], "Pulses mA:")
+            # Acquire s starts at 30 s in Switch (user, 2026-11-23: "set the
+            # default acquire time in switch as 30s").
+            self.assertEqual(panel.ppms_acquisition_time_var.get(), "30")
             self.assertIs(panel.rte_round_trip.get(), True)
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
             self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "40, 20, 0, -20")
             self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
-                             ("Pulse mA", "Switch: 6221 pulse mA; outer: field G"))
+                             ("", "Switch: 6221 pulse mA; outer: field G"))
             self.assertEqual({w.grid_removed for w in pulse_row}, {False})
             self.assertEqual({w.grid_options["row"] for w in pulse_row}, {4})
             self.assertEqual(panel.ppms_plot_axis, "pulse")
@@ -307,6 +314,8 @@ class SwitchPageTests(unittest.TestCase):
             panel.ppms_simple_mode.set("Angle+Field")
             panel._rte_mode_changed()
             self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+            self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {False})
             self.assertTrue(panel.rte_time_frame.grid_removed)
             self.assertIs(panel.rte_time_row_on, False)
             self.assertNotIn("Time (s)", {call.args[2] for call in draw.call_args_list})
@@ -314,6 +323,17 @@ class SwitchPageTests(unittest.TestCase):
     def test_the_plan_is_the_pulse_loop(self):
         plan = app.rte_scan_plan("Switch", "-2", "2", "2", 1, True)
         self.assertEqual([value for _loop, _point, value in plan], [-2.0, 0.0, 2.0, 0.0, -2.0])
+        # Typed pulses, in the order typed, and back with Round trip.
+        typed = app.rte_pulse_list("10, -5;  0 7.5")
+        self.assertEqual(typed, (10.0, -5.0, 0.0, 7.5))
+        plan = app.rte_scan_plan("Switch", None, None, None, 2, True, values=typed)
+        self.assertEqual([value for _loop, _point, value in plan], [10.0, -5.0, 0.0, 7.5, 0.0, -5.0, 10.0] * 2)
+        self.assertEqual([value for _loop, _point, value in app.rte_scan_plan("Switch", None, None, None, 1, False, values=typed)], list(typed))
+        for text, message in (("", "type the pulse currents"), ("1, x", '"x" is not a number'), ("nan", "not a finite number")):
+            with self.assertRaisesRegex(ValueError, message):
+                app.rte_pulse_list(text)
+        with self.assertRaisesRegex(ValueError, r"within \+/-105 mA; 106 mA is outside"):
+            app.rte_scan_plan("Switch", None, None, None, 1, False, values=(0.0, 106.0))
         with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
             app.rte_scan_plan("Switch", "0", "106", "106", 1, False)
 
@@ -373,8 +393,8 @@ class SwitchScanTests(SwitchScan):
         title, question = h.askyesno.call_args.args[:2]
         self.assertEqual(title, "SHHV scan")
         self.assertIn("Field, the OUTER loop: 2 fields in the order typed: +100, -50 G, each within ±2 G", question)
-        self.assertIn("6221 pulse current, the INNER loop: from -2 mA to +2 mA and back (step 2 mA), 5 pulses a "
-                      "loop, 1 loop(s). Largest pulse 2 mA.", question)
+        self.assertIn("6221 pulse current, the INNER loop: 5 pulses a loop in the order typed, -2, +0, +2 mA and back, "
+                      "1 loop(s). Largest pulse 2 mA.", question)
         self.assertIn("one write of 1 pulse(s) of 30 µs at the point's current", question)
         self.assertIn("then the read current on again, 0.5 mA RMS at 317.3 Hz", question)
         self.assertIn("2 fields x 5 pulses x 1 harmonic pass(es) = 10 points.", question)

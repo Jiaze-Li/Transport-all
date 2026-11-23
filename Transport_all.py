@@ -2231,13 +2231,14 @@ RTE_STAGE_MODES = (*RTE_ANGLE_MODES, FIELD_ANGLE_SCAN_MODE)
 RTE_FIELD_SWEEP_MODES = ('Field', FIELD_ANGLE_SCAN_MODE)
 RTE_FIELD_DEFAULT_RANGE = ('-1', '1', '0.02')
 RTE_FIELD_ACQUISITION_S = 2.0
+SWITCH_ACQUISITION_S = 30.0
 FIELD_ANGLE_DEFAULT_ANGLES = '0, 45, 90'
 SWITCH_SCAN_MODE = 'Switch'
 RTE_TAB_TITLE = 'SHHV & Switch'
 RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
 RTE_FIELD_LIST_MODES = ('Angle+Field', SWITCH_SCAN_MODE)
-SWITCH_PULSE_DEFAULT_RANGE = ('-20', '20', '1')
+SWITCH_DEFAULT_PULSES_MA = ', '.join(str(value) for value in range(-20, 21))
 SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
@@ -37102,10 +37103,10 @@ class NewmarkNSCA1Controller:
             raise NewmarkStageError(f"PX read back {now} after PX=0")
         self.logger(f'{self.owner_scope} {self.label}: zero set here (was {newmark_angle_text(before, self.steps_per_degree)}, PX {before})')
         return before
-def rte_scan_plan(mode, start, end, step, loops=1, round_trip=True, max_current_a=STFMR_KEPCO_MAX_CURRENT_A, supply='KEPCO'):
+def rte_scan_plan(mode, start, end, step, loops=1, round_trip=True, max_current_a=STFMR_KEPCO_MAX_CURRENT_A, supply='KEPCO', values=None):
     if mode not in ('Field', 'Current', 'Angle', SWITCH_SCAN_MODE):
         raise ValueError('SHHV supports only Field, Current and Angle scans')
-    nodes = tuple(ppms_scan_axis(float(start), float(end), float(step)))
+    nodes = tuple(values) if values is not None else tuple(ppms_scan_axis(float(start), float(end), float(step)))
     if mode == SWITCH_SCAN_MODE:
         limit_ma = K6221_MAX_ABS_CURRENT_A * 1e3
         outside = [v for v in nodes if abs(v) > limit_ma]
@@ -37175,9 +37176,25 @@ def rte_outer_angle_list_plan(text):
 def rte_outer_angles_text(values, limit=12):
     shown = ', '.join(f'{value:+g}' for value in values[:limit])
     return f"{shown}{', ...' if len(values) > limit else ''}°"
-def rte_outer_values_text(values, limit=12):
+def rte_pulse_list(text):
+    parts = [part for part in re.split(r'[,;\s]+', str(text).strip()) if part]
+    if not parts:
+        raise ValueError('Pulses mA: type the pulse currents in mA in the order to scan, e.g. -10, -5, 0, 5, 10')
+    if len(parts) > RTE_OUTER_LIST_MAX:
+        raise ValueError(f'Pulses mA: at most {RTE_OUTER_LIST_MAX} pulse currents ({len(parts)} typed)')
+    values = []
+    for part in parts:
+        try:
+            value = float(part)
+        except ValueError:
+            raise ValueError(f'Pulses mA: "{part}" is not a number') from None
+        if not math.isfinite(value):
+            raise ValueError(f'Pulses mA: "{part}" is not a finite number')
+        values.append(value + 0.0)
+    return tuple(values)
+def rte_outer_values_text(values, limit=12, unit='G'):
     shown = ', '.join(f'{value:+g}' for value in values[:limit])
-    return f"{shown}{', ...' if len(values) > limit else ''} G"
+    return f"{shown}{', ...' if len(values) > limit else ''} {unit}"
 def rte_outer_step_of(row):
     if row.get('scan_mode') in RTE_FIELD_LIST_MODES and 'outer_field_index' in row:
         value, index = row.get('outer_target_field_g'), row.get('outer_field_index')
@@ -37642,12 +37659,24 @@ class RTEPanel(PPMSPanel):
         combo.bind('<<ComboboxSelected>>', self._rte_mode_changed)
         self.rte_edit_widgets.append((combo, 'readonly'))
         variables = [*self.ppms_simple_range, self.ppms_field_scan_loop_var, self.ppms_field_scan_stable_var, self.ppms_acquisition_time_var]
+        self.rte_range_widgets = []
         for i, (label, variable) in enumerate(zip(('Start', 'End', 'Step', 'Loops', 'Settle s', 'Acquire s'), variables)):
             scan_row, scan_col = divmod(i, 3)
-            ttk.Label(scan_rows, text=label).grid(row=scan_row, column=1 + 2*scan_col, sticky='e', padx=(4, 0))
+            name = ttk.Label(scan_rows, text=label)
+            name.grid(row=scan_row, column=1 + 2*scan_col, sticky='e', padx=(4, 0))
             entry = ttk.Entry(scan_rows, textvariable=variable, width=6)
             entry.grid(row=scan_row, column=2 + 2*scan_col, padx=2, sticky='ew')
             self.rte_edit_widgets.append((entry, 'normal'))
+            if i < 3:
+                self.rte_range_widgets += [name, entry]
+        self.rte_switch_pulses_var = tk.StringVar(value=SWITCH_DEFAULT_PULSES_MA)
+        pulses = ttk.Entry(scan_rows, textvariable=self.rte_switch_pulses_var, width=6)
+        self.rte_switch_pulse_list_widgets = [ttk.Label(scan_rows, text='Pulses mA:'), pulses]
+        self.rte_switch_pulse_list_widgets[0].grid(row=0, column=1, columnspan=2, sticky='e', padx=(4, 0))
+        pulses.grid(row=0, column=3, columnspan=4, padx=2, sticky='ew')
+        for widget in self.rte_switch_pulse_list_widgets:
+            widget.grid_remove()
+        self.rte_edit_widgets.append((pulses, 'normal'))
         ttk.Label(scan_rows, textvariable=self.rte_scan_units).grid(row=1, column=0)
         check = ttk.Checkbutton(scan_rows, text='Round trip', variable=self.rte_round_trip)
         check.grid(row=2, column=5, columnspan=2)
@@ -37918,13 +37947,13 @@ class RTEPanel(PPMSPanel):
         angle = mode in RTE_ANGLE_MODES
         switch = mode == SWITCH_SCAN_MODE
         self.rte_round_trip.set(mode in RTE_FIELD_SWEEP_MODES or switch)
-        defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else SWITCH_PULSE_DEFAULT_RANGE if switch else RTE_FIELD_DEFAULT_RANGE
+        defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else () if switch else RTE_FIELD_DEFAULT_RANGE
         for variable, value in zip(self.ppms_simple_range, defaults):
             variable.set(value)
         acquire = self.__dict__.get('ppms_acquisition_time_var')
         if acquire is not None:
             shown = self.__dict__.get('rte_acquisition_default_shown')
-            new = f'{RTE_FIELD_ACQUISITION_S if mode in RTE_FIELD_SWEEP_MODES else RTE_ACQUISITION_S:g}'
+            new = f'{RTE_FIELD_ACQUISITION_S if mode in RTE_FIELD_SWEEP_MODES else SWITCH_ACQUISITION_S if switch else RTE_ACQUISITION_S:g}'
             if shown is None or str(acquire.get()).strip() == shown:
                 acquire.set(new)
                 self.rte_acquisition_default_shown = new
@@ -37942,7 +37971,11 @@ class RTEPanel(PPMSPanel):
                 widget.grid_remove()
     def _rte_show_scan_units(self, mode):
         name = self._rte_supply_label()
-        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else 'Pulse mA' if mode == SWITCH_SCAN_MODE else f'{name} A')
+        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '' if mode == SWITCH_SCAN_MODE else f'{name} A')
+        for widget in self.__dict__.get('rte_range_widgets') or ():
+            widget.grid_remove() if mode == SWITCH_SCAN_MODE else widget.grid()
+        for widget in self.__dict__.get('rte_switch_pulse_list_widgets') or ():
+            widget.grid() if mode == SWITCH_SCAN_MODE else widget.grid_remove()
         note = self.__dict__.get('rte_scan_note')
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
@@ -38726,7 +38759,7 @@ class RTEPanel(PPMSPanel):
             plan = rte_scan_plan('Angle' if angle else 'Field' if field_angle else mode,
                                  *(v.get() for v in self.ppms_simple_range),
                                  self.ppms_field_scan_loop_var.get(), self.rte_round_trip.get(),
-                                 supply.max_current_a(), supply.label)
+                                 supply.max_current_a(), supply.label, rte_pulse_list(self.rte_switch_pulses_var.get()) if switch else None)
             if not self.rte_controllers['gauss'].connected:
                 raise ValueError('Connect LS475 for measured-field recording')
             if mode in RTE_FIELD_SWEEP_MODES and not supply.connected:
@@ -39092,9 +39125,7 @@ class RTEPanel(PPMSPanel):
                 f'current is found as Set field finds it ({terms}; {start}), never beyond '
                 f'±{self._rte_supply().max_current_a():g} A, and then stays there, not corrected, for that '
                 'field\'s whole pulse loop.\n\n'
-                f'6221 pulse current, the INNER loop: from {currents[0]:+g} mA to '
-                f'{max(currents, key=lambda value: abs(value - currents[0])):+g} mA{trip} (step '
-                f'{abs(float(self.ppms_simple_range[2].get())):g} mA), {len(plan) // loops} pulses a loop, '
+                f'6221 pulse current, the INNER loop: {len(plan) // loops} pulses a loop in the order typed, {rte_outer_values_text(currents[:(len(plan) // loops + 1) // 2 if trip else len(plan) // loops], unit="mA")}{trip}, '
                 f'{loops} loop(s). Largest pulse {max(abs(value) for value in currents):g} mA.\n\n'
                 f'Each point: the read current off; one write of {pulse["count"]} pulse(s) of '
                 f'{pulse["width_s"] * 1e6:g} µs at the point\'s current (compliance {pulse["compliance_v"]:g} V; '
@@ -39379,8 +39410,7 @@ class RTEPanel(PPMSPanel):
         return dict(
             program=Path(__file__).name, app_version=APP_VERSION, python_version=sys.version,
             file_name=typed_name, mode=mode,
-            plan=dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None,
-                      step=values[2] if len(values) > 2 else None,
+            plan=dict(**(dict(typed=box(state.get('rte_switch_pulses_var'))) if mode == SWITCH_SCAN_MODE else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
                       unit='A (KEPCO)' if mode in RTE_FIELD_SWEEP_MODES else 'deg (stage)' if mode in RTE_ANGLE_MODES
                       else 'mA (6221 pulse)' if mode == SWITCH_SCAN_MODE else 'mA RMS (6221)',
                       loops=loops, round_trip=bool(box(round_trip)) if round_trip is not None else None,

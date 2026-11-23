@@ -1,5 +1,16 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Switch: typed pulse currents, Acquire s 30 (user, 2026-11-23)
+
+- **Requests:** "change the switch current pulse input like the outer field, use the text input pls."; "set the default
+  acquire time in switch as 30s pls."
+- In Switch mode the scan box's Start / End / Step give way to one "Pulses mA:" box: the pulse currents in mA in the
+  order typed, separated by commas, semicolons or spaces (as "Outer field G:"). Round trip (on in Switch) then goes
+  back through the list; Loops repeats it. Start-up text: -20, -19, … 20 (the old -20 to 20 step 1). Each value within
+  ±105 mA, at most 1000. Other modes keep Start / End / Step. `rte_pulse_list`, `rte_scan_plan(values=…)`; the run's
+  `settings.json` keeps the typed text under `plan.typed`.
+- Acquire s starts at 30 s when Switch is chosen (`SWITCH_ACQUISITION_S`), unless a value of your own is in the box.
+
 ## Scan-start windows show only the expected time (user, 2026-11-23)
 
 - **Request:** "all this scan start window, only tell me the scan expected time is Okay and make the required time
