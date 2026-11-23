@@ -36,6 +36,9 @@ class Switch2Page(unittest.TestCase):
         self.assertEqual([w.options.get("text") for w in Recorder.made if w.parent is entry.parent][:1], ["Avtech"])
         self.assertIsInstance(panel.rte_controllers["avtech"], app.AvtechPulserController)
         self.assertEqual(panel.rte_controllers["avtech"].owner_scope, "SHHV")
+        # Shown only in Switch2 or while the Avtech is connected: the other
+        # modes keep their height for the plots (GitHub's 1101 px window).
+        self.assertIs(entry.parent.grid_removed, True)
         pulse_list, pulse_row = panel.rte_switch_pulse_list_widgets, panel.rte_pulse_widgets
         with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
             panel.ppms_simple_mode.set("Switch2")
@@ -55,6 +58,7 @@ class Switch2Page(unittest.TestCase):
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch2"][0])
             self.assertEqual(panel.rte_outer_ranges["Switch2"][0].get(), "40, 20, 0, -20")
             self.assertEqual(panel.ppms_plot_axis, "avtech")
+            self.assertIs(entry.parent.grid_removed, False)
             self.assertIs(panel.rte_time_row_on, True)
             # Back to Switch: the 6221's boxes again.
             panel.ppms_simple_mode.set("Switch")
@@ -65,6 +69,12 @@ class Switch2Page(unittest.TestCase):
             self.assertEqual([pulse_row[2].options["textvariable"], pulse_row[4].options["textvariable"]],
                              [panel.rte_pulse_width_us, panel.rte_pulse_count])
             self.assertEqual(panel.ppms_plot_axis, "pulse")
+            self.assertIs(entry.parent.grid_removed, True)
+            # Connected, it stays in every mode.
+            panel.rte_controllers["avtech"].instrument = object()
+            panel._rte_show_avtech_row()
+            self.assertIs(entry.parent.grid_removed, False)
+            panel.rte_controllers["avtech"].instrument = None
 
     def test_the_plan_takes_volts_within_the_avtechs_100_v(self):
         typed = app.rte_pulse_list("-100, 0 50", "Pulses V", "pulse amplitudes", "V")

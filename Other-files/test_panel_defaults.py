@@ -75,7 +75,7 @@ class PanelDefaultTests(unittest.TestCase):
         # The first Angle+Field (a range of supply currents) is gone and
         # Angle+Field has its name (user, 2026-11-22).
         self.assertEqual(len(panel.rte_outer_ranges["Angle+Field"]), 1)
-        self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2")])
+        self.assertFalse([mode for mode in app.RTE_SCAN_MODES if mode.endswith("2") and mode != "Switch2"])
         self.assertEqual([v.get() for v in panel.ppms_simple_range], ["0", "-360", "5"])
         self.assertIs(panel.rte_round_trip.get(), False)
         self.assertEqual((panel.ppms_field_scan_stable_var.get(), panel.ppms_acquisition_time_var.get(),

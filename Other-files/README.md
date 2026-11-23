@@ -15,7 +15,8 @@
 - Scan box in Switch2: "Pulses V:" (signed amplitudes in V in the order typed, each within ±100 V; start-up text
   -100, -90, … 100) and the row "Avtech  Width ns [50]  Pulses [1]" (1 ns – 5 µs; 1 – 10000). A unit whose model name
   says -P or -N refuses the other sign at Start, before anything is sent.
-- Measurement instruments: a new "Avtech" row under the Zurich MFLI's (the page's own controller, owner SHHV; the
+- Measurement instruments: a new "Avtech" row under the Zurich MFLI's, shown while Switch2 is chosen or the Avtech is
+  connected (so the other modes keep their plot height at 1101 px; the page's own controller, owner SHHV; the
   start-up address is the CIDWM page's, GPIB0::8::INSTR, the same as SR830-1 here: type the Avtech's real address).
   The Avtech cannot be connected on both pages at once (one VISA owner per address).
 - CSV columns: `pulse_amplitude_v`, `pulse_width_ns`, `pulse_count`, `avtech_amplitude_read_v`, `avtech_width_read_ns`,

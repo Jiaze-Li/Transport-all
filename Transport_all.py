@@ -37545,6 +37545,8 @@ class RTEPanel(PPMSPanel):
         self._create_connection_indicator(group, 'rte_avtech').grid(row=0, column=4, padx=3)
         ttk.Label(group, textvariable=self.rte_connections['avtech'], width=13).grid(row=0, column=5, sticky='w')
         self.rte_connection_widgets['avtech'] = (entry, connect, disconnect)
+        self.rte_avtech_row = group
+        group.grid_remove()
         self.rte_resources['newmark'] = tk.StringVar(value='auto')
         self.rte_connections['newmark'] = tk.StringVar(value='Not connected')
         ttk.Label(rack, text='Motor', width=13).grid(row=4, column=0, sticky='w')
@@ -37999,9 +38001,20 @@ class RTEPanel(PPMSPanel):
         self._rte_show_scan_units(mode)
         self._rte_show_pulse_row(mode)
         self._rte_show_outer_row(mode)
+        self._rte_show_avtech_row()
         if not self.ppms_field_scan_rows:
             self.ppms_plot_axis = 'current' if current else 'angle' if angle else rte_pulse_axis(mode) if switch else 'field'
             self._rte_plot_axis_changed()
+    def _rte_show_avtech_row(self):
+        row, controller = self.__dict__.get('rte_avtech_row'), (self.__dict__.get('rte_controllers') or {}).get('avtech')
+        if row is None or controller is None:
+            return
+        state = self.__dict__.get('rte_connections', {}).get('avtech')
+        mode = self.__dict__.get('ppms_simple_mode')
+        shown = (mode is not None and mode.get() == SWITCH2_SCAN_MODE) or controller.connected or (state is not None and state.get() == 'Check output')
+        if shown != self.__dict__.get('rte_avtech_row_shown', False):
+            self.rte_avtech_row_shown = shown
+            row.grid() if shown else row.grid_remove()
     def _rte_show_pulse_row(self, mode):
         widgets = self.__dict__.get('rte_pulse_widgets') or ()
         for widget in widgets:
@@ -38092,6 +38105,7 @@ class RTEPanel(PPMSPanel):
         self.rte_start_button.configure(state='normal' if not busy and self.ppms_control_safety_var.get() else 'disabled')
         self.ppms_field_scan_stop_button.configure(state='normal' if self.ppms_field_scan_running else 'disabled')
         self.ppms_field_scan_save_button.configure(state='normal' if self.ppms_field_scan_rows and not busy else 'disabled')
+        self._rte_show_avtech_row()
         for key, (entry, connect, disconnect) in self.rte_connection_widgets.items():
             connected = self.rte_controllers[key].connected
             entry.configure(state='disabled' if busy or connected else 'normal')
