@@ -188,9 +188,9 @@ class SwitchPageTests(unittest.TestCase):
         panel = ete.build_page(kepco=False)
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
         self.assertEqual(app.RTE_TRANSPORT_COMPLIANCE_V, 100.0)
-        # Pulse µs starts at 20 (user, 2026-11-24: "use this as default
-        # setting"; 50 from 2026-11-22), one pulse per write.
-        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("20", "1"))
+        # Pulse µs starts at 10 (user, 2026-11-24: "change default as
+        # this"; 20 earlier that day, 50 from 2026-11-22), one pulse per write.
+        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("10", "1"))
         parts = panel.rte_apply_pulse_parts
         self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
                          ["Pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
@@ -291,9 +291,9 @@ class SwitchPageTests(unittest.TestCase):
             # the time row; the 6221 and lock-in boxes are not touched.
             panel.ppms_simple_mode.set("Switch")
             panel._rte_mode_changed()
-            # The user's settings (2026-11-24: "use this as default
-            # setting"): pulses 10, -10 mA, field 0 G, Round trip off.
-            self.assertEqual(panel.rte_switch_pulses_var.get(), "10, -10")
+            # The user's settings (2026-11-24: "change default as this"):
+            # the typed loop, field -12 G, Round trip off.
+            self.assertEqual(panel.rte_switch_pulses_var.get(), "14, 12, 10, 8, 6, 4, 2, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 2, 4, 6, 8, 10, 12, 14")
             self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {True})
             self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {False})
             self.assertEqual(panel.rte_switch_pulse_list_widgets[0].options["text"], "Pulses mA:")
@@ -303,7 +303,7 @@ class SwitchPageTests(unittest.TestCase):
             self.assertIs(panel.rte_round_trip.get(), False)
             self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "0.5"))
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
-            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "0")
+            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "-12")
             self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
                              ("", "Switch: 6221 pulse mA; outer: field G"))
             self.assertEqual({w.grid_removed for w in pulse_row}, {False})
