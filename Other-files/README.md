@@ -1,5 +1,18 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: Switch defaults and the plots' x range (user, 2026-11-24)
+
+- **Requests:** "use this as default setting" (Switch: Pulses mA 10, -10; Loops 1; Settle s 0.5; Acquire s 30; Round
+  trip off; Outer field G 0; Pulse µs 20; Pulses 1) and "the xlim should be the maxium of the settings not the
+  readings".
+- Switch starts with `SWITCH_DEFAULT_PULSES_MA` "10, -10", `SWITCH_DEFAULT_FIELDS_G` "0", Round trip off and Pulse µs
+  20 (`SWITCH_DEFAULT_PULSE_WIDTH_US`; the Settings box's Apply pulse row shares the box, so it starts at 20 too).
+  Switch2 keeps its own: -100 … 100 V, fields 40, 20, 0, -20 G (`SWITCH2_DEFAULT_FIELDS_G`), Round trip on.
+- X, Y and θ plots of the page: the x axis ends at the scan's own range (`_draw_nonlocal_series(x_range=…)`, ticks
+  inside, no rounding out): the typed pulses (Switch, Switch2) or currents (Current) as set at Start
+  (`ppms_plot_x_range`); for a measured field (Field, Field+Angle: the settings are supply amps) the lowest and
+  highest field read; angles as before. Other pages' plots unchanged.
+
 ## Switch / Switch2: X and Y vs time drawn live (user, 2026-11-24)
 
 - **Request:** "The X and Y signals versus time should be displayed and updated in real time here."

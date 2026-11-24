@@ -88,6 +88,9 @@ class SwitchScan(ete.EndToEnd):
         # The pulses as typed in "Pulses mA:" (user, 2026-11-23: "change the
         # switch current pulse input like the outer field").
         panel.rte_switch_pulses_var.set(", ".join(f"{value:g}" for value in app.ppms_scan_axis(*map(float, span))))
+        # Round trip ticked: the scan tests go back through the list (off at
+        # the start in Switch since 2026-11-24).
+        panel.rte_round_trip.set(True)
         panel.rte_outer_ranges["Switch"][0].set(fields)
         panel.rte_pulse_width_us.set(width)
         panel.rte_pulse_count.set(pulses)
@@ -185,9 +188,9 @@ class SwitchPageTests(unittest.TestCase):
         panel = ete.build_page(kepco=False)
         self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
         self.assertEqual(app.RTE_TRANSPORT_COMPLIANCE_V, 100.0)
-        # Pulse µs starts at 50 (user, 2026-11-22: "Pulse µs to start at 50
-        # instead of 30"), one pulse per write.
-        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("50", "1"))
+        # Pulse µs starts at 20 (user, 2026-11-24: "use this as default
+        # setting"; 50 from 2026-11-22), one pulse per write.
+        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("20", "1"))
         parts = panel.rte_apply_pulse_parts
         self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
                          ["Pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
@@ -288,16 +291,19 @@ class SwitchPageTests(unittest.TestCase):
             # the time row; the 6221 and lock-in boxes are not touched.
             panel.ppms_simple_mode.set("Switch")
             panel._rte_mode_changed()
-            self.assertEqual(panel.rte_switch_pulses_var.get(), ", ".join(str(v) for v in range(-20, 21)))
+            # The user's settings (2026-11-24: "use this as default
+            # setting"): pulses 10, -10 mA, field 0 G, Round trip off.
+            self.assertEqual(panel.rte_switch_pulses_var.get(), "10, -10")
             self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {True})
             self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {False})
             self.assertEqual(panel.rte_switch_pulse_list_widgets[0].options["text"], "Pulses mA:")
             # Acquire s starts at 30 s in Switch (user, 2026-11-23: "set the
             # default acquire time in switch as 30s").
             self.assertEqual(panel.ppms_acquisition_time_var.get(), "30")
-            self.assertIs(panel.rte_round_trip.get(), True)
+            self.assertIs(panel.rte_round_trip.get(), False)
+            self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "0.5"))
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
-            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "40, 20, 0, -20")
+            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "0")
             self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
                              ("", "Switch: 6221 pulse mA; outer: field G"))
             self.assertEqual({w.grid_removed for w in pulse_row}, {False})
@@ -319,6 +325,25 @@ class SwitchPageTests(unittest.TestCase):
             self.assertTrue(panel.rte_time_frame.grid_removed)
             self.assertIs(panel.rte_time_row_on, False)
             self.assertNotIn("Time (s)", {call.args[2] for call in draw.call_args_list})
+
+    def test_the_x_axis_ends_at_the_settings_not_at_a_rounded_tick(self):
+        """User, 2026-11-24: "the xlim should be the maxium of the settings
+        not the readings" (a field sweep to 205 G drawn to 300 G).  The SHHV
+        plots end at the scan's own range: the typed pulses or currents, or,
+        for a measured field (the settings are supply amps), the last field
+        read, not the next round tick."""
+        from test_nonlocal_keithley import Canvas
+        panel = ete.build_page(kepco=False)
+        field = {"a": [(-200.0, 1e-6), (0.0, 2e-6), (205.0, 3e-6)]}
+        canvas = Canvas(900, 300)
+        panel._draw_nonlocal_series(canvas, field, "Measured magnetic field (G)", "X voltage", "wait", x_range=(app.math.inf, -app.math.inf))
+        self.assertIn("200", canvas.texts())
+        self.assertNotIn("300", canvas.texts())
+        panel._draw_nonlocal_series(canvas, field, "Measured magnetic field (G)", "X voltage", "wait")
+        self.assertIn("300", canvas.texts(), "the other pages' plots round out as before")
+        pulses = {"b": [(6.0, 1e-6)]}
+        panel._draw_nonlocal_series(canvas, pulses, "6221 pulse current (mA)", "X voltage", "wait", x_range=(-10.0, 10.0))
+        self.assertTrue({"-10", "10"} <= set(canvas.texts()), canvas.texts())
 
     def test_the_plan_is_the_pulse_loop(self):
         plan = app.rte_scan_plan("Switch", "-2", "2", "2", 1, True)
@@ -485,6 +510,7 @@ class SwitchScanTests(SwitchScan):
         pulse_calls = [call for call in h.draw.call_args_list if call.args[2] == "6221 pulse current (mA)"]
         self.assertEqual({call.args[3] for call in pulse_calls}, {"X voltage", "Y voltage"})
         self.assertEqual({call.kwargs["auto_voltage_unit"] for call in pulse_calls}, {True})
+        self.assertEqual({call.kwargs["x_range"] for call in pulse_calls}, {(-2.0, 2.0)}, "the typed pulses' ends")
         canvases = h.panel.ppms_harmonic_canvases
         last_x = [call for call in pulse_calls if call.args[0] is canvases[(1, "x")]][-1]
         saved = h.panel.ppms_field_scan_rows

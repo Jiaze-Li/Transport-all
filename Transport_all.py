@@ -2241,9 +2241,10 @@ RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_FIELD_LIST_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_SCAN_ROWS_LAST_COLUMN = 14
-SWITCH_DEFAULT_PULSES_MA = ', '.join(str(value) for value in range(-20, 21))
-SWITCH_DEFAULT_FIELDS_G = '40, 20, 0, -20'
-SWITCH_DEFAULT_PULSE_WIDTH_US = 50.0
+SWITCH_DEFAULT_PULSES_MA = '10, -10'
+SWITCH_DEFAULT_FIELDS_G = '0'
+SWITCH2_DEFAULT_FIELDS_G = '40, 20, 0, -20'
+SWITCH_DEFAULT_PULSE_WIDTH_US = 20.0
 SWITCH_DEFAULT_PULSE_COUNT = 1
 SWITCH2_DEFAULT_PULSES_V = ', '.join(str(value) for value in range(-100, 101, 10))
 RTE_APPLY_PULSE_DEFAULT_MA = 10.0
@@ -2262,7 +2263,7 @@ RTE_OUTER_ROWS = {
                           index_column='outer_current_index'),
     SWITCH_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
                            index_column='outer_field_index', listed=True),
-    SWITCH2_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
+    SWITCH2_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH2_DEFAULT_FIELDS_G,),
                             index_column='outer_field_index', listed=True),
     FIELD_ANGLE_SCAN_MODE: dict(label='Outer stage °:', defaults=(FIELD_ANGLE_DEFAULT_ANGLES,),
                                 index_column='outer_angle_index', listed=True),
@@ -27263,6 +27264,7 @@ class CombinedControlApp:
         series_markers=None,
         symmetric_x_extent=None,
         angle_x_range=None,
+        x_range=None,
     ) -> None:
         canvas.delete("all")
         width = max(canvas.winfo_width(), 330)
@@ -27316,6 +27318,8 @@ class CombinedControlApp:
             x_min, x_max, x_ticks, x_tick_step = nice_linear_ticks(-extent, extent)
         elif angle_x_range is not None and float(angle_x_range[0]) != float(angle_x_range[1]):
             x_min, x_max, x_ticks, x_tick_step = angle_axis_ticks(min(float(min(angle_x_range)), min(xs)), max(float(max(angle_x_range)), max(xs)))
+        elif x_range is not None:
+            x_min, x_max, x_ticks, x_tick_step = nice_linear_ticks(min(float(x_range[0]), min(xs)), max(float(x_range[1]), max(xs)), expand_limits=False)
         else:
             x_min, x_max, x_ticks, x_tick_step = nice_linear_ticks(min(xs), max(xs))
         y_min, y_max, y_ticks, y_tick_step = nice_linear_ticks(min(ys), max(ys))
@@ -38045,7 +38049,7 @@ class RTEPanel(PPMSPanel):
         current = mode == 'Current'
         angle = mode in RTE_ANGLE_MODES
         switch = mode in SWITCH_MODES
-        self.rte_round_trip.set(mode in RTE_FIELD_SWEEP_MODES or switch)
+        self.rte_round_trip.set(mode in RTE_FIELD_SWEEP_MODES or mode == SWITCH2_SCAN_MODE)
         defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else () if switch else RTE_FIELD_DEFAULT_RANGE
         for variable, value in zip(self.ppms_simple_range, defaults):
             variable.set(value)
@@ -39099,6 +39103,7 @@ class RTEPanel(PPMSPanel):
             self.ppms_active_scan_mode = mode
             self.ppms_plot_axis = 'field' if mode in RTE_FIELD_SWEEP_MODES else 'angle' if angle else rte_pulse_axis(mode) if switch else 'current'
             self.ppms_plot_angle_range = (min((p[2] for p in plan)), max((p[2] for p in plan))) if angle else None
+            self.ppms_plot_x_range = (min((p[2] for p in plan)), max((p[2] for p in plan))) if switch or mode == 'Current' else None
             self.ppms_plot_addresses = {key: self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name) for key in settings['active_lockins']}
             self.ppms_field_scan_rows = []
             self.rte_switch_traces, self.rte_switch_trace_path, self.rte_switch_trace_failed = [], None, False
@@ -40184,6 +40189,7 @@ class RTEPanel(PPMSPanel):
                     auto_voltage_unit=channel != 'theta',
                     show_legend=False, series_colors=colors[channel], series_markers=markers[channel],
                     angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
+                    x_range=None if axis == 'angle' else (self.__dict__.get('ppms_plot_x_range') if axis != 'field' else None) or (math.inf, -math.inf),
                     **({'series_labels': labels[channel]} if labels[channel] else {}))
         self._redraw_switch_time_plot()
     def save_ppms_field_scan_csv(self):
