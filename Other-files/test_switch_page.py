@@ -291,9 +291,9 @@ class SwitchPageTests(unittest.TestCase):
             # the time row; the 6221 and lock-in boxes are not touched.
             panel.ppms_simple_mode.set("Switch")
             panel._rte_mode_changed()
-            # The user's settings (2026-11-24: "change default as this"):
-            # the typed loop, field -12 G, Round trip off.
-            self.assertEqual(panel.rte_switch_pulses_var.get(), "14, 12, 10, 8, 6, 4, 2, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 2, 4, 6, 8, 10, 12, 14")
+            # The user's settings (2026-11-24: "default setting as this
+            # fig"): the typed loop, field -12 G, Settle s 10, Round trip off.
+            self.assertEqual(panel.rte_switch_pulses_var.get(), "14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14")
             self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {True})
             self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {False})
             self.assertEqual(panel.rte_switch_pulse_list_widgets[0].options["text"], "Pulses mA:")
@@ -301,7 +301,7 @@ class SwitchPageTests(unittest.TestCase):
             # default acquire time in switch as 30s").
             self.assertEqual(panel.ppms_acquisition_time_var.get(), "30")
             self.assertIs(panel.rte_round_trip.get(), False)
-            self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "0.5"))
+            self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "10"))
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
             self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "-12")
             self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
@@ -320,6 +320,7 @@ class SwitchPageTests(unittest.TestCase):
             panel.ppms_simple_mode.set("Angle+Field")
             panel._rte_mode_changed()
             self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+            self.assertEqual(panel.ppms_field_scan_stable_var.get(), "0.5", "Settle s back to 0.5 in the other modes")
             self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {True})
             self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {False})
             self.assertTrue(panel.rte_time_frame.grid_removed)

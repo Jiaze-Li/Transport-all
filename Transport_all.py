@@ -2241,7 +2241,9 @@ RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_FIELD_LIST_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_SCAN_ROWS_LAST_COLUMN = 14
-SWITCH_DEFAULT_PULSES_MA = '14, 12, 10, 8, 6, 4, 2, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 2, 4, 6, 8, 10, 12, 14'
+SWITCH_DEFAULT_PULSES_MA = '14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14'
+SWITCH_SETTLE_S = 10.0
+RTE_SETTLE_S = 0.5
 SWITCH_DEFAULT_FIELDS_G = '-12'
 SWITCH2_DEFAULT_FIELDS_G = '40, 20, 0, -20'
 SWITCH_DEFAULT_PULSE_WIDTH_US = 10.0
@@ -37345,6 +37347,8 @@ class RTEPanel(PPMSPanel):
             self.ppms_lockin_selection[key].set(measured)
         self.ppms_acquisition_time_var.set(f'{RTE_ACQUISITION_S:g}')
         self.rte_acquisition_default_shown = f'{RTE_ACQUISITION_S:g}'
+        self.ppms_field_scan_stable_var.set(f'{RTE_SETTLE_S:g}')
+        self.rte_settle_default_shown = f'{RTE_SETTLE_S:g}'
         self.ppms_simple_mode.set(self.rte_default_scan_mode)
         self._rte_mode_changed()
         self.rte_magnet_choice_var.set(RTE_MAGNET_CHOICES[1])
@@ -38062,6 +38066,12 @@ class RTEPanel(PPMSPanel):
             if shown is None or str(acquire.get()).strip() == shown:
                 acquire.set(new)
                 self.rte_acquisition_default_shown = new
+        settle = self.__dict__.get('ppms_field_scan_stable_var')
+        if settle is not None and 'rte_settle_default_shown' in self.__dict__:
+            new = f'{SWITCH_SETTLE_S if mode == SWITCH_SCAN_MODE else RTE_SETTLE_S:g}'
+            if str(settle.get()).strip() == self.rte_settle_default_shown:
+                settle.set(new)
+                self.rte_settle_default_shown = new
         self._rte_show_scan_units(mode)
         self._rte_show_pulse_row(mode)
         self._rte_show_outer_row(mode)

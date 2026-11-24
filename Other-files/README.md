@@ -5,8 +5,9 @@
 - **Requests:** "use this as default setting" (Switch: Pulses mA 10, -10; Loops 1; Settle s 0.5; Acquire s 30; Round
   trip off; Outer field G 0; Pulse µs 20; Pulses 1) and "the xlim should be the maxium of the settings not the
   readings".
-- Switch starts with `SWITCH_DEFAULT_PULSES_MA` "14, 12, 10, 8, 6, 4, 2, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 2, 4, 6, 8, 10, 12, 14" (the user's loop as typed, 2026-11-24: "change default as
-  this"; "10, -10" earlier that day), `SWITCH_DEFAULT_FIELDS_G` "-12", Round trip off and Pulse µs 10
+- Switch starts with `SWITCH_DEFAULT_PULSES_MA` "14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14" (the user's loop as typed, 2026-11-24: "default setting
+  as this fig"; earlier that day "10, -10" and the loop without 0), `SWITCH_DEFAULT_FIELDS_G` "-12", Settle s 10 when
+  Switch is chosen (`SWITCH_SETTLE_S`; other modes 0.5, a typed value kept, as Acquire s), Round trip off and Pulse µs 10
   (`SWITCH_DEFAULT_PULSE_WIDTH_US`; the Settings box's Apply pulse row shares the box, so it starts at 10 too).
   Switch2 keeps its own: -100 … 100 V, fields 40, 20, 0, -20 G (`SWITCH2_DEFAULT_FIELDS_G`), Round trip on.
 - X, Y and θ plots of the page: the x axis ends at the scan's own range (`_draw_nonlocal_series(x_range=…)`, ticks
