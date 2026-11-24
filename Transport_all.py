@@ -37564,7 +37564,7 @@ class RTEPanel(PPMSPanel):
         self._create_connection_indicator(group, 'rte_avtech').grid(row=0, column=4, padx=3)
         ttk.Label(group, textvariable=self.rte_connections['avtech'], width=13).grid(row=0, column=5, sticky='w')
         self.rte_connection_widgets['avtech'] = (entry, connect, disconnect)
-        self.rte_avtech_row = group
+        self.rte_avtech_row, self.rte_measurement_frame = group, measurement
         group.grid_remove()
         self.rte_resources['newmark'] = tk.StringVar(value='auto')
         self.rte_connections['newmark'] = tk.StringVar(value='Not connected')
@@ -38029,6 +38029,8 @@ class RTEPanel(PPMSPanel):
         self._arrange_pair_by_width(measurement, rack, instruments, gap=12, stack_gap=4, left_width=rack_width, right_width=right_width)
         def place(_event=None) -> None:
             side = getattr(measurement, '_pair_side_by_side', None)
+            if side is not None:
+                self._rte_show_avtech_row()
             if side is None or getattr(measurement, '_rte_live_beside_rack', None) is (not side):
                 return
             measurement._rte_live_beside_rack = not side
@@ -38073,7 +38075,8 @@ class RTEPanel(PPMSPanel):
             return
         state = self.__dict__.get('rte_connections', {}).get('avtech')
         mode = self.__dict__.get('ppms_simple_mode')
-        shown = (mode is not None and mode.get() == SWITCH2_SCAN_MODE) or controller.connected or (state is not None and state.get() == 'Check output')
+        two_columns = getattr(self.__dict__.get('rte_measurement_frame'), '_pair_side_by_side', False) is True
+        shown = two_columns or (mode is not None and mode.get() == SWITCH2_SCAN_MODE) or controller.connected or (state is not None and state.get() == 'Check output')
         if shown != self.__dict__.get('rte_avtech_row_shown', False):
             self.rte_avtech_row_shown = shown
             row.grid() if shown else row.grid_remove()

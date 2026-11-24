@@ -401,6 +401,25 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             self.three_plot_rows(panel)
             self.root.update()
 
+    def test_the_avtech_row_is_in_the_two_column_layout(self):
+        """User, 2026-11-24: "add avtech connection here" (under the Zurich
+        MFLI, beside the Motor row of the two-column connections).  Shown
+        there in every mode; in the stacked 1101 px window only in Switch2 or
+        while connected (a row there takes the plots' height)."""
+        panel = self.a.rte_panel
+        self.assertNotEqual(panel.ppms_simple_mode.get(), "Switch2")
+        for width, height, shown in ((LAB_WIDE, self.height, True), (1101, CI_SHOT_HEIGHT, False)):
+            self.root.geometry(f"{width}x{height}+0+0")
+            for _ in range(3):
+                self.root.update()
+            with self.subTest(width=width):
+                self.assertIs(panel.rte_measurement_frame._pair_side_by_side, shown)
+                self.assertEqual(bool(panel.rte_avtech_row.winfo_ismapped()), shown)
+                if shown:
+                    row = panel.rte_avtech_row
+                    self.assertEqual(row.grid_info()["row"], 4)
+                    self.assertIs(row.master, panel.ppms_instruments_frame)
+
     def test_the_switch_plots_are_drawn_in_the_1101_px_window(self):
         """User, 2026-11-23: "fix the Switch2 plots at 1101 px too".  Switch
         and Switch2 at the default (SR830-1 at 2): the X and Y plots and the
