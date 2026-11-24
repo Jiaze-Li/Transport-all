@@ -10,6 +10,10 @@
   Switch is chosen (`SWITCH_SETTLE_S`; other modes 0.5, a typed value kept, as Acquire s), Round trip off and Pulse µs 10
   (`SWITCH_DEFAULT_PULSE_WIDTH_US`; the Settings box's Apply pulse row shares the box, so it starts at 10 too).
   Switch2 keeps its own: -100 … 100 V, fields 40, 20, 0, -20 G (`SWITCH2_DEFAULT_FIELDS_G`), Round trip on.
+- Switch: "Cycles" in Round trip's place (user, 2026-11-24: "change the round trip setting to cycle times and text
+  input in the switch scan mode"): how many times the typed list runs, the Loops count itself (`rte_cycles_widgets`
+  share `ppms_field_scan_loop_var`), so Loops and Round trip are off screen in Switch (Round trip off). Switch2 and the
+  other modes keep Loops and Round trip.
 - X, Y and θ plots of the page: the x axis ends at the scan's own range (`_draw_nonlocal_series(x_range=…)`, ticks
   inside, no rounding out): the typed pulses (Switch, Switch2) or currents (Current) as set at Start
   (`ppms_plot_x_range`); for a measured field (Field, Field+Angle: the settings are supply amps) the lowest and

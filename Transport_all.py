@@ -37729,6 +37729,8 @@ class RTEPanel(PPMSPanel):
             self.rte_edit_widgets.append((entry, 'normal'))
             if i < 3:
                 self.rte_range_widgets += [name, entry]
+            elif i == 3:
+                self.rte_loops_widgets = [name, entry]
         self.rte_switch_pulses_var = tk.StringVar(value=SWITCH_DEFAULT_PULSES_MA)
         self.rte_switch2_pulses_var = tk.StringVar(value=SWITCH2_DEFAULT_PULSES_V)
         self.rte_avtech_width_ns = tk.StringVar(value=f'{AVTECH_DEFAULT_WIDTH_NS:g}')
@@ -37744,6 +37746,14 @@ class RTEPanel(PPMSPanel):
         check = ttk.Checkbutton(scan_rows, text='Round trip', variable=self.rte_round_trip)
         check.grid(row=2, column=5, columnspan=2)
         self.rte_edit_widgets.append((check, 'normal'))
+        cycles = ttk.Entry(scan_rows, textvariable=self.ppms_field_scan_loop_var, width=6)
+        self.rte_cycles_widgets = [ttk.Label(scan_rows, text='Cycles'), cycles]
+        self.rte_cycles_widgets[0].grid(row=2, column=5, sticky='e', padx=(4, 0))
+        cycles.grid(row=2, column=6, padx=2, sticky='ew')
+        for widget in self.rte_cycles_widgets:
+            widget.grid_remove()
+        self.rte_edit_widgets.append((cycles, 'normal'))
+        self.rte_round_trip_check = check
         self.rte_start_button = ttk.Button(scan_rows, text='Start scan', command=self.start_ppms_field_scan)
         self.rte_start_button.grid(row=2, column=0, sticky='ew')
         self.ppms_field_scan_stop_button = ttk.Button(scan_rows, text='Stop', command=self.stop_ppms_field_scan)
@@ -38114,6 +38124,11 @@ class RTEPanel(PPMSPanel):
         self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '' if mode in SWITCH_MODES else f'{name} A')
         for widget in self.__dict__.get('rte_range_widgets') or ():
             widget.grid_remove() if mode in SWITCH_MODES else widget.grid()
+        cycles = mode == SWITCH_SCAN_MODE
+        for widget in self.__dict__.get('rte_cycles_widgets') or ():
+            widget.grid() if cycles else widget.grid_remove()
+        for widget in (*(self.__dict__.get('rte_loops_widgets') or ()), *([self.rte_round_trip_check] if 'rte_round_trip_check' in self.__dict__ else [])):
+            widget.grid_remove() if cycles else widget.grid()
         pulse_list = self.__dict__.get('rte_switch_pulse_list_widgets') or ()
         for widget in pulse_list:
             widget.grid() if mode in SWITCH_MODES else widget.grid_remove()

@@ -1888,9 +1888,10 @@ class AnglePageTests(unittest.TestCase):
         # Hidden: the range row of the other outer modes (row 3), the
         # Switch mode's pulse row (row 4; user, 2026-11-22) and its typed
         # "Pulses mA:" box in place of Start / End / Step (row 0; user,
-        # 2026-11-23).
+        # 2026-11-23) and its Cycles box in Round trip's place (row 2; user,
+        # 2026-11-24).
         self.assertEqual({w.grid_options["row"] for w in Recorder.made
-                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {0, 3, 4})
+                          if w.parent is rows and "row" in w.grid_options and w.grid_removed}, {0, 2, 3, 4})
         self.assertEqual({w.grid_options["row"] for w in panel.rte_pulse_widgets}, {4})
         labels = {w.options["text"]: w for w in Recorder.made
                   if w.parent is block and "text" in w.options and "command" not in w.options}

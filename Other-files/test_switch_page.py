@@ -302,6 +302,14 @@ class SwitchPageTests(unittest.TestCase):
             self.assertEqual(panel.ppms_acquisition_time_var.get(), "30")
             self.assertIs(panel.rte_round_trip.get(), False)
             self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "10"))
+            # Cycles in Round trip's place (user, 2026-11-24: "change the
+            # round trip setting to cycle times and text input in the switch
+            # scan mode"): the Loops count, so the Loops box is off screen.
+            label, cycles = panel.rte_cycles_widgets
+            self.assertEqual((label.options["text"], cycles.options["textvariable"]), ("Cycles", panel.ppms_field_scan_loop_var))
+            self.assertEqual({w.grid_removed for w in panel.rte_cycles_widgets}, {False})
+            self.assertEqual([(w.grid_options["row"], w.grid_options["column"]) for w in panel.rte_cycles_widgets], [(2, 5), (2, 6)])
+            self.assertEqual({w.grid_removed for w in (*panel.rte_loops_widgets, panel.rte_round_trip_check)}, {True})
             self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
             self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "-12")
             self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
@@ -321,6 +329,8 @@ class SwitchPageTests(unittest.TestCase):
             panel._rte_mode_changed()
             self.assertEqual({w.grid_removed for w in pulse_row}, {True})
             self.assertEqual(panel.ppms_field_scan_stable_var.get(), "0.5", "Settle s back to 0.5 in the other modes")
+            self.assertEqual({w.grid_removed for w in panel.rte_cycles_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in (*panel.rte_loops_widgets, panel.rte_round_trip_check)}, {False})
             self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {True})
             self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {False})
             self.assertTrue(panel.rte_time_frame.grid_removed)
