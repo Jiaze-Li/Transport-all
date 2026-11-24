@@ -518,6 +518,51 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual({line[3] for line in lines[1:]}, {"V"})
         self.assertEqual(lines[1][4], "#1 -2 mA")
 
+    def test_x_and_y_vs_time_follow_the_window_as_it_is_read(self):
+        """User, 2026-11-24: "The X and Y signals versus time should be
+        displayed and updated in real time here."  While a Switch scan runs,
+        a 1 s timer draws the readings of the Acquire window being read
+        beside the saved ones; nothing new, nothing redrawn; the scan over,
+        the timer stops."""
+        h = self.make_switch()
+        panel = h.panel
+        started = app.time.monotonic() - 300.0
+        panel.ppms_field_scan_running, panel.ppms_active_scan_mode = True, "Switch"
+        panel.ppms_field_scan_started_at = started
+        panel.rte_switch_traces = [dict(index=1, pulse_ma=-2.0, harmonics={"8": 1}, times=[0.0, 1.0],
+                                        values=[{"sr830_8_x_v": 1e-6, "sr830_8_y_v": -1e-6}] * 2)]
+        panel.rte_switch_live = dict(index=2, harmonics={"8": 1})
+        panel.ppms_sample_trace = [(started + 305.0, {"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6})]
+        h.root.pending.clear()
+
+        def drawn(channel):
+            calls = [c for c in h.draw.call_args_list if c.args[0] is panel.rte_time_canvases[channel]]
+            return calls[-1].args[1] if calls else None
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        for channel, sign in (("x", 1), ("y", -1)):
+            series = drawn(channel)
+            self.assertEqual(sorted(series), ["SR830-1 #1", "SR830-1 #2"])
+            (at, value), = series["SR830-1 #2"]
+            self.assertAlmostEqual(at, 305.0, places=6)
+            self.assertEqual(value, sign * 5e-6)
+        self.assertEqual([delay for delay, _callback in h.root.pending], [1000])
+        panel.ppms_sample_trace.append((started + 305.4, {"sr830_8_x_v": 6e-6, "sr830_8_y_v": -6e-6}))
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        self.assertEqual([v for _at, v in drawn("x")["SR830-1 #2"]], [5e-6, 6e-6])
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        self.assertIsNone(drawn("x"), "no new reading, no redraw")
+        panel.ppms_field_scan_running = False
+        h.root.pending.clear()
+        panel._rte_live_time_tick()
+        self.assertEqual(h.root.pending, [])
+        # A scan's start sets the timer going.
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        self.start(h)
+        self.assertIn(h.panel._rte_live_time_tick, [callback for _delay, callback in h.root.pending])
+
     def test_apply_pulse_sends_one_pulse_by_hand(self):
         """User, 2026-11-22: "add another pulse apply below here RMS
         continuous settings": the settings' Apply pulse sends the "6221

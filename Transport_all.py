@@ -2250,6 +2250,7 @@ RTE_APPLY_PULSE_DEFAULT_MA = 10.0
 RTE_TRANSPORT_COMPLIANCE_V = 100.0
 SWITCH_TIME_ROW_TITLE = 'X and Y vs time'
 SWITCH_TRACE_MOST_DRAWN = 4000
+SWITCH_LIVE_REDRAW_S = 1.0
 SWITCH_TRACE_COLUMNS = ("time_s", "quantity", "value", "unit", "point")
 SWITCH_PULSE_DONE_MARGIN_S = 0.2
 SWITCH_READ_SETTLE_TAUS = 5.0
@@ -37364,6 +37365,16 @@ class RTEPanel(PPMSPanel):
             self._refresh_ppms2_plot_layout()
         else:
             self._redraw_ppms_transport_plot()
+    def _rte_live_time_tick(self):
+        self.rte_live_time_after = None
+        if self.rte_closed or self.closing or not self.ppms_field_scan_running or self.__dict__.get('ppms_active_scan_mode') not in SWITCH_MODES:
+            return
+        live, trace = self.__dict__.get('rte_switch_live'), self.__dict__.get('ppms_sample_trace')
+        drawn = (live or {}).get('index'), len(trace or ())
+        if live and trace and drawn != self.__dict__.get('rte_live_drawn'):
+            self.rte_live_drawn = drawn
+            self._redraw_switch_time_plot()
+        self.rte_live_time_after = self.root.after(int(SWITCH_LIVE_REDRAW_S * 1000), self._rte_live_time_tick)
     def _switch_time_order(self):
         orders = self._ppms2_measured_orders()
         for order in PPMS_HARMONIC_ORDERS:
@@ -37397,7 +37408,11 @@ class RTEPanel(PPMSPanel):
         if not canvases or not self._rte_time_row_shown():
             return
         order, meters = self._switch_time_order()
-        traces = self.__dict__.get('rte_switch_traces') or []
+        traces = list(self.__dict__.get('rte_switch_traces') or [])
+        live, readings = self.__dict__.get('rte_switch_live'), list(self.__dict__.get('ppms_sample_trace') or ())
+        if live and readings and self.__dict__.get('ppms_field_scan_running'):
+            started = self.ppms_field_scan_started_at
+            traces.append(dict(live, times=[at - started for at, _values in readings], values=[values for _at, values in readings]))
         wanted = []
         for meter in meters:
             address = None if meter == 'zurich' else self._ppms2_meter_address(meter)
@@ -39184,6 +39199,9 @@ class RTEPanel(PPMSPanel):
                 self._rte_dialog(f'{self.ppms_page_name} scan not started', str(error))
                 return
             self.rte_scan_future = future
+            if switch:
+                self.rte_live_drawn = None
+                self._rte_live_time_tick()
             future.add_done_callback(lambda f: self.post_ui(lambda: finished(f)))
         if not turns:
             begin()
@@ -39969,6 +39987,7 @@ class RTEPanel(PPMSPanel):
                 except Exception:
                     field_failure = mode in (*RTE_FIELD_SWEEP_MODES, *RTE_ANGLE_MODES, *SWITCH_MODES)
                     raise
+                self.rte_switch_live = dict(index=progress, harmonics={str(self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name)): settings[PPMS_SR830_HARMONIC_SETTING_KEYS[key]] for key in settings['active_lockins']}) if switch else None
                 self.ppms_sample_trace = [] if switch else None
                 try:
                     if index == 1 or (mode == 'Angle+Current' and new_step):
@@ -39977,7 +39996,7 @@ class RTEPanel(PPMSPanel):
                         sample = self._average_ppms_transport_sample(settings['frequency_hz'], settings['active_lockins'], duration)
                         windows = 1
                 finally:
-                    trace, self.ppms_sample_trace = self.__dict__.get('ppms_sample_trace'), None
+                    trace, self.ppms_sample_trace, self.rte_switch_live = self.__dict__.get('ppms_sample_trace'), None, None
                 self._rte_wait(0)
                 try:
                     measured = self._rte_read_field()
@@ -40194,7 +40213,7 @@ class RTEPanel(PPMSPanel):
         if lakeshore is not None:
             lakeshore.request_stop()
         self._rte_log('stop_requested', button='the program closing')
-        for name in ('ppms_poll_after_id', 'zurich_after_id'):
+        for name in ('ppms_poll_after_id', 'zurich_after_id', 'rte_live_time_after'):
             timer = self.__dict__.get(name)
             if timer is not None:
                 self.root.after_cancel(timer)

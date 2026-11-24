@@ -1,5 +1,13 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Switch / Switch2: X and Y vs time drawn live (user, 2026-11-24)
+
+- **Request:** "The X and Y signals versus time should be displayed and updated in real time here."
+- While a Switch or Switch2 scan runs, a 1 s timer (`SWITCH_LIVE_REDRAW_S`, `_rte_live_time_tick`) redraws the "X and Y
+  vs time" row with the readings of the Acquire window being read (`ppms_sample_trace`, the point's harmonics in
+  `rte_switch_live`), beside the windows already saved; a tick with no new reading draws nothing. The saved point, the
+  CSV and the trace CSV are as before. The timer stops when the scan ends.
+
 ## Switch2: the Switch scan with the Avtech's pulses (user, 2026-11-23)
 
 - **Request:** "add switch2 scan in the SHHV & Switch module which use the Avtech in stead of 6221. You can refer to
