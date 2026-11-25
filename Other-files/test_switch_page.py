@@ -356,6 +356,23 @@ class SwitchPageTests(unittest.TestCase):
         panel._draw_nonlocal_series(canvas, pulses, "6221 pulse current (mA)", "X voltage", "wait", x_range=(-10.0, 10.0))
         self.assertTrue({"-10", "10"} <= set(canvas.texts()), canvas.texts())
 
+    def test_the_lockins_start_at_gpib_9_10_and_11(self):
+        """User, 2026-11-25: "default settings as the fig in SHHV & Switch"
+        (SR830-1 GPIB0::9, SR830-2 GPIB0::10, SR830-3 GPIB0::11).  The page
+        takes any GPIB address 1 to 30 for its SR830s; the PPMS page keeps
+        8, 9 and 10."""
+        panel = ete.build_page(kepco=False)
+        self.assertEqual([panel.ppms_resource_vars[key].get() for key in app.PPMS_SR830_KEYS],
+                         ["GPIB0::9::INSTR", "GPIB0::10::INSTR", "GPIB0::11::INSTR"])
+        self.assertEqual([panel._ppms_sr830_address(f"GPIB0::{a}::INSTR") for a in (1, 9, 11, 30)], [1, 9, 11, 30])
+        for bad in ("GPIB0::0::INSTR", "GPIB0::31::INSTR", "ASRL3::INSTR"):
+            with self.assertRaisesRegex(ValueError, "SR830 address must be GPIB0::<1 to 30>::INSTR"):
+                panel._ppms_sr830_address(bad)
+        self.assertEqual([app.PPMS_DEFAULT_RESOURCES[key] for key in app.PPMS_SR830_KEYS],
+                         ["GPIB0::8::INSTR", "GPIB0::9::INSTR", "GPIB0::10::INSTR"])
+        with self.assertRaisesRegex(ValueError, "8, 9 or 10"):
+            app.CombinedControlApp._ppms_sr830_address("GPIB0::11::INSTR")
+
     def test_the_plan_is_the_pulse_loop(self):
         plan = app.rte_scan_plan("Switch", "-2", "2", "2", 1, True)
         self.assertEqual([value for _loop, _point, value in plan], [-2.0, 0.0, 2.0, 0.0, -2.0])

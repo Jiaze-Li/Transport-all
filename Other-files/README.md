@@ -1,5 +1,14 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: SR830 addresses 9, 10, 11 (user, 2026-11-25)
+
+- **Request:** "default settings as the fig in SHHV & Switch" (SR830-1 GPIB0::9, SR830-2 GPIB0::10, SR830-3
+  GPIB0::11).
+- The page starts with those addresses (`RTE_SR830_ADDRESSES`) and accepts any GPIB address 1 to 30 for its SR830s
+  (`RTEPanel._ppms_sr830_address`; before, only 8, 9 or 10, so 11 was refused at Connect). The PPMS page keeps 8, 9,
+  10. The CSV columns are named by address (`sr830_9_x_v` …), as before. The Avtech's start-up GPIB0::8 no longer
+  shares an address with SR830-1.
+
 ## SHHV & Switch: Switch defaults and the plots' x range (user, 2026-11-24)
 
 - **Requests:** "use this as default setting" (Switch: Pulses mA 10, -10; Loops 1; Settle s 0.5; Acquire s 30; Round

@@ -2241,6 +2241,7 @@ RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_FIELD_LIST_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_SCAN_ROWS_LAST_COLUMN = 14
+RTE_SR830_ADDRESSES = (9, 10, 11)
 SWITCH_DEFAULT_PULSES_MA = '14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -8, -12, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14'
 SWITCH_SETTLE_S = 10.0
 RTE_SETTLE_S = 0.5
@@ -37280,6 +37281,12 @@ class RTEPanel(PPMSPanel):
     rte_default_scan_mode = RTE_DEFAULT_SCAN_MODE
     def _rte_harmonic_orders(self, key):
         return self._ppms_harmonic_orders(key)
+    @staticmethod
+    def _ppms_sr830_address(resource_name: str) -> int:
+        match = re.fullmatch(r'GPIB\d*::([1-9]|[12]\d|30)::INSTR', str(resource_name).strip(), flags=re.IGNORECASE)
+        if match is None:
+            raise ValueError('SR830 address must be GPIB0::<1 to 30>::INSTR')
+        return int(match.group(1))
     def _ppms_direct_transport_settings(self):
         if not self.ppms_instrument_controllers['6221'].connected:
             raise ValueError('Please connect the 6221')
@@ -37326,6 +37333,8 @@ class RTEPanel(PPMSPanel):
         self.rte_stage_prompt_open = False
         super().__init__(parent, tab)
         self.zurich_controller.mfli_server_candidates = SUPER_ZURICH_MFLI_SERVERS
+        for key, address in zip(PPMS_SR830_KEYS, RTE_SR830_ADDRESSES):
+            self.ppms_resource_vars[key].set(f'GPIB0::{address}::INSTR')
         self.zurich_resource.set(zurich_mfli_label(SUPER_ZURICH_MFLI_DEVICE))
         for controller in self.ppms_instrument_controllers.values():
             controller.owner_scope = self.ppms_page_name
