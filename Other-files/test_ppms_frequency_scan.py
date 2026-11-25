@@ -998,7 +998,7 @@ class SHVUnchangedTests(unittest.TestCase):
         # 2026-11-22) and Switch2 (user, 2026-11-23) are the last choices; no
         # frequency mode.
         self.assertEqual(app.RTE_SCAN_MODES,
-                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Switch", "Switch2"))
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch2"))
         for name in ("Frequency", "PPMS_SCAN_MODES", "_ppms_frequency_scan_block", "_ppms_set_up_frequency",
                      "_ppms_wait_zurich_reference", "reference_timeout_s", "frequency_settle_s"):
             self.assertNotIn(name, source.replace("RTE_TRANSPORT_FREQUENCY_HZ", "").replace("Frequency Hz", ""))

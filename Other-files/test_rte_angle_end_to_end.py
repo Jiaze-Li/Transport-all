@@ -1475,6 +1475,103 @@ class OuterScanTests(RunLogBase):
         self.assertIn("KEPCO sweep current must stay within +/-10 A", h.showerror.call_args.args[1])
         self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
 
+    def make_field_current(self, typed, span=("-1", "1", "1"), trip=False, **kwargs):
+        """A Field+Current scan (user, 2026-11-25): the typed 6221 read
+        currents outside, the KEPCO's currents of ``span`` at each."""
+        h = self.make(span=span, round_trip=False, **kwargs)
+        panel = h.panel
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Field+Current")
+            panel._rte_mode_changed()
+        self.assertIs(panel.rte_round_trip.get(), True, "a field sweep goes and comes back by default")
+        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5")
+        panel.rte_round_trip.set(trip)
+        for variable, value in zip(panel.ppms_simple_range, span):
+            variable.set(value)
+        panel.rte_outer_ranges["Field+Current"][0].set(typed)
+        h.gauss = FollowingGauss(h.log, h.kepco)
+        panel.rte_controllers["gauss"] = h.gauss
+        h.configured, h.updated = [], []
+
+        def configure(settings):
+            h.configured.append(dict(settings))
+            h.log.append(("6221", "on", settings["current_rms_ma"], settings["frequency_hz"], threading.get_ident()))
+
+        def update(settings):
+            h.updated.append(dict(settings))
+            h.log.append(("6221", "current", settings["current_rms_ma"], threading.get_ident()))
+        panel._configure_ppms_transport_scan = configure
+        panel._update_ppms_transport_current = update
+        h.log.clear()
+        return h
+
+    def test_field_current_sweeps_the_field_at_each_typed_6221_current(self):
+        """User, 2026-11-25: "add field+current scan in the SHHV & Switch
+        mode which I input current in the text and current is the larger
+        cycle": the 6221 is set to each typed current, then the Field scan's
+        sweep runs there; a curve per current against the measured field."""
+        h = self.make_field_current("0.5, 2")
+        self.start(h)
+        panel = h.panel
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV Field+Current scan")
+        for text in ("6221 read current, the OUTER loop: 2 currents in the order typed: +0.5, +2 mA RMS.",
+                     "KEPCO current at each 6221 current, the INNER loop: from -1 A to +1 A (step 1 A), 3 currents a loop",
+                     "2 6221 currents x 3 KEPCO currents x 1 harmonic pass(es) = 6 points.",
+                     "the 6221 and then the KEPCO are zeroed."):
+            self.assertIn(text, question)
+        self.assertNotIn("wires", question)
+        calls = [e[:3] for e in h.log if e[0] == "6221" and e[1] in ("on", "current")
+                 or e[:2] in (("kepco", "set_output"), ("kepco", "set_scan_current"))]
+        self.assertEqual(calls, [("6221", "on", 0.5), ("kepco", "set_output", "CURR"),
+                                 ("kepco", "set_scan_current", 0.0), ("kepco", "set_scan_current", 1.0),
+                                 ("6221", "current", 2.0), ("kepco", "set_scan_current", -1.0),
+                                 ("kepco", "set_scan_current", 0.0), ("kepco", "set_scan_current", 1.0)])
+        self.assertEqual({s["continuous_sweep_peak_a"] for s in h.configured + h.updated}, {2 ** 0.5 * 2.0 * 1e-3})
+        self.assertEqual([e for e in h.log if e[0] == "stage"], [], "the stage never moves")
+        rows = self.rows(h)
+        self.assertEqual([(r["scan_mode"], r["outer_current_index"], float(r["6221_current_rms_ma"]),
+                           float(r["kepco_programmed_current_a"]), r["first_point_windows"]) for r in rows],
+                         [("Field+Current", index, current, field, "2" if field == -1.0 else "1")
+                          for index, current in (("1", 0.5), ("2", 2.0)) for field in (-1.0, 0.0, 1.0)])
+        self.assertNotIn("stage_angle_deg", rows[0])
+        for r in rows:
+            self.assertAlmostEqual(float(r["measured_field_g"]), 100.0 * float(r["kepco_programmed_current_a"]))
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; KEPCO and 6221 zeroed")
+        self.assertEqual(self.names(h, "kepco", "6221")[-3:], ZEROED)
+        events = self.events(h)
+        self.assertEqual([(e["step_index"], e["current_rms_ma"]) for e in events if e["event"] == "current_programmed"],
+                         [(1, 0.5), (2, 2.0)])
+        self.assertEqual([e["x_column"] for e in events if e["event"] == "point_saved"], ["measured_field_g"] * 6)
+        prepared = events[0]
+        self.assertEqual((prepared["mode"], prepared["plan"]["unit"], prepared["plan"]["points"]),
+                         ("Field+Current", "A (KEPCO)", 3))
+        self.assertEqual(prepared["outer"], {"typed": "0.5, 2", "unit": "mA RMS (6221)", "steps": 2, "values": [0.5, 2.0],
+                                             "order": "outer first, in the order typed; the field sweep inner"})
+        self.assertEqual(prepared["source_6221"]["note"], "the outer loop gives the currents")
+        self.assertEqual(prepared["kepco"], {"current_a": "the plan", "voltage_limit_v": 5.0})
+        self.assertEqual(events[-1]["outputs"], {"6221": "zeroed", "kepco": "zeroed"})
+        self.assertEqual({entry[-1] for entry in h.log}, {h.worker}, "all on the worker")
+        self.assert_closed(h)
+        self.assertEqual(panel.ppms_plot_axis, "field")
+        drawn = next(c for c in reversed(h.draw.call_args_list) if c.args[1])
+        self.assertEqual(drawn.args[2], "Measured magnetic field (G)")
+        self.assertEqual({" ".join(name.split(" ")[1:4]) for name in drawn.args[1]}, {"#1 0.5 mA", "#2 2 mA"})
+        self.assertEqual({len(points) for points in drawn.args[1].values()}, {3})
+
+    def test_field_current_refuses_a_bad_list_before_anything_is_sent(self):
+        for typed, message in (("", "Outer 6221 mA RMS: type the 6221 read currents in mA RMS in the order to scan"),
+                               ("0.5, a", 'Outer 6221 mA RMS: "a" is not a number'),
+                               ("0.5, 0", "Outer 6221 mA RMS: the 6221 read currents must be greater than 0 mA RMS; 0 mA is not")):
+            with self.subTest(typed=typed):
+                h = self.make_field_current(typed)
+                self.start(h)
+                h.askyesno.assert_not_called()
+                self.assertEqual(h.showerror.call_args.args[0], "SHHV scan parameters")
+                self.assertIn(message, h.showerror.call_args.args[1])
+                self.assertEqual([e for e in h.log if e[0] in ("kepco", "stage", "6221")], [], "nothing sent")
+
     def test_field_angle_stop_during_the_turn_to_the_second_angle(self):
         h = self.make_field_angle("0, 90")
         panel = h.panel

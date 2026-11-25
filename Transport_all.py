@@ -2225,14 +2225,17 @@ RTE_TRANSPORT_CURRENT_RMS_MA = 1.5
 RTE_DEFAULT_SCAN_MODE = 'Angle+Field'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 FIELD_ANGLE_SCAN_MODE = 'Field+Angle'
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, 'Switch', 'Switch2')
+FIELD_CURRENT_SCAN_MODE = 'Field+Current'
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, FIELD_CURRENT_SCAN_MODE, 'Switch', 'Switch2')
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Current')
 RTE_STAGE_MODES = (*RTE_ANGLE_MODES, FIELD_ANGLE_SCAN_MODE)
-RTE_FIELD_SWEEP_MODES = ('Field', FIELD_ANGLE_SCAN_MODE)
+RTE_FIELD_SWEEP_MODES = ('Field', FIELD_ANGLE_SCAN_MODE, FIELD_CURRENT_SCAN_MODE)
+RTE_CURRENT_OUTER_MODES = ('Angle+Current', FIELD_CURRENT_SCAN_MODE)
 RTE_FIELD_DEFAULT_RANGE = ('-1', '1', '0.02')
 RTE_FIELD_ACQUISITION_S = 2.0
 SWITCH_ACQUISITION_S = 30.0
 FIELD_ANGLE_DEFAULT_ANGLES = '0, 45, 90'
+FIELD_CURRENT_DEFAULT_CURRENTS_MA = '0.5, 1, 1.5'
 SWITCH_SCAN_MODE = 'Switch'
 SWITCH2_SCAN_MODE = 'Switch2'
 SWITCH_MODES = (SWITCH_SCAN_MODE, SWITCH2_SCAN_MODE)
@@ -2270,6 +2273,8 @@ RTE_OUTER_ROWS = {
                             index_column='outer_field_index', listed=True),
     FIELD_ANGLE_SCAN_MODE: dict(label='Outer stage °:', defaults=(FIELD_ANGLE_DEFAULT_ANGLES,),
                                 index_column='outer_angle_index', listed=True),
+    FIELD_CURRENT_SCAN_MODE: dict(label='Outer 6221 mA RMS:', defaults=(FIELD_CURRENT_DEFAULT_CURRENTS_MA,),
+                                  index_column='outer_current_index', listed=True),
 }
 RTE_OUTER_LIST_MAX = 1000
 RTE_OUTER_FIELD_MAX_G = 7300.0
@@ -37210,6 +37215,13 @@ def rte_pulse_list(text, box='Pulses mA', what='pulse currents', unit='mA', exam
             raise ValueError(f'{box}: "{part}" is not a finite number')
         values.append(value + 0.0)
     return tuple(values)
+def rte_outer_current_list_plan(text):
+    label = RTE_OUTER_ROWS[FIELD_CURRENT_SCAN_MODE]['label'].rstrip(':')
+    values = rte_pulse_list(text, label, '6221 read currents', 'mA RMS', '0.5, 1, 1.5')
+    bad = [value for value in values if value <= 0]
+    if bad:
+        raise ValueError(f'{label}: the 6221 read currents must be greater than 0 mA RMS; {bad[0]:g} mA is not')
+    return values
 def rte_pulse_axis(mode):
     return 'avtech' if mode == SWITCH2_SCAN_MODE else 'pulse'
 def rte_outer_values_text(values, limit=12, unit='G'):
@@ -37233,6 +37245,8 @@ def rte_outer_step_of(row):
     if not isinstance(value, (int, float)) or not math.isfinite(value):
         index = row.get('outer_current_index')
         return (float(index) if isinstance(index, (int, float)) else 0.0), f'step {index}'
+    if row.get('scan_mode') == FIELD_CURRENT_SCAN_MODE:
+        return float(value), f"#{row.get('outer_current_index')} {value:{form}} {unit}"
     return float(value), f'{value:{form}} {unit}'
 RTE_STATUS_WIDEST_EXAMPLE = "Stopped; outputs held unless OFF was requested; stage stopped at -359.999°"
 def rte_outputs_text(results, check=True, supply='KEPCO'):
@@ -37269,6 +37283,7 @@ RTE_SCAN_NOTES = {
     'Angle+Field': 'Angle+Field: Stage °; outer: field G',
     'Angle+Current': 'Angle+Current: Stage °; outer: 6221 mA',
     'Field+Angle': 'Field+Angle: KEPCO A; outer: stage °',
+    FIELD_CURRENT_SCAN_MODE: 'Field+Current: KEPCO A; outer: 6221 mA',
     SWITCH_SCAN_MODE: 'Switch: 6221 pulse mA; outer: field G',
     SWITCH2_SCAN_MODE: 'Switch2: Avtech pulse V; outer: field G',
 }
@@ -38953,11 +38968,12 @@ class RTEPanel(PPMSPanel):
             switch = mode in SWITCH_MODES
             avtech = mode == SWITCH2_SCAN_MODE
             field_angle = mode == FIELD_ANGLE_SCAN_MODE
+            current_outer = mode == FIELD_CURRENT_SCAN_MODE
             turns = mode in RTE_STAGE_MODES
             supply = self._rte_supply()
             typed_pulses = (rte_pulse_list(self.rte_switch2_pulses_var.get(), 'Pulses V', 'pulse amplitudes', 'V', '-100, -50, 0, 50, 100') if avtech
                             else rte_pulse_list(self.rte_switch_pulses_var.get()) if switch else None)
-            plan = rte_scan_plan('Angle' if angle else 'Field' if field_angle else mode,
+            plan = rte_scan_plan('Angle' if angle else 'Field' if field_angle or current_outer else mode,
                                  *(v.get() for v in self.ppms_simple_range),
                                  self.ppms_field_scan_loop_var.get(), self.rte_round_trip.get(),
                                  supply.max_current_a(), supply.label, typed_pulses)
@@ -38986,6 +39002,8 @@ class RTEPanel(PPMSPanel):
                 self.rte_scan_field_tolerance_g = tolerance
             elif field_angle:
                 outer = rte_outer_angle_list_plan(self.rte_outer_ranges[mode][0].get())
+            elif current_outer:
+                outer = rte_outer_current_list_plan(self.rte_outer_ranges[mode][0].get())
             else:
                 outer = rte_outer_plan(mode, *(v.get() for v in self.rte_outer_ranges[mode]), supply.max_current_a(), supply.label) if mode in RTE_OUTER_ROWS else None
             field_current = None
@@ -39008,7 +39026,7 @@ class RTEPanel(PPMSPanel):
                         raise ValueError(f'The {supply.label} is not at its setpoint (still ramping, or a ramp was stopped): wait for it, or Apply its current or ramp it to 0 A, then start')
             settings = self._ppms_direct_transport_settings()
             pulse = self._rte_avtech_pulse_settings(plan) if avtech else self._rte_switch_pulse_settings(plan, settings) if switch else None
-            for value in [value for _, _, value in plan] if mode == 'Current' else outer if mode == 'Angle+Current' else ():
+            for value in [value for _, _, value in plan] if mode == 'Current' else outer if mode in RTE_CURRENT_OUTER_MODES else ():
                 validate_ppms_transport_scan_settings(value, settings['frequency_hz'], settings['compliance_v'],
                     settings['harmonic_a'], settings['harmonic_b'], settings['active_lockins'],
                     allow_no_lockins=self.zurich_scan_enabled, harmonic_c=settings['harmonic_c'])
@@ -39041,6 +39059,8 @@ class RTEPanel(PPMSPanel):
             turning = sum(abs(b - a) for a, b in zip(angles, angles[1:]))
             steps_s = len(outer) * STFMR_FIELD_SETTLE_REQUIRED_SAMPLES * RTE_FIELD_SETTLE_POLL_S if mode in RTE_FIELD_OUTER_MODES else (len(outer) - 1) * duration
             least_s += turning / NEWMARK_SPEED_DEG_S + len(passes) * steps_s
+        if current_outer:
+            least_s += len(passes) * (len(outer) - 1) * duration
         if field_angle:
             angles = list(outer) * len(passes)
             turning = sum(abs(b - a) for a, b in zip(angles, angles[1:]))
@@ -39049,7 +39069,7 @@ class RTEPanel(PPMSPanel):
         if ramp_rate is not None and mode not in RTE_FIELD_LIST_MODES:
             here = supply.lakeshore_controller.current_a
             here = here if math.isfinite(here) else 0.0
-            sequence = [value for _loop, _point, value in plan] * (len(outer) if field_angle else 1)
+            sequence = [value for _loop, _point, value in plan] * (len(outer) if field_angle or current_outer else 1)
             ramp_s = lakeshore_scan_ramp_seconds([here, *sequence * len(passes), 0.0] if mode in RTE_FIELD_SWEEP_MODES else [here, field_current, 0.0], ramp_rate)
             least_s += ramp_s
         least_text = self._format_scan_duration(least_s)
@@ -39065,6 +39085,9 @@ class RTEPanel(PPMSPanel):
                 return
         elif field_angle:
             if not self._ask_scan_start(f'{self.ppms_page_name} {mode} scan', self._rte_field_angle_question(plan, outer, passes, limit, settle_text, least_text, turning, ramp_text), f'at least {least_text}', parent=self.root):
+                return
+        elif current_outer:
+            if not self._ask_scan_start(f'{self.ppms_page_name} {mode} scan', self._rte_field_current_question(plan, outer, passes, limit, settle_text, least_text, ramp_text), f'at least {least_text}', parent=self.root):
                 return
         elif outer:
             if not self._ask_scan_start(f'{self.ppms_page_name} {mode} scan', self._rte_outer_question(
@@ -39156,6 +39179,8 @@ class RTEPanel(PPMSPanel):
             elif field_angle:
                 self.rte_stage_where = 'stage not moved'
                 self.ppms_field_scan_status_var.set(f'{self.ppms_page_name} {mode}: {len(outer)} angles x {len(plan)} currents; {self.ppms_field_scan_total} points')
+            elif current_outer:
+                self.ppms_field_scan_status_var.set(f'{self.ppms_page_name} {mode}: {len(outer)} 6221 currents x {len(plan)} {supply.label} currents; {self.ppms_field_scan_total} points')
             elif outer:
                 self.rte_stage_where = 'stage not moved'
                 steps = 'fields' if mode in RTE_FIELD_OUTER_MODES else 'currents'
@@ -39180,7 +39205,9 @@ class RTEPanel(PPMSPanel):
                                + 
                                f'with {settings["current_rms_ma"]:g} mA RMS' if switch else
                                f'; stage angles as typed: {rte_outer_angles_text(outer, 50)} ({len(outer)} steps); at '
-                               f'each, {len(plan)} {supply.label} currents from {plan[0][2]:+g} A' if field_angle else '')
+                               f'each, {len(plan)} {supply.label} currents from {plan[0][2]:+g} A' if field_angle else
+                               f'; 6221 read currents as typed: {rte_outer_values_text(outer, 50, "mA RMS")} ({len(outer)} steps); at '
+                               f'each, {len(plan)} {supply.label} currents from {plan[0][2]:+g} A' if current_outer else '')
                             + f'; each reading waits {settle_text}; at least {least_text}'
                             + (f'; {supply.label} ramps at {ramp_rate:g} A/s' if ramp_rate is not None else ''))
             self.ppms_scan_settle_logged = settle_s
@@ -39619,6 +39646,28 @@ class RTEPanel(PPMSPanel):
                 'The Newmark stage turns the SAMPLE HOLDER with its wires attached, at '
                 f'{NEWMARK_SPEED_DEG_S:g}°/s, to each angle counted from the stage zero (absolute moves, all '
                 f'within ±{NEWMARK_CABLE_LIMIT_DEG:g}° of it). Can the wires follow?\n\nStart the scan?')
+    def _rte_field_current_question(self, plan, outer, passes, limit, settle_text, least_text, ramp_text=''):
+        name, terms = self._rte_supply_label(), self._rte_magnet_terms(limit)
+        currents = [value for _loop, _point, value in plan]
+        loops = plan[-1][0]
+        trip = ', round trip' if self.rte_round_trip.get() else ''
+        setting = 'the first switches the output on, the others change its current only' if name == 'KEPCO' else 'it ramps there and each point waits until RDGI? is at it'
+        steps = len(outer) * len(passes)
+        passes_text = f' Each of the {len(passes)} harmonic passes runs the whole current x field scan, from the first 6221 current.' if len(passes) > 1 else ''
+        return (f'Field+Current scan.\n\n'
+                f'6221 read current, the OUTER loop: {len(outer)} currents in the order typed: '
+                f'{rte_outer_values_text(outer, unit="mA RMS")}. The 6221 is set to each before its field sweep, '
+                f'and its first point is read after the lock-ins have settled on the new current.\n\n'
+                f'{name} current at each 6221 current, the INNER loop: from {currents[0]:+g} A to '
+                f'{max(currents, key=lambda value: abs(value - currents[0])):+g} A (step '
+                f'{abs(float(self.ppms_simple_range[2].get())):g} A{trip}), {len(plan) // loops} currents a loop, '
+                f'{loops} loop(s) ({terms}; {setting}). After each the field is settled on the LS475 (at most '
+                f'{STFMR_FIELD_SETTLE_TIMEOUT_S:g} s; an unsettled field is noted in the log and the scan goes on) '
+                'and read; the plots are against the measured field, a curve per 6221 current.\n\n'
+                f'{len(outer)} 6221 currents x {len(plan)} {name} currents x {len(passes)} harmonic pass(es) = '
+                f'{len(plan) * steps} points.{passes_text}\n\n'
+                f'Each point waits {settle_text} before it is read; the scan takes at least {least_text}.{ramp_text}\n\n'
+                f'When the scan ends (completed, stopped or failed) the 6221 and then the {name} are zeroed.\n\nStart the scan?')
     def _rte_outer_question(self, mode, plan, outer, passes, limit, field_current, settle_text, least_text, moves, turning, ramp_text=''):
         first, last = plan[0][2], max((p[2] for p in plan), key=lambda value: abs(value - plan[0][2]))
         trip = ', round trip' if self.rte_round_trip.get() else ''
@@ -39725,6 +39774,11 @@ class RTEPanel(PPMSPanel):
                 order='outer first, in the order typed; the field sweep inner')}
                if outer and mode == FIELD_ANGLE_SCAN_MODE else
                {'outer': dict(
+                typed=box(state['rte_outer_ranges'][mode][0]) if 'rte_outer_ranges' in state else None,
+                unit='mA RMS (6221)', steps=len(outer), values=list(outer),
+                order='outer first, in the order typed; the field sweep inner')}
+               if outer and mode == FIELD_CURRENT_SCAN_MODE else
+               {'outer': dict(
                 start=box(state['rte_outer_ranges'][mode][0]) if 'rte_outer_ranges' in state else None,
                 end=box(state['rte_outer_ranges'][mode][1]) if 'rte_outer_ranges' in state else None,
                 step=box(state['rte_outer_ranges'][mode][2]) if 'rte_outer_ranges' in state else None,
@@ -39745,7 +39799,7 @@ class RTEPanel(PPMSPanel):
             source_6221=dict(current_rms_ma=settings['current_rms_ma'], frequency_hz=settings['frequency_hz'],
                              compliance_v=settings['compliance_v'],
                              note='the plan gives the currents' if mode == 'Current'
-                             else 'the outer loop gives the currents' if mode == 'Angle+Current'
+                             else 'the outer loop gives the currents' if mode in RTE_CURRENT_OUTER_MODES
                              else 'the read current, on after each pulse' if mode in SWITCH_MODES else ''),
             kepco=(dict(current_a=field_current, voltage_limit_v=limit, held=True)
                    if mode in ('Angle', 'Angle+Current')
@@ -39898,7 +39952,7 @@ class RTEPanel(PPMSPanel):
         stage_state = None
         supply = self._rte_supply()
         try:
-            sweep_peak = math.sqrt(2.0) * max((p[2] for p in plan)) * 0.001 if mode == 'Current' else math.sqrt(2.0) * max(outer) * 0.001 if mode == 'Angle+Current' else None
+            sweep_peak = math.sqrt(2.0) * max((p[2] for p in plan)) * 0.001 if mode == 'Current' else math.sqrt(2.0) * max(outer) * 0.001 if mode in RTE_CURRENT_OUTER_MODES else None
             steps = tuple(enumerate(outer, 1)) if outer else ((None, None),)
             points = [(step_index, step_value, loop, point, target) for step_index, step_value in steps for loop, point, target in plan]
             for index, (step_index, step_value, loop, point, target) in enumerate(points, 1):
@@ -39909,7 +39963,7 @@ class RTEPanel(PPMSPanel):
                 if mode == 'Current':
                     point_settings['current_rms_ma'] = target
                     point_settings['continuous_sweep_peak_a'] = sweep_peak
-                elif mode == 'Angle+Current':
+                elif mode in RTE_CURRENT_OUTER_MODES:
                     point_settings['current_rms_ma'] = step_value
                     point_settings['continuous_sweep_peak_a'] = sweep_peak
                 if switch:
@@ -39917,9 +39971,9 @@ class RTEPanel(PPMSPanel):
                         self._configure_ppms_transport_scan(point_settings)
                 elif index == 1 and not settings.get('continue_source'):
                     self._configure_ppms_transport_scan(point_settings)
-                elif mode == 'Current' or (mode == 'Angle+Current' and new_step):
+                elif mode == 'Current' or (mode in RTE_CURRENT_OUTER_MODES and new_step):
                     self._rte_update_current(point_settings)
-                if mode == 'Angle+Current' and new_step:
+                if mode in RTE_CURRENT_OUTER_MODES and new_step:
                     self._rte_log('current_programmed', index=progress, step_index=step_index, steps=len(outer), current_rms_ma=step_value)
                     self._rte_log_check()
                 if field_angle and self.rte_stage_stop_event.is_set():
@@ -40034,7 +40088,7 @@ class RTEPanel(PPMSPanel):
                 self.rte_switch_live = dict(index=progress, harmonics={str(self._ppms_sr830_address(self.ppms_instrument_controllers[key].resource_name)): settings[PPMS_SR830_HARMONIC_SETTING_KEYS[key]] for key in settings['active_lockins']}) if switch else None
                 self.ppms_sample_trace = [] if switch else None
                 try:
-                    if index == 1 or (mode == 'Angle+Current' and new_step):
+                    if index == 1 or (mode in RTE_CURRENT_OUTER_MODES and new_step):
                         sample, windows = self._acquire_ppms_first_point(settings['frequency_hz'], settings['active_lockins'], duration)
                     else:
                         sample = self._average_ppms_transport_sample(settings['frequency_hz'], settings['active_lockins'], duration)

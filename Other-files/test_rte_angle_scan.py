@@ -1761,6 +1761,7 @@ class AnglePageTests(unittest.TestCase):
                 ("Field", ["-1", "1", "0.02"], "KEPCO A", "field", True, "2"),
                 ("Angle+Field", ["0", "-360", "5"], "Stage °", "angle", False, "5"),
                 ("Field+Angle", ["-1", "1", "0.02"], "KEPCO A", "field", True, "2"),
+                ("Field+Current", ["-1", "1", "0.02"], "KEPCO A", "field", True, "2"),
                 ("Angle+Current", ["0", "-360", "5"], "Stage °", "angle", False, "5"),
                 ("Angle", ["0", "-360", "5"], "Stage °", "angle", False, "5")):
             panel.ppms_simple_mode.set(mode)
@@ -1938,7 +1939,7 @@ class AnglePageTests(unittest.TestCase):
         # Angle+Field after Angle+Field (user, 2026-11-17); Switch (user,
         # 2026-11-22) and Switch2, the Avtech's (user, 2026-11-23), last.
         self.assertEqual(combo.options["values"],
-                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Switch", "Switch2"))
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch2"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3025,7 +3026,7 @@ class OuterPlanTests(unittest.TestCase):
         # The stage turns in it, but its inner loop is the field sweep.
         self.assertIn("Field+Angle", app.RTE_STAGE_MODES)
         self.assertNotIn("Field+Angle", app.RTE_ANGLE_MODES)
-        self.assertEqual(app.RTE_FIELD_SWEEP_MODES, ("Field", "Field+Angle"))
+        self.assertEqual(app.RTE_FIELD_SWEEP_MODES, ("Field", "Field+Angle", "Field+Current"))
 
     def test_the_outer_step_of_a_row(self):
         self.assertIsNone(app.rte_outer_step_of({"kepco_programmed_current_a": 2.0}), "the other modes' rows")
@@ -3253,6 +3254,38 @@ class OuterRowPageTests(unittest.TestCase):
         panel.ppms_field_scan_running = False
         panel._update_ppms_control_ui()
         self.assertEqual(entry.options["state"], "normal")
+        panel.safe_close_ppms()
+
+    def test_field_current_shows_the_list_row_for_its_6221_currents(self):
+        """Field+Current (user, 2026-11-25: "I input current in the text and
+        current is the larger cycle"): the list row with the 6221 currents'
+        label and box; the main row is the Field sweep."""
+        panel = AnglePageTests.build_page(self)
+        outer = [widget for widget, _options in panel.rte_outer_widgets]
+        label, entry = [widget for widget, _options in panel.rte_outer_list_widgets]
+        self.mode(panel, "Field+Current")
+        self.assertFalse(label.grid_removed or entry.grid_removed, "the list row shown")
+        self.assertTrue(all(w.grid_removed for w in outer), "the range row removed")
+        self.assertEqual(panel.rte_outer_label.get(), "Outer 6221 mA RMS:")
+        self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Field+Current"][0])
+        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5")
+        self.assertEqual([v.get() for v in panel.ppms_simple_range], ["-1", "1", "0.02"])
+        self.assertIs(panel.rte_round_trip.get(), True)
+        self.assertEqual((panel.ppms_acquisition_time_var.get(), panel.ppms_plot_axis), ("2", "field"))
+        supply = panel._rte_supply_label()
+        self.assertEqual(panel.rte_scan_note.get(), f"Field+Current: {supply} A; outer: 6221 mA")
+        panel.rte_outer_ranges["Field+Current"][0].set("2, 1")
+        self.mode(panel, "Field+Angle")
+        self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Field+Angle"][0])
+        self.mode(panel, "Field+Current")
+        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "2, 1", "the typed currents kept")
+        self.assertEqual(app.rte_outer_current_list_plan(" 0.5; 1  2 "), (0.5, 1.0, 2.0))
+        # The same current typed twice: two curves, named by the step (review, 2026-11-25).
+        step = app.rte_outer_step_of
+        self.assertEqual(step({"scan_mode": "Field+Current", "6221_current_rms_ma": 1.0, "outer_current_index": 3}), (1.0, "#3 1 mA"))
+        self.assertEqual(step({"scan_mode": "Angle+Current", "6221_current_rms_ma": 1.0, "outer_current_index": 3}), (1.0, "1 mA"))
+        self.assertNotIn("Field+Current", app.RTE_STAGE_MODES)
+        self.assertEqual(app.RTE_CURRENT_OUTER_MODES, ("Angle+Current", "Field+Current"))
         panel.safe_close_ppms()
 
     def test_field_angle_shows_the_list_row_for_its_angles(self):

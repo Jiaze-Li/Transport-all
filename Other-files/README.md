@@ -1,5 +1,17 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: Field+Current scan (user, 2026-11-25)
+
+- **Request:** "add field+current scan in the SHHV & Switch mode which I input current in the text and current is the
+  larger cycle".
+- Field+Current (`FIELD_CURRENT_SCAN_MODE`, after Field+Angle): the 6221 read currents typed in "Outer 6221 mA RMS:"
+  (mA RMS, in the order typed, start-up "0.5, 1, 1.5", my choice) are the outer loop; at each, the Field scan's sweep
+  of the supply current (Start / End / Step A, Round trip, Loops; -1 to 1 A in 0.02 A, Acquire s 2 as Field) is the
+  inner loop. The 6221 is switched on at the first current and only changes its amplitude for the next ones, as
+  Angle+Current does (`RTE_CURRENT_OUTER_MODES`); the first point of each current waits for the lock-ins to settle.
+  Rows have `outer_current_index` and `6221_current_rms_ma`; plots against the measured field, a curve per current.
+  The stage is not used. Each current is checked against the 6221 limits and compliance before Start.
+
 ## SHHV & Switch: SR830 addresses 9, 10, 11 (user, 2026-11-25)
 
 - **Request:** "default settings as the fig in SHHV & Switch" (SR830-1 GPIB0::9, SR830-2 GPIB0::10, SR830-3
