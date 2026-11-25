@@ -1,5 +1,18 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Speed pass (user, 2026-11-25: "optimize and check the whole code", chose "Speed")
+
+- Same plots, same saved data, every instrument wait unchanged. SHHV and PPMS redraws walk the rows once per redraw
+  (they did it once per meter x harmonic, up to 12 times per point). The PPMS page no longer redraws its nine hidden
+  legacy plots (`ppms_transport_plot_frames`, always `grid_remove`d there). The Switch "X and Y vs time" plot keeps
+  the decimated points of finished traces while the step is unchanged (`rte_switch_trace_cache`), so its 1 s refresh
+  works only on the live trace. ST-FMR redraws its plot after the next current is set and its read scheduled
+  (`_redraw_once_idle`), so the redraw falls in the settle time and no longer adds to each point; its three live
+  plots redraw once per resize, not three times. The UI queue wakes every 5 ms when idle (`UI_QUEUE_IDLE_DELAY_MS`,
+  20 before), so a worker's result reaches the window sooner.
+- Not done (bigger or for the user to decide): incremental canvas drawing, a one-folder .exe build (faster start,
+  ships as a zip), lazy imports of cv2/zhinst/pyvisa/pco, keeping the CSV and log files open between points.
+
 ## SHHV & Switch: Field+Current scan (user, 2026-11-25)
 
 - **Request:** "add field+current scan in the SHHV & Switch mode which I input current in the text and current is the

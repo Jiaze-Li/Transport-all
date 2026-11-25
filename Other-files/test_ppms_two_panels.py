@@ -144,12 +144,17 @@ class TwoPanelTests(unittest.TestCase):
                 sr830_8_x_v=1, sr830_8_y_v=2, sr830_8_r_v=3, sr830_8_theta_deg=4,
                 sr830_9_x_v=1, sr830_9_y_v=2, sr830_9_r_v=3, sr830_9_theta_deg=4)]
             panel._draw_nonlocal_series = Mock()
+            # The legacy plots: the page itself skips them while its harmonic plots exist (hidden; speed, 2026-11-25).
             panel._redraw_ppms_transport_plot()
+            for frame in panel.ppms_transport_plot_frames.values():
+                frame.configure.assert_not_called()
+            legacy = app.CombinedControlApp._redraw_ppms_transport_plot
+            legacy(panel)
             for (key, channel), frame in panel.ppms_transport_plot_frames.items():
                 expected = '2nd harmonic' if key == '830_a' else '3rd harmonic'
                 self.assertIn(expected, frame.configure.call_args.kwargs['text'])
             panel.ppms_field_scan_rows = []
-            panel._redraw_ppms_transport_plot()
+            legacy(panel)
             for frame in panel.ppms_transport_plot_frames.values():
                 self.assertIn('1st harmonic', frame.configure.call_args.kwargs['text'])
 

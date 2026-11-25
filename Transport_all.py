@@ -1667,7 +1667,7 @@ CURRENT_LIMIT = 2000
 UI_QUEUE_MAX_CALLBACKS_PER_TICK = 50
 UI_QUEUE_TIME_BUDGET_S = 0.008
 UI_QUEUE_ACTIVE_DELAY_MS = 1
-UI_QUEUE_IDLE_DELAY_MS = 20
+UI_QUEUE_IDLE_DELAY_MS = 5
 CHANNELS = (1, 2, 3, 4)
 PARAMETERS = ("i", "m", "p", "g", "d", "f")
 MODE_LABEL_TO_VALUE = {"Off": 0, "Continuous": 1, "Pulse": 2}
@@ -15492,7 +15492,7 @@ class CombinedControlApp:
         self.stfmr_lockin_x_canvas = tk.Canvas(x_plot, background='white', highlightthickness=1, highlightbackground=THEME_COLORS['plot_border'], height=self._ui_px(190, 135))
         self.stfmr_lockin_x_canvas.grid(row=0, column=0, sticky="nsew")
         self._stfmr_lockin_compact_canvas(self.stfmr_lockin_x_canvas)
-        self.stfmr_lockin_x_canvas.bind('<Configure>', lambda _event: self._redraw_stfmr_lockin_live_plots(), add='+')
+        self.stfmr_lockin_x_canvas.bind('<Configure>', lambda _event: self._redraw_once_idle('stfmr_lockin_live_redraw_queued', self._redraw_stfmr_lockin_live_plots), add='+')
         y_plot = ttk.LabelFrame(plots, text='Lock-in Y vs field', padding=4)
         y_plot.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=(0, 2))
         y_plot.rowconfigure(0, weight=1)
@@ -15500,7 +15500,7 @@ class CombinedControlApp:
         self.stfmr_lockin_y_canvas = tk.Canvas(y_plot, background='white', highlightthickness=1, highlightbackground=THEME_COLORS['plot_border'], height=self._ui_px(190, 135))
         self.stfmr_lockin_y_canvas.grid(row=0, column=0, sticky="nsew")
         self._stfmr_lockin_compact_canvas(self.stfmr_lockin_y_canvas)
-        self.stfmr_lockin_y_canvas.bind('<Configure>', lambda _event: self._redraw_stfmr_lockin_live_plots(), add='+')
+        self.stfmr_lockin_y_canvas.bind('<Configure>', lambda _event: self._redraw_once_idle('stfmr_lockin_live_redraw_queued', self._redraw_stfmr_lockin_live_plots), add='+')
         theta_plot = ttk.LabelFrame(plots, text='Lock-in theta vs field', padding=4)
         theta_plot.grid(row=1, column=0, sticky="nsew", padx=(0, 4), pady=(2, 0))
         theta_plot.rowconfigure(0, weight=1)
@@ -15508,7 +15508,7 @@ class CombinedControlApp:
         self.stfmr_lockin_theta_canvas = tk.Canvas(theta_plot, background='white', highlightthickness=1, highlightbackground=THEME_COLORS['plot_border'], height=self._ui_px(190, 135))
         self.stfmr_lockin_theta_canvas.grid(row=0, column=0, sticky="nsew")
         self._stfmr_lockin_compact_canvas(self.stfmr_lockin_theta_canvas)
-        self.stfmr_lockin_theta_canvas.bind('<Configure>', lambda _event: self._redraw_stfmr_lockin_live_plots(), add='+')
+        self.stfmr_lockin_theta_canvas.bind('<Configure>', lambda _event: self._redraw_once_idle('stfmr_lockin_live_redraw_queued', self._redraw_stfmr_lockin_live_plots), add='+')
         plot = ttk.LabelFrame(plots, text='Measured field vs 4886 current (field sweep only)', padding=4)
         plot.grid(row=1, column=1, sticky="nsew", padx=(4, 0), pady=(2, 0))
         plot.rowconfigure(0, weight=1)
@@ -18314,7 +18314,7 @@ class CombinedControlApp:
         total = max(len(angles), 1) * len(self.stfmr_lockin_modulation_frequencies_hz) * len(powers) * len(self.stfmr_lockin_frequencies_ghz) * len(self.stfmr_lockin_points)
         self._set_stfmr_progress(self.stfmr_lockin_progress, completed, total)
         if not discard_startup_point:
-            self._redraw_stfmr_lockin_plot()
+            self._redraw_once_idle('stfmr_lockin_redraw_queued', self._redraw_stfmr_lockin_plot)
         remaining = elapsed / max(completed, 1) * max(total - completed, 0)
         if discard_startup_point:
             fixed_current = self.stfmr_lockin_points_per_loop <= 1
@@ -32150,6 +32150,19 @@ class CombinedControlApp:
             values = [round((c + (255-c)*light)*(1-dark)) for c in rgb]
             colors[key] = '#' + ''.join(f'{v:02x}' for v in values)
         return colors
+    def _redraw_once_idle(self, flag, draw):
+        if self.__dict__.get(flag):
+            return
+        self.__dict__[flag] = True
+        def run():
+            self.__dict__[flag] = False
+            if not getattr(self, 'closing', False):
+                draw()
+        try:
+            self.root.after_idle(run)
+        except (tk.TclError, AttributeError, RuntimeError):
+            self.__dict__[flag] = False
+            draw()
     def _request_plot_redraw(self) -> None:
         if self.__dict__.get('ppms_plot_redraw_queued'):
             return
@@ -36178,9 +36191,9 @@ class PPMSPanel(CombinedControlApp):
             return None
         return self._ppms2_finite(row.get(prefix + ('theta_deg' if channel == 'theta' else f'{channel}_v')))
     def _redraw_ppms_transport_plot(self):
-        super()._redraw_ppms_transport_plot()
         canvases = self.__dict__.get('ppms_harmonic_canvases')
         if not canvases:
+            super()._redraw_ppms_transport_plot()
             return
         axis = getattr(self, 'ppms_plot_axis', 'field')
         x_key, x_label = {'field': ('measured_field_oe', 'Measured magnetic field (Oe)'),
@@ -36200,6 +36213,20 @@ class PPMSPanel(CombinedControlApp):
         by_order = {}
         for (order, channel), canvas in canvases.items():
             by_order.setdefault(order, []).append((channel, canvas))
+        prepared = []
+        for row in rows:
+            x_value = row.get(x_key)
+            if not isinstance(x_value, (int, float)) or not math.isfinite(x_value):
+                continue
+            group = f"A{row.get('angle_index', 1)}" if axis == 'temperature' else f"T{row.get('temperature_index', 1)} ({row.get('target_temperature_k', '')} K)"
+            temperature = row.get('target_temperature_k')
+            if by_frequency:
+                group = self._ppms_frequency_series_group(row)
+                temperature = row.get('6221_frequency_hz')
+            elif by_field:
+                group = self._ppms_field_series_group(row)
+                temperature = row.get('target_field_oe')
+            prepared.append((row, f"{group} L{row.get('loop', 1)}", temperature, float(x_value) * scale))
         for order, targets in by_order.items():
             columns = tuple(((channel, 'theta_deg' if channel == 'theta' else f'{channel}_v') for channel, _ in targets))
             series = {channel: {} for channel, _ in targets}
@@ -36211,23 +36238,11 @@ class PPMSPanel(CombinedControlApp):
                 base_color = PPMS_METER_COLORS.get(meter, '#666666')
                 temperatures = {channel: {} for channel, _ in targets}
                 resolve_prefix = self._ppms2_prefix_resolver(meter, order)
-                for row in rows:
-                    x_value = row.get(x_key)
-                    if not isinstance(x_value, (int, float)) or not math.isfinite(x_value):
-                        continue
+                for row, tail, temperature, point_x in prepared:
                     prefix = resolve_prefix(row)
                     if prefix is None:
                         continue
-                    group = f"A{row.get('angle_index', 1)}" if axis == 'temperature' else f"T{row.get('temperature_index', 1)} ({row.get('target_temperature_k', '')} K)"
-                    temperature = row.get('target_temperature_k')
-                    if by_frequency:
-                        group = self._ppms_frequency_series_group(row)
-                        temperature = row.get('6221_frequency_hz')
-                    elif by_field:
-                        group = self._ppms_field_series_group(row)
-                        temperature = row.get('target_field_oe')
-                    name = f"{meter_label} {group} L{row.get('loop', 1)}"
-                    point_x = float(x_value) * scale
+                    name = f'{meter_label} {tail}'
                     for channel, suffix in columns:
                         value = row.get(prefix + suffix)
                         if not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -37440,7 +37455,8 @@ class RTEPanel(PPMSPanel):
         if not canvases or not self._rte_time_row_shown():
             return
         order, meters = self._switch_time_order()
-        traces = list(self.__dict__.get('rte_switch_traces') or [])
+        stored = self.__dict__.get('rte_switch_traces') or []
+        traces = list(stored)
         live, readings = self.__dict__.get('rte_switch_live'), list(self.__dict__.get('ppms_sample_trace') or ())
         if live and readings and self.__dict__.get('ppms_field_scan_running'):
             started = self.ppms_field_scan_started_at
@@ -37452,15 +37468,22 @@ class RTEPanel(PPMSPanel):
                 wanted.append((meter, str(address)))
         total = sum(len(entry['times']) for entry in traces) * max(1, len(wanted))
         step = max(1, math.ceil(total / SWITCH_TRACE_MOST_DRAWN))
+        cache = self.__dict__.get('rte_switch_trace_cache')
+        if cache is None or cache[0] is not stored or cache[1] != step:
+            cache = self.rte_switch_trace_cache = (stored, step, {})
         for channel, canvas in canvases.items():
             series, colors = {}, {}
             for meter, address in wanted:
                 key = f'sr830_{address}_{channel}_v'
                 label = PPMS_SR830_LABELS.get(meter, meter)
-                for entry in traces:
+                for position, entry in enumerate(traces):
                     if str(entry['harmonics'].get(address)) != str(order):
                         continue
-                    points = [(at, values[key]) for at, values in zip(entry['times'], entry['values']) if key in values][::step]
+                    points = cache[2].get((position, key)) if position < len(stored) else None
+                    if points is None:
+                        points = [(at, values[key]) for at, values in zip(entry['times'], entry['values']) if key in values][::step]
+                        if position < len(stored):
+                            cache[2][(position, key)] = points
                     if points:
                         name = f"{label} #{entry['index']}"
                         series[name] = points
@@ -40235,6 +40258,13 @@ class RTEPanel(PPMSPanel):
         for (order, channel), canvas in canvases.items():
             if not (pulse_axis and channel == 'theta'):
                 by_order.setdefault(order, []).append((channel, canvas))
+        prepared = []
+        for row in self.ppms_field_scan_rows:
+            x_value = row.get(x_key)
+            if isinstance(x_value, (float, int)):
+                step = rte_outer_step_of(row)
+                tail = f"P{row.get('harmonic_pass', 1)} L{row['loop']}"
+                prepared.append((row, x_value, step, tail if step is None else f'{step[1]} {tail}'))
         for order, targets in by_order.items():
             columns = tuple(((channel, 'theta_deg' if channel == 'theta' else f'{channel}_v') for channel, _ in targets))
             series = {channel: {} for channel, _ in targets}
@@ -40246,18 +40276,11 @@ class RTEPanel(PPMSPanel):
                 meter_label = PPMS_SR830_LABELS.get(meter, 'Zurich')
                 resolve_prefix = self._ppms2_prefix_resolver(meter, order)
                 steps = {}
-                for row in self.ppms_field_scan_rows:
-                    x_value = row.get(x_key)
-                    if not isinstance(x_value, (float, int)):
-                        continue
+                for row, x_value, step, tail in prepared:
                     prefix = resolve_prefix(row)
                     if prefix is None:
                         continue
-                    step = rte_outer_step_of(row)
-                    if step is None:
-                        name = f"{meter_label} P{row.get('harmonic_pass', 1)} L{row['loop']}"
-                    else:
-                        name = f"{meter_label} {step[1]} P{row.get('harmonic_pass', 1)} L{row['loop']}"
+                    name = f'{meter_label} {tail}'
                     for channel, suffix in columns:
                         value = row.get(prefix + suffix)
                         if not isinstance(value, (int, float)) or not math.isfinite(value):
