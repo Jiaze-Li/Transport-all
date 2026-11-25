@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 # The instrument code MS-fourState shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 f0bbe356101a…
+# Copied from Transport_all.py, SHA-256 07ba717d7e21…
 import ctypes
 
 

@@ -146,9 +146,23 @@ class SwitchScan(ete.EndToEnd):
             h.log.append(("6221", "off", threading.get_ident()))
             for command in ("SOUR:WAVE:ABOR", "OUTP OFF"):
                 h.fake.write(command)
+            panel.post_ui(lambda: panel.ppms_transport_status_var.set("Transport acquisition: 6221 output OFF"))
         panel._stop_ppms_transport_source = off
+        lines = panel.test_transport_lines = []
+        line, real_set = panel.ppms_transport_status_var, panel.ppms_transport_status_var.set
+
+        def record(value):
+            lines.append(value)
+            return real_set(value)
+        line.set = record
         h.log.clear()
         return h
+
+
+def status_lines(h):
+    """Every text the page set on its acquisition line, in order (the
+    harness keeps the UI callbacks it ran)."""
+    return h.panel.__dict__.get("test_transport_lines", [])
 
 
 class SwitchPageTests(unittest.TestCase):
@@ -508,6 +522,14 @@ class SwitchScanTests(SwitchScan):
             "SOUR:WAVE:PMAR:STAT ON", "OUTP OFF", "SOUR:WAVE:ABOR", "SOUR:WAVE:ARM", "SOUR:WAVE:INIT"])
         self.assertEqual(len(h.fake.sines), 10, "the read current on again before every reading")
         self.assertEqual(h.fake.output, 0, "off at the end")
+        # The acquisition line follows the read current (user, 2026-11-24:
+        # "fix the 6221 output OFF line too"): ON before each reading, OFF
+        # for each pulse and at the end.
+        shown = [text for text in status_lines(h) if text.startswith("Transport acquisition: 6221")]
+        self.assertEqual(shown.count("Transport acquisition: 6221 ON, 0.5 mA RMS at 317.3 Hz (read current)"), 10)
+        on = shown.index("Transport acquisition: 6221 ON, 0.5 mA RMS at 317.3 Hz (read current)")
+        self.assertTrue(any("OFF" in text for text in shown[:on]), shown[:on + 1])
+        self.assertIn("OFF", shown[-1])
         # A pulse is never sent with the read current on: each train's
         # commands start after an output read back off.
         for index, command in enumerate(sent):

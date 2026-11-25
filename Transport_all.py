@@ -39506,6 +39506,8 @@ class RTEPanel(PPMSPanel):
                 f'{peak_a * 1e3:.3g} mA peak, Compliance V {compliance_v:g} V): the sample and leads are above about '
                 f'{compliance_v / peak_a:.3g} Ω. Lower the read current or raise Compliance V; the scan is stopped and '
                 'the outputs zeroed')
+        text = f'Transport acquisition: 6221 ON, {current_rms_ma:g} mA RMS at {frequency_hz:g} Hz (read current)'
+        self.post_ui(lambda: self.ppms_transport_status_var.set(text))
     def _rte_switch_keep_trace(self, progress, pulse_ma, row, trace, unit='mA'):
         started = self.ppms_field_scan_started_at
         harmonics = {key[len('sr830_'):-len('_harmonic')]: value for key, value in row.items() if key.startswith('sr830_') and key.endswith('_harmonic')}

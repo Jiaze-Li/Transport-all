@@ -35,6 +35,10 @@
   vs time" row with the readings of the Acquire window being read (`ppms_sample_trace`, the point's harmonics in
   `rte_switch_live`), beside the windows already saved; a tick with no new reading draws nothing. The saved point, the
   CSV and the trace CSV are as before. The timer stops when the scan ends.
+- The "Transport acquisition:" line follows the read current in Switch and Switch2 (user, 2026-11-24: "fix the 6221
+  output OFF line too"): "6221 ON, <mA> mA RMS at <Hz> Hz (read current)" once the read current is on again after each
+  pulse (`_rte_switch_read_on`), "6221 output OFF" while each pulse is sent and at the end. Before, it kept the OFF of
+  the pulse through the reading.
 
 ## Switch2: the Switch scan with the Avtech's pulses (user, 2026-11-23)
 
