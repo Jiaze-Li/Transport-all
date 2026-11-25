@@ -72,6 +72,20 @@ Thorlabs Kinesis, LabOne and MultiVu/QDInstrument. DLLs kept beside the .py
 .exe. An MFLI on LabOne 18.12 still needs the Python 3.7 bridge from
 `Other-files/INSTALL_MFLI_LABONE_18_12.bat`.
 
+**One-folder build (starts faster).** The release also has
+`Transport_all-folder.zip`, the same program from the same commit as one
+folder (user, 2026-11-25): `Transport_all\Transport_all.exe` with its
+libraries in `Transport_all\_internal`. It does not unpack itself on each
+start, so its window appears sooner, and the antivirus checks its DLLs once
+rather than on every start. Unzip it to a folder you keep, such as
+`C:\Transport_all\`, and double-click `Transport_all.exe` inside; keep
+`_internal` beside it and put the Newmark DLLs beside the .exe as above. The
+results folders are made beside that .exe. Its SHA-256 is in the release notes
+and in `Transport_all-folder.zip.sha256`. To update, close the program and
+replace the whole `Transport_all` folder with the new one (move your results
+folders out first, or unzip the new one elsewhere). GitHub checks both builds
+the same way (below) and logs how long each takes to show its window.
+
 **Update.** Close the program, download `Transport_all.exe` again from the
 release and replace the old one; the results folders beside it are not touched.
 

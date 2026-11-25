@@ -6,6 +6,9 @@
 # of main also replaces the .exe of the pre-release "Windows exe (newest main)"
 # (tag windows-exe, made once by the owner; this workflow never moves the tag),
 # so it can be downloaded directly, without signing in, from the Releases page.
+# The same commit is also built as one folder (Transport_all\Transport_all.exe
+# with its libraries in _internal, user 2026-11-25), released beside it as
+# Transport_all-folder.zip: it starts faster, as nothing is unpacked on start.
 #
 # Before uploading, the .exe is checked on the runner: it loads every library
 # it bundles (--package-self-test), loads the PCO DLLs (--pco-dll-self-test),
@@ -29,7 +32,7 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     # A newer push to the same branch replaces a build still running.
     concurrency:
       group: windows-exe-build-${{ github.ref }}
@@ -53,6 +56,10 @@ jobs:
           python -m pip check
       - name: Build Transport_all.exe
         run: python -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_all.spec
+      - name: Build the one-folder Transport_all
+        env:
+          TRANSPORT_ONE_FOLDER: "1"
+        run: python -m PyInstaller --noconfirm --distpath dist-folder --workpath build-folder Other-files/packaging/Transport_all.spec
       - name: Build information
         shell: pwsh
         run: |
@@ -79,21 +86,33 @@ jobs:
             "",
             "Python $(python -c 'import platform; print(platform.python_version())') and packages:"
           ) + (python -m pip freeze)
+          # The one-folder build, zipped before any check writes into its folder.
+          $folderExe = Get-Item dist-folder/Transport_all/Transport_all.exe
+          if ($folderExe.VersionInfo.CompanyName -ne $vi.CompanyName -or $folderExe.VersionInfo.ProductVersion -ne $version) { throw "The one-folder .exe has other version information" }
+          Compress-Archive -Path dist-folder/Transport_all -DestinationPath dist/Transport_all-folder.zip -CompressionLevel Optimal
+          $zip = Get-Item dist/Transport_all-folder.zip
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content -NoNewline -Encoding ascii dist/Transport_all-folder.zip.sha256 -Value "$zipHash  Transport_all-folder.zip`n"
+          $info = $info[0..6] + @("One folder: Transport_all-folder.zip, $($zip.Length) bytes, SHA-256: $zipHash") + $info[7..($info.Count - 1)]
           $info | Set-Content -Encoding utf8 dist/BUILD_INFO.txt
-          Get-Content dist/BUILD_INFO.txt | Select-Object -First 8
+          Get-Content dist/BUILD_INFO.txt | Select-Object -First 9
       - name: The .exe loads every library it bundles
         shell: pwsh
         run: |
-          $p = Start-Process (Resolve-Path dist/Transport_all.exe).Path -ArgumentList "--package-self-test" -Wait -PassThru
-          Get-Content dist/Transport_all_package_self_test.txt
-          if ($p.ExitCode -ne 0) { throw "Package self-test failed (exit code $($p.ExitCode))" }
+          foreach ($folder in "dist", "dist-folder/Transport_all") {
+            $p = Start-Process (Resolve-Path "$folder/Transport_all.exe").Path -ArgumentList "--package-self-test" -Wait -PassThru
+            Get-Content "$folder/Transport_all_package_self_test.txt"
+            if ($p.ExitCode -ne 0) { throw "Package self-test of $folder/Transport_all.exe failed (exit code $($p.ExitCode))" }
+          }
       - name: The program's own PCO DLL self-test
         if: success() || failure()
         shell: pwsh
         run: |
-          $p = Start-Process (Resolve-Path dist/Transport_all.exe).Path -ArgumentList "--pco-dll-self-test" -Wait -PassThru
-          Get-Content dist/MOKE_NH_*_pco_self_test.txt
-          if ($p.ExitCode -ne 0) { throw "PCO DLL self-test failed (exit code $($p.ExitCode))" }
+          foreach ($folder in "dist", "dist-folder/Transport_all") {
+            $p = Start-Process (Resolve-Path "$folder/Transport_all.exe").Path -ArgumentList "--pco-dll-self-test" -Wait -PassThru
+            Get-Content "$folder/MOKE_NH_*_pco_self_test.txt"
+            if ($p.ExitCode -ne 0) { throw "PCO DLL self-test of $folder/Transport_all.exe failed (exit code $($p.ExitCode))" }
+          }
       - name: The program starts and shows its window
         if: success() || failure()
         shell: pwsh
@@ -107,32 +126,37 @@ jobs:
             $bitmap.Save("exe-check/$name.png")
           }
           $title = "Magneto_Electro_Optical_Microwave_Transport_NH"
-          $started = Get-Date
-          $p = Start-Process (Resolve-Path dist/Transport_all.exe).Path -PassThru
-          $window = $null
-          while (-not $window -and ((Get-Date) - $started).TotalSeconds -lt 180) {
-            Start-Sleep -Seconds 2
-            if ($p.HasExited) { Save-Screen "exited"; throw "Transport_all.exe exited during start-up (exit code $($p.ExitCode))" }
-            $window = Get-Process Transport_all -ErrorAction SilentlyContinue |
-              Where-Object { $_.MainWindowTitle -like "$title*" } | Select-Object -First 1
+          foreach ($build in @(@{ name = "one-file"; exe = "dist/Transport_all.exe" }, @{ name = "one-folder"; exe = "dist-folder/Transport_all/Transport_all.exe" })) {
+            $started = Get-Date
+            $p = Start-Process (Resolve-Path $build.exe).Path -PassThru
+            $window = $null
+            while (-not $window -and ((Get-Date) - $started).TotalSeconds -lt 180) {
+              Start-Sleep -Milliseconds 500
+              if ($p.HasExited) { Save-Screen "$($build.name)_exited"; throw "The $($build.name) Transport_all.exe exited during start-up (exit code $($p.ExitCode))" }
+              $window = Get-Process Transport_all -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowTitle -like "$title*" } | Select-Object -First 1
+            }
+            if (-not $window) {
+              Save-Screen "$($build.name)_no_window"
+              Get-Process Transport_all -ErrorAction SilentlyContinue | Format-Table Id, MainWindowTitle | Out-String | Write-Host
+              throw "No main window of the $($build.name) build within 180 s"
+            }
+            "$($build.name): main window '$($window.MainWindowTitle)' after $([math]::Round(((Get-Date) - $started).TotalSeconds, 1)) s"
+            Start-Sleep -Seconds 15
+            Save-Screen "$($build.name)_started"
+            if ($p.HasExited) { throw "The $($build.name) Transport_all.exe exited after its window appeared (exit code $($p.ExitCode))" }
+            Get-Process Transport_all | Format-Table Id, MainWindowTitle | Out-String | Write-Host
+            Stop-Process -Name Transport_all -Force
+            Start-Sleep -Seconds 3
           }
-          if (-not $window) {
-            Save-Screen "no_window"
-            Get-Process Transport_all -ErrorAction SilentlyContinue | Format-Table Id, MainWindowTitle | Out-String | Write-Host
-            throw "No main window within 180 s"
-          }
-          "Main window '$($window.MainWindowTitle)' after $([int]((Get-Date) - $started).TotalSeconds) s"
-          Start-Sleep -Seconds 15
-          Save-Screen "started"
-          if ($p.HasExited) { throw "Transport_all.exe exited after its window appeared (exit code $($p.ExitCode))" }
-          Get-Process Transport_all | Format-Table Id, MainWindowTitle | Out-String | Write-Host
-          Stop-Process -Name Transport_all -Force
       - uses: actions/upload-artifact@v4
         with:
           name: Transport_all-windows-x64
           path: |
             dist/Transport_all.exe
             dist/Transport_all.exe.sha256
+            dist/Transport_all-folder.zip
+            dist/Transport_all-folder.zip.sha256
             dist/BUILD_INFO.txt
           if-no-files-found: error
           retention-days: 90
@@ -143,6 +167,7 @@ jobs:
           path: |
             exe-check
             dist/*_self_test.txt
+            dist-folder/Transport_all/*_self_test.txt
             build/Transport_all/warn-Transport_all.txt
           if-no-files-found: ignore
 
@@ -169,6 +194,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           sha256=$(cut -d' ' -f1 dist/Transport_all.exe.sha256)
+          zip_sha256=$(cut -d' ' -f1 dist/Transport_all-folder.zip.sha256)
           version=$(sed -n 's/^Transport_all.exe, program version //p' dist/BUILD_INFO.txt | tr -d '\r')
           publisher=$(sed -n 's/^Publisher: \(.*\) (company name.*/\1/p' dist/BUILD_INFO.txt | tr -d '\r')
           tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
@@ -184,10 +210,16 @@ jobs:
           Put it in a folder you keep (the results folders are made beside it) and double-click it.
           Instrument drivers are still needed; see the README's "Windows .exe" section.
 
+          \`Transport_all-folder.zip\`: the same program as one folder, which starts faster (nothing is
+          unpacked on each start). Unzip it to a folder you keep and double-click
+          \`Transport_all\\Transport_all.exe\` inside; keep the \`_internal\` folder beside it.
+          SHA-256 of the zip: \`$zip_sha256\`
+
           The "Source code" files below are GitHub's snapshot of the tag \`$RELEASE_TAG\`
           (commit ${tag_commit:0:7}), which does not move; the .exe is from the commit above.
           EOF
-          gh release upload "$RELEASE_TAG" dist/Transport_all.exe dist/Transport_all.exe.sha256 dist/BUILD_INFO.txt \
+          gh release upload "$RELEASE_TAG" dist/Transport_all.exe dist/Transport_all.exe.sha256 \
+            dist/Transport_all-folder.zip dist/Transport_all-folder.zip.sha256 dist/BUILD_INFO.txt \
             --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$RELEASE_TAG" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \

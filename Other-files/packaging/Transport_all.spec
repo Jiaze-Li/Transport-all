@@ -9,10 +9,19 @@
 #     py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_all.spec
 # The program is then dist\Transport_all.exe.
 #
+# The same recipe also makes the one-folder build (user, 2026-11-25: "do the
+# one-folder exe build too"): with the environment variable
+# TRANSPORT_ONE_FOLDER=1 it makes dist\Transport_all\Transport_all.exe with
+# its libraries in dist\Transport_all\_internal.  It starts faster, since
+# nothing is unpacked to a temp folder on each start, and the antivirus checks
+# its DLLs once instead of on every start.  The workflow builds both and
+# releases the folder as Transport_all-folder.zip.
+#
 # Still needed on the PC, outside the .exe: the vendor drivers and runtimes
 # (NI-VISA and GPIB, PCO camera driver, Thorlabs Kinesis, LabOne, MultiVu /
 # QDInstrument, Newmark PerformaxCom.dll), as for the .py program.
 
+import os
 import re
 import sysconfig
 from pathlib import Path
@@ -122,12 +131,7 @@ version_info = VSVersionInfo(
         VarFileInfo([VarStruct("Translation", [0x0409, 0x04B0])]),
     ],
 )
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+common = dict(
     name="Transport_all",
     icon=str(ASSETS / f"{ICON}.ico"),
     version=version_info,
@@ -135,5 +139,10 @@ exe = EXE(
     upx=False,  # compressed executables are flagged more often by antivirus
     debug=False,
     strip=False,
-    runtime_tmpdir=None,
 )
+if os.environ.get("TRANSPORT_ONE_FOLDER") == "1":
+    # One folder: the .exe and an _internal folder with the libraries and data.
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, **common)
+    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Transport_all")
+else:
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], runtime_tmpdir=None, **common)
