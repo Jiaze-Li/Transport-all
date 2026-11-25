@@ -37457,6 +37457,7 @@ class RTEPanel(PPMSPanel):
         order, meters = self._switch_time_order()
         stored = self.__dict__.get('rte_switch_traces') or []
         traces = list(stored)
+        finished = len(traces)
         live, readings = self.__dict__.get('rte_switch_live'), list(self.__dict__.get('ppms_sample_trace') or ())
         if live and readings and self.__dict__.get('ppms_field_scan_running'):
             started = self.ppms_field_scan_started_at
@@ -37479,10 +37480,10 @@ class RTEPanel(PPMSPanel):
                 for position, entry in enumerate(traces):
                     if str(entry['harmonics'].get(address)) != str(order):
                         continue
-                    points = cache[2].get((position, key)) if position < len(stored) else None
+                    points = cache[2].get((position, key)) if position < finished else None
                     if points is None:
                         points = [(at, values[key]) for at, values in zip(entry['times'], entry['values']) if key in values][::step]
-                        if position < len(stored):
+                        if position < finished:
                             cache[2][(position, key)] = points
                     if points:
                         name = f"{label} #{entry['index']}"

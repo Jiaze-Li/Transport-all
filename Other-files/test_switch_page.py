@@ -640,6 +640,35 @@ class SwitchScanTests(SwitchScan):
         self.start(h)
         self.assertIn(h.panel._rte_live_time_tick, [callback for _delay, callback in h.root.pending])
 
+    def test_the_time_plot_never_keeps_a_live_trace_that_finishes_mid_redraw(self):
+        """Speed pass, 2026-11-25: finished traces' points are kept between
+        redraws; review: the worker may append the live trace while the x
+        plot is drawn, and its partial points must not be kept for the y
+        plot or later redraws."""
+        h = self.make_switch()
+        panel = h.panel
+        started = app.time.monotonic() - 300.0
+        panel.ppms_field_scan_running, panel.ppms_active_scan_mode = True, "Switch"
+        panel.ppms_field_scan_started_at = started
+        first = dict(index=1, pulse_ma=-2.0, harmonics={"8": 1}, times=[0.0, 1.0],
+                     values=[{"sr830_8_x_v": 1e-6, "sr830_8_y_v": -1e-6}] * 2)
+        panel.rte_switch_traces = [first]
+        panel.rte_switch_live = dict(index=2, harmonics={"8": 1})
+        panel.ppms_sample_trace = [(started + 305.0, {"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6})]
+        whole = dict(index=2, pulse_ma=-4.0, harmonics={"8": 1}, times=[5.0, 6.0],
+                     values=[{"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6}, {"sr830_8_x_v": 7e-6, "sr830_8_y_v": -7e-6}])
+        def finish(canvas, *args, **kwargs):
+            if canvas is panel.rte_time_canvases["x"] and len(panel.rte_switch_traces) == 1:
+                panel.rte_switch_traces.append(whole)      # the worker, during the x plot
+        h.draw.side_effect = finish
+        panel._redraw_switch_time_plot()
+        panel.ppms_field_scan_running, panel.ppms_sample_trace = False, None
+        h.draw.reset_mock()
+        panel._redraw_switch_time_plot()
+        for call in h.draw.call_args_list:
+            self.assertEqual(len(call.args[1]["SR830-1 #2"]), 2, "the whole trace, not the live part")
+        self.assertEqual(len(h.draw.call_args_list), 2)
+
     def test_apply_pulse_sends_one_pulse_by_hand(self):
         """User, 2026-11-22: "add another pulse apply below here RMS
         continuous settings": the settings' Apply pulse sends the "6221
