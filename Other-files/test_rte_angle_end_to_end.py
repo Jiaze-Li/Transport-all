@@ -1484,7 +1484,7 @@ class OuterScanTests(RunLogBase):
             panel.ppms_simple_mode.set("Field+Current")
             panel._rte_mode_changed()
         self.assertIs(panel.rte_round_trip.get(), True, "a field sweep goes and comes back by default")
-        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5")
+        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5, 2")
         panel.rte_round_trip.set(trip)
         for variable, value in zip(panel.ppms_simple_range, span):
             variable.set(value)

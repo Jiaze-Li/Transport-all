@@ -3268,7 +3268,7 @@ class OuterRowPageTests(unittest.TestCase):
         self.assertTrue(all(w.grid_removed for w in outer), "the range row removed")
         self.assertEqual(panel.rte_outer_label.get(), "Outer 6221 mA RMS:")
         self.assertIs(entry.options["textvariable"], panel.rte_outer_ranges["Field+Current"][0])
-        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5")
+        self.assertEqual(panel.rte_outer_ranges["Field+Current"][0].get(), "0.5, 1, 1.5, 2")
         self.assertEqual([v.get() for v in panel.ppms_simple_range], ["-1", "1", "0.02"])
         self.assertIs(panel.rte_round_trip.get(), True)
         self.assertEqual((panel.ppms_acquisition_time_var.get(), panel.ppms_plot_axis), ("2", "field"))
