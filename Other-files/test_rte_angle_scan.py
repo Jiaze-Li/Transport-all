@@ -1939,7 +1939,7 @@ class AnglePageTests(unittest.TestCase):
         # Angle+Field after Angle+Field (user, 2026-11-17); Switch (user,
         # 2026-11-22) and Switch2, the Avtech's (user, 2026-11-23), last.
         self.assertEqual(combo.options["values"],
-                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch2"))
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch-loop", "Switch2"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),
@@ -3074,8 +3074,8 @@ class OuterListTests(unittest.TestCase):
         self.assertIn("Angle+Field", app.RTE_ANGLE_MODES)
         # The Switch scan steps the magnet too (user, 2026-11-21); it is the
         # SHHV page's last mode since 2026-11-22 and turns no stage.
-        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Switch", "Switch2"))
-        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Switch", "Switch2"))
+        self.assertEqual(app.RTE_FIELD_OUTER_MODES, ("Angle+Field", "Switch", "Switch-loop", "Switch2"))
+        self.assertEqual(app.RTE_SCAN_MODES[-3:], ("Switch", "Switch-loop", "Switch2"))
         self.assertNotIn("Switch", app.RTE_ANGLE_MODES)
         # Since 2026-11-22 it has the name of the first Angle+Field (a range
         # of supply currents), which is gone (user: "delete the old

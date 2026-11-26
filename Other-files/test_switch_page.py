@@ -289,7 +289,7 @@ class SwitchPageTests(unittest.TestCase):
         Angle+Field, where the pulse row and the time row are off screen."""
         panel = ete.build_page(kepco=False)
         self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))
-        self.assertEqual(app.RTE_SCAN_MODES[-4:], ("Field+Angle", "Field+Current", "Switch", "Switch2"))
+        self.assertEqual(app.RTE_SCAN_MODES[-5:], ("Field+Angle", "Field+Current", "Switch", "Switch-loop", "Switch2"))
         self.assertEqual(panel.rte_start_button.parent.parent.options["text"], "Scan")
         self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
         self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field"][0])
@@ -594,6 +594,53 @@ class SwitchScanTests(SwitchScan):
         self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 mean X"), 10)
         self.assertEqual({line[3] for line in lines[1:]}, {"V"})
         self.assertEqual(lines[1][4], "#1 -2 mA")
+
+    def test_switch_loop_takes_start_end_step_and_loops_like_field(self):
+        """User, 2026-11-26: "add a switch-loop in the scan mode below switch
+        which input start, end, step, loops like field": the Switch scan
+        with its pulse currents from Start / End / Step mA, Loops and Round
+        trip instead of the typed list."""
+        h = self.make_switch(fields="100")
+        panel = h.panel
+        modes = list(app.RTE_SCAN_MODES)
+        self.assertEqual(modes[modes.index("Switch") + 1], "Switch-loop")
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Switch-loop")
+            panel._rte_mode_changed()
+        self.assertEqual([v.get() for v in panel.ppms_simple_range], ["14", "-14", "2"])
+        self.assertIs(panel.rte_round_trip.get(), True)
+        self.assertEqual(panel.rte_scan_units.get(), "6221 pulse mA")
+        self.assertEqual(panel.rte_scan_note.get(), "Switch-loop: pulse mA; outer: field G")
+        self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
+        self.assertEqual(panel.rte_outer_ranges["Switch-loop"][0].get(), "-12")
+        self.assertEqual(panel.ppms_plot_axis, "pulse")
+        self.assertEqual([v for _l, _p, v in app.rte_scan_plan("Switch-loop", "14", "-14", "2", 1, True)],
+                         [14.0 - 2 * i for i in range(15)] + [-12.0 + 2 * i for i in range(14)])
+        panel.ppms_simple_range[0].set("-2")
+        panel.ppms_simple_range[1].set("2")
+        panel.ppms_simple_range[2].set("2")
+        panel.ppms_field_scan_loop_var.set("2")
+        panel.ppms_field_scan_stable_var.set("0")
+        panel.rte_outer_ranges["Switch-loop"][0].set("100")
+        self.start(h)
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertTrue(question.startswith("Switch-loop scan."))
+        self.assertIn("6221 pulse current, the INNER loop: 5 pulses a loop from -2 mA to +2 mA (step 2 mA and back), "
+                      "2 loop(s). Largest pulse 2 mA.", question)
+        self.assertIn("1 fields x 10 pulses x 1 harmonic pass(es) = 10 points.", question)
+        rows = self.rows(h)
+        self.assertEqual([(r["scan_mode"], r["loop"], float(r["pulse_current_ma"])) for r in rows],
+                         [("Switch-loop", loop, v) for loop in ("1", "2") for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
+        self.assertEqual(len(h.fake.trains), 6, "0 mA sends no pulse")
+        prepared = ete.RunLogBase.events(h)[0]
+        self.assertEqual({k: prepared["plan"][k] for k in ("start", "end", "step", "unit", "loops", "round_trip")},
+                         {"start": "-2", "end": "2", "step": "2", "unit": "mA (6221 pulse)", "loops": 2, "round_trip": True})
+        self.assertEqual(prepared["outer"]["values"], [100.0])
+        self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Completed"))
+        # A pulse beyond the 6221's limit is refused before anything is sent.
+        with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
+            app.rte_scan_plan("Switch-loop", "0", "106", "106", 1, False)
 
     def test_x_and_y_vs_time_follow_the_window_as_it_is_read(self):
         """User, 2026-11-24: "The X and Y signals versus time should be

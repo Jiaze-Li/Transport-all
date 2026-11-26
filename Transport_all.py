@@ -2226,7 +2226,7 @@ RTE_DEFAULT_SCAN_MODE = 'Angle+Field'
 RTE_ANGLE_DEFAULT_RANGE = ('0', '-360', '5')
 FIELD_ANGLE_SCAN_MODE = 'Field+Angle'
 FIELD_CURRENT_SCAN_MODE = 'Field+Current'
-RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, FIELD_CURRENT_SCAN_MODE, 'Switch', 'Switch2')
+RTE_SCAN_MODES = ('Field', 'Current', 'Angle+Field', 'Angle+Current', FIELD_ANGLE_SCAN_MODE, FIELD_CURRENT_SCAN_MODE, 'Switch', 'Switch-loop', 'Switch2')
 RTE_ANGLE_MODES = ('Angle', 'Angle+Field', 'Angle+Current')
 RTE_STAGE_MODES = (*RTE_ANGLE_MODES, FIELD_ANGLE_SCAN_MODE)
 RTE_FIELD_SWEEP_MODES = ('Field', FIELD_ANGLE_SCAN_MODE, FIELD_CURRENT_SCAN_MODE)
@@ -2238,7 +2238,11 @@ FIELD_ANGLE_DEFAULT_ANGLES = '0, 45, 90'
 FIELD_CURRENT_DEFAULT_CURRENTS_MA = '0.5, 1, 1.5, 2'
 SWITCH_SCAN_MODE = 'Switch'
 SWITCH2_SCAN_MODE = 'Switch2'
-SWITCH_MODES = (SWITCH_SCAN_MODE, SWITCH2_SCAN_MODE)
+SWITCH_LOOP_SCAN_MODE = 'Switch-loop'
+SWITCH_MODES = (SWITCH_SCAN_MODE, SWITCH_LOOP_SCAN_MODE, SWITCH2_SCAN_MODE)
+SWITCH_LIST_MODES = (SWITCH_SCAN_MODE, SWITCH2_SCAN_MODE)
+SWITCH_6221_MODES = (SWITCH_SCAN_MODE, SWITCH_LOOP_SCAN_MODE)
+SWITCH_LOOP_DEFAULT_RANGE = ('14', '-14', '2')
 RTE_TAB_TITLE = 'SHHV & Switch'
 RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
@@ -2269,6 +2273,8 @@ RTE_OUTER_ROWS = {
                           index_column='outer_current_index'),
     SWITCH_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
                            index_column='outer_field_index', listed=True),
+    SWITCH_LOOP_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH_DEFAULT_FIELDS_G,),
+                                index_column='outer_field_index', listed=True),
     SWITCH2_SCAN_MODE: dict(label='Outer field G:', defaults=(SWITCH2_DEFAULT_FIELDS_G,),
                             index_column='outer_field_index', listed=True),
     FIELD_ANGLE_SCAN_MODE: dict(label='Outer stage °:', defaults=(FIELD_ANGLE_DEFAULT_ANGLES,),
@@ -37141,7 +37147,7 @@ def rte_scan_plan(mode, start, end, step, loops=1, round_trip=True, max_current_
     if mode not in ('Field', 'Current', 'Angle', *SWITCH_MODES):
         raise ValueError('SHHV supports only Field, Current and Angle scans')
     nodes = tuple(values) if values is not None else tuple(ppms_scan_axis(float(start), float(end), float(step)))
-    if mode == SWITCH_SCAN_MODE:
+    if mode in SWITCH_6221_MODES:
         limit_ma = K6221_MAX_ABS_CURRENT_A * 1e3
         outside = [v for v in nodes if abs(v) > limit_ma]
         if outside:
@@ -37300,6 +37306,7 @@ RTE_SCAN_NOTES = {
     'Field+Angle': 'Field+Angle: KEPCO A; outer: stage °',
     FIELD_CURRENT_SCAN_MODE: 'Field+Current: KEPCO A; outer: 6221 mA',
     SWITCH_SCAN_MODE: 'Switch: 6221 pulse mA; outer: field G',
+    SWITCH_LOOP_SCAN_MODE: 'Switch-loop: pulse mA; outer: field G',
     SWITCH2_SCAN_MODE: 'Switch2: Avtech pulse V; outer: field G',
 }
 def rte_angle_not_started_text(reason, mode='Angle'):
@@ -37995,7 +38002,7 @@ class RTEPanel(PPMSPanel):
                     stacked = getattr(controls, '_pair_side_by_side', None) is False
                     room = scan.winfo_width() - self._pair_inset(scan)
                     widths = [widget.winfo_reqwidth() + grid_padx(options) for (widget, _under), options in zip(widgets, beside_options)]
-                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') and self.ppms_simple_mode.get() not in SWITCH_MODES else sum(widths)
+                    beside_width = max(widths) if widgets is self.__dict__.get('rte_outer_list_widgets') and self.ppms_simple_mode.get() not in SWITCH_LIST_MODES else sum(widths)
                     rows_width = scan_rows_width(outer_row=False)
                     beside = stacked and room > 1 and room >= rows_width + beside_width
                 except (tk.TclError, ValueError):
@@ -38113,8 +38120,8 @@ class RTEPanel(PPMSPanel):
         current = mode == 'Current'
         angle = mode in RTE_ANGLE_MODES
         switch = mode in SWITCH_MODES
-        self.rte_round_trip.set(mode in RTE_FIELD_SWEEP_MODES or mode == SWITCH2_SCAN_MODE)
-        defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else () if switch else RTE_FIELD_DEFAULT_RANGE
+        self.rte_round_trip.set(mode in (*RTE_FIELD_SWEEP_MODES, SWITCH_LOOP_SCAN_MODE, SWITCH2_SCAN_MODE))
+        defaults = ('0.01', '1', '0.01') if current else RTE_ANGLE_DEFAULT_RANGE if angle else SWITCH_LOOP_DEFAULT_RANGE if mode == SWITCH_LOOP_SCAN_MODE else () if switch else RTE_FIELD_DEFAULT_RANGE
         for variable, value in zip(self.ppms_simple_range, defaults):
             variable.set(value)
         acquire = self.__dict__.get('ppms_acquisition_time_var')
@@ -38126,7 +38133,7 @@ class RTEPanel(PPMSPanel):
                 self.rte_acquisition_default_shown = new
         settle = self.__dict__.get('ppms_field_scan_stable_var')
         if settle is not None and 'rte_settle_default_shown' in self.__dict__:
-            new = f'{SWITCH_SETTLE_S if mode == SWITCH_SCAN_MODE else RTE_SETTLE_S:g}'
+            new = f'{SWITCH_SETTLE_S if mode in SWITCH_6221_MODES else RTE_SETTLE_S:g}'
             if str(settle.get()).strip() == self.rte_settle_default_shown:
                 settle.set(new)
                 self.rte_settle_default_shown = new
@@ -38169,9 +38176,9 @@ class RTEPanel(PPMSPanel):
                 widget.configure(textvariable=variable)
     def _rte_show_scan_units(self, mode):
         name = self._rte_supply_label()
-        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '' if mode in SWITCH_MODES else f'{name} A')
+        self.rte_scan_units.set('6221 mA RMS' if mode == 'Current' else 'Stage °' if mode in RTE_ANGLE_MODES else '6221 pulse mA' if mode == SWITCH_LOOP_SCAN_MODE else '' if mode in SWITCH_MODES else f'{name} A')
         for widget in self.__dict__.get('rte_range_widgets') or ():
-            widget.grid_remove() if mode in SWITCH_MODES else widget.grid()
+            widget.grid_remove() if mode in SWITCH_LIST_MODES else widget.grid()
         cycles = mode == SWITCH_SCAN_MODE
         for widget in self.__dict__.get('rte_cycles_widgets') or ():
             widget.grid() if cycles else widget.grid_remove()
@@ -38179,8 +38186,8 @@ class RTEPanel(PPMSPanel):
             widget.grid_remove() if cycles else widget.grid()
         pulse_list = self.__dict__.get('rte_switch_pulse_list_widgets') or ()
         for widget in pulse_list:
-            widget.grid() if mode in SWITCH_MODES else widget.grid_remove()
-        if mode in SWITCH_MODES and len(pulse_list) == 2:
+            widget.grid() if mode in SWITCH_LIST_MODES else widget.grid_remove()
+        if mode in SWITCH_LIST_MODES and len(pulse_list) == 2:
             avtech = mode == SWITCH2_SCAN_MODE
             pulse_list[0].configure(text='Pulses V:' if avtech else 'Pulses mA:')
             pulse_list[1].configure(textvariable=self.rte_switch2_pulses_var if avtech else self.rte_switch_pulses_var)
@@ -38188,7 +38195,7 @@ class RTEPanel(PPMSPanel):
         if note is not None:
             note.set(RTE_SCAN_NOTES.get(mode, RTE_SCAN_NOTES['Current']).replace('KEPCO', name))
     def _rte_outer_list_beside(self):
-        return self.__dict__.get('rte_outer_switch_beside_options' if self.ppms_simple_mode.get() in SWITCH_MODES else 'rte_outer_list_beside_options') or []
+        return self.__dict__.get('rte_outer_switch_beside_options' if self.ppms_simple_mode.get() in SWITCH_LIST_MODES else 'rte_outer_list_beside_options') or []
     def _rte_shown_outer_set(self):
         for widgets, beside in ((self.__dict__.get('rte_outer_widgets') or [],
                                  self.__dict__.get('rte_outer_beside_options') or []),
@@ -38996,7 +39003,7 @@ class RTEPanel(PPMSPanel):
             turns = mode in RTE_STAGE_MODES
             supply = self._rte_supply()
             typed_pulses = (rte_pulse_list(self.rte_switch2_pulses_var.get(), 'Pulses V', 'pulse amplitudes', 'V', '-100, -50, 0, 50, 100') if avtech
-                            else rte_pulse_list(self.rte_switch_pulses_var.get()) if switch else None)
+                            else rte_pulse_list(self.rte_switch_pulses_var.get()) if mode == SWITCH_SCAN_MODE else None)
             plan = rte_scan_plan('Angle' if angle else 'Field' if field_angle or current_outer else mode,
                                  *(v.get() for v in self.ppms_simple_range),
                                  self.ppms_field_scan_loop_var.get(), self.rte_round_trip.get(),
@@ -39459,13 +39466,16 @@ class RTEPanel(PPMSPanel):
         trip = ' and back' if self.rte_round_trip.get() else ''
         start = "the KEPCO's output is switched on at 0 A first if it is off" if name == 'KEPCO' else f'each change is a ramp at the rate, and the {name} must be at its setpoint at Start'
         passes_text = f' Each of the {len(passes)} harmonic passes runs the whole scan, its pulses again.' if len(passes) > 1 else ''
-        return (f'Switch scan.\n\n'
+        return (f'{self.ppms_simple_mode.get()} scan.\n\n'
                 f'Field, the OUTER loop: {len(outer)} fields in the order typed: {rte_outer_values_text(outer)}, '
                 f'each within ±{tolerance:g} G on the LS475 (Set field\'s Tol. box). At each field the {name} '
                 f'current is found as Set field finds it ({terms}; {start}), never beyond '
                 f'±{self._rte_supply().max_current_a():g} A, and then stays there, not corrected, for that '
                 'field\'s whole pulse loop.\n\n'
-                f'6221 pulse current, the INNER loop: {len(plan) // loops} pulses a loop in the order typed, {rte_outer_values_text(currents[:(len(plan) // loops + 1) // 2 if trip else len(plan) // loops], unit="mA")}{trip}, '
+                + (f'6221 pulse current, the INNER loop: {len(plan) // loops} pulses a loop from {currents[0]:+g} mA to '
+                   f'{max(currents, key=lambda value: abs(value - currents[0])):+g} mA (step {abs(float(self.ppms_simple_range[2].get())):g} mA{trip}), '
+                   if self.ppms_simple_mode.get() == SWITCH_LOOP_SCAN_MODE else
+                   f'6221 pulse current, the INNER loop: {len(plan) // loops} pulses a loop in the order typed, {rte_outer_values_text(currents[:(len(plan) // loops + 1) // 2 if trip else len(plan) // loops], unit="mA")}{trip}, ') +
                 f'{loops} loop(s). Largest pulse {max(abs(value) for value in currents):g} mA.\n\n'
                 f'Each point: the read current off; one write of {pulse["count"]} pulse(s) of '
                 f'{pulse["width_s"] * 1e6:g} µs at the point\'s current (compliance {pulse["compliance_v"]:g} V; '
@@ -39774,9 +39784,9 @@ class RTEPanel(PPMSPanel):
         return dict(
             program=Path(__file__).name, app_version=APP_VERSION, python_version=sys.version,
             file_name=typed_name, mode=mode,
-            plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var' if mode == SWITCH2_SCAN_MODE else 'rte_switch_pulses_var'))) if mode in SWITCH_MODES else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
+            plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var' if mode == SWITCH2_SCAN_MODE else 'rte_switch_pulses_var'))) if mode in SWITCH_LIST_MODES else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
                       unit='A (KEPCO)' if mode in RTE_FIELD_SWEEP_MODES else 'deg (stage)' if mode in RTE_ANGLE_MODES
-                      else 'mA (6221 pulse)' if mode == SWITCH_SCAN_MODE else 'V (Avtech pulse)' if mode == SWITCH2_SCAN_MODE else 'mA RMS (6221)',
+                      else 'mA (6221 pulse)' if mode in SWITCH_6221_MODES else 'V (Avtech pulse)' if mode == SWITCH2_SCAN_MODE else 'mA RMS (6221)',
                       loops=loops, round_trip=bool(box(round_trip)) if round_trip is not None else None,
                       points=len(plan), points_per_loop=len(plan) // loops,
                       harmonic_passes=len(passes),

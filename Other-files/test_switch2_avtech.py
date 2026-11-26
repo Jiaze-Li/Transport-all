@@ -24,8 +24,8 @@ setUpModule, tearDownModule = ete.setUpModule, ete.tearDownModule
 class Switch2Page(unittest.TestCase):
     def test_switch2_is_the_last_mode_with_the_avtechs_boxes(self):
         panel = ete.build_page(kepco=False)
-        self.assertEqual(app.RTE_SCAN_MODES[-2:], ("Switch", "Switch2"))
-        self.assertEqual(app.SWITCH_MODES, ("Switch", "Switch2"))
+        self.assertEqual(app.RTE_SCAN_MODES[-3:], ("Switch", "Switch-loop", "Switch2"))
+        self.assertEqual(app.SWITCH_MODES, ("Switch", "Switch-loop", "Switch2"))
         # The Avtech's connection row: under the Zurich's, the CIDWM page's
         # address to start with, and the page's own controller.
         entry, connect, disconnect = panel.rte_connection_widgets["avtech"]

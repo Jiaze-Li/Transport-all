@@ -1,5 +1,15 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## SHHV & Switch: Switch-loop scan (user, 2026-11-26)
+
+- **Request:** "add a switch-loop in the scan mode below switch which input start, end, step, loops like field".
+- Switch-loop (`SWITCH_LOOP_SCAN_MODE`, right after Switch) is the Switch scan with its 6221 pulse currents from
+  Start / End / Step (mA), Loops and Round trip, as the Field scan takes its currents, instead of the typed
+  "Pulses mA:" list. Start-up 14 to -14 mA in 2 mA, Round trip on (14 ... -14 ... 14, the Switch default loop), my
+  choice; outer field G "-12", Settle s 30, Acquire s 30, Pulse µs / Pulses as Switch. Same pulse, read and limits
+  (±105 mA) as Switch; rows say `scan_mode` "Switch-loop"; the run log's plan has start / end / step.
+  `SWITCH_LIST_MODES` are the modes with a typed list (Switch, Switch2), `SWITCH_6221_MODES` the 6221-pulse ones.
+
 ## Speed pass (user, 2026-11-25: "optimize and check the whole code", chose "Speed")
 
 - Same plots, same saved data, every instrument wait unchanged. SHHV and PPMS redraws walk the rows once per redraw

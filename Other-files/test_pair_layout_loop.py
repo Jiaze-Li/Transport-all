@@ -434,7 +434,7 @@ class RTEStageBlockTests(Built, unittest.TestCase):
             panel.zurich_harmonic.set(app.RTE_ZURICH_DEFAULT_HARMONICS)
             panel._apply_ppms2_zurich_harmonic()
             self.root.geometry(f"1101x{CI_SHOT_HEIGHT}+0+0")
-            for mode in ("Switch", "Switch2"):
+            for mode in ("Switch", "Switch-loop", "Switch2"):
                 panel.ppms_simple_mode.set(mode)
                 panel._rte_mode_changed()
                 for _ in range(3):
@@ -444,7 +444,8 @@ class RTEStageBlockTests(Built, unittest.TestCase):
                       f"{sorted(c.winfo_height() for c in shown)} px tall; pulse row {panel.rte_pulse_place}, note {panel.rte_note_place}")
                 with self.subTest(mode=mode):
                     self.assertEqual(len(shown), 4, "X, Y and X, Y vs time")
-                    self.assertEqual((panel.rte_pulse_place, panel.rte_note_place), ("beside", "beside"))
+                    if mode != "Switch-loop":
+                        self.assertEqual((panel.rte_pulse_place, panel.rte_note_place), ("beside", "beside"))
                     self.assertEqual(panel.rte_avtech_row.winfo_ismapped(), mode == "Switch2")
                     for canvas in shown:
                         self.assertGreaterEqual(canvas.winfo_height(), 55, "Increase the window height")
