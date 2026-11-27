@@ -15,8 +15,8 @@ stays on `main`.
 
 ## Running it
 
-**Windows .exe (no Python needed).** Download from the pre-release
-[FMR Windows exe (newest Transport-FMR)](https://github.com/nbb2026/Transport-all/releases/tag/fmr-windows-exe):
+**Windows .exe (no Python needed).** Download from the release
+[Transport_FMR v1.0](https://github.com/nbb2026/Transport-all/releases/tag/fmr-v1.0):
 
 - `Transport_FMR.exe`: one file. Put it in a folder you keep and double-click it.
 - `Transport_FMR-folder.zip`: the same program as one folder, which starts faster.
@@ -24,7 +24,9 @@ stays on `main`.
   beside it.
 
 Both are rebuilt from this branch after every push that passes its checks; the
-release notes give the commit and the SHA-256 of each file.
+release notes give the commit and the SHA-256 of each file. The version is this
+program's own (`APP_VERSION` in [`tools/fmr_host.py`](tools/fmr_host.py)), not the main
+program's; raising it starts a new release.
 
 **From the source (64-bit Python 3.11):**
 

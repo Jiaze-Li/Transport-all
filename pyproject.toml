@@ -1,14 +1,14 @@
 # The standalone FMR application as an installable package: Transport_FMR.py
 # plus the transport package beside it.  `pip install transport_fmr-<version>-py3-none-any.whl`
 # adds the `transport-fmr` command; `python Transport_FMR.py` in a copied
-# folder works too.  The version follows APP_VERSION in transport/fmr/app.py.
+# folder works too.  The version is APP_VERSION of tools/fmr_host.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "transport-fmr"
-version = "1.0.2"
+version = "1.0"
 description = "Ferromagnetic resonance (VNA-FMR) and spin-torque FMR measurement control program (Tk GUI): the FMR and STFMR pages of Transport-all as a program of their own"
 readme = "README.md"
 license = "GPL-3.0-only"

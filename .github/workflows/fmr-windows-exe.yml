@@ -4,9 +4,10 @@
 # branch Transport-FMR (and to ci/** test branches cut from it), or by hand:
 # Actions tab -> "FMR Windows exe" -> Run workflow.  The .exe is attached to
 # the run as the artifact "Transport_FMR-windows-x64".  A build of
-# Transport-FMR also replaces the files of the pre-release "FMR Windows exe
-# (newest Transport-FMR)" (tag fmr-windows-exe; this workflow never moves
-# the tag), so it can be downloaded directly, without signing in.
+# Transport-FMR also puts its files in the release "Transport_FMR v<version>"
+# (tag fmr-v<version>; the version is APP_VERSION of tools/fmr_host.py), so they
+# can be downloaded directly, without signing in: a release that is there
+# gets the new files, and a raised version starts a new release.
 # The same commit is also built as one folder (Transport_FMR\Transport_FMR.exe
 # with its libraries in _internal), released beside it as
 # Transport_FMR-folder.zip: it starts faster, as nothing is unpacked on start.
@@ -28,7 +29,7 @@ permissions:
 env:
   PYTHONIOENCODING: utf-8
   PYTHONUTF8: "1"
-  RELEASE_TAG: fmr-windows-exe
+  RELEASE_TAG_PREFIX: fmr-v
 
 jobs:
   build:
@@ -180,7 +181,7 @@ jobs:
         with:
           name: Transport_FMR-windows-x64
           path: dist
-      - name: Replace the files of the release "FMR Windows exe (newest Transport-FMR)"
+      - name: Put the files in the release "Transport_FMR v<version>"
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -189,11 +190,19 @@ jobs:
           zip_sha256=$(cut -d' ' -f1 dist/Transport_FMR-folder.zip.sha256)
           version=$(sed -n 's/^Transport_FMR.exe, program version //p' dist/BUILD_INFO.txt | tr -d '\r')
           publisher=$(sed -n 's/^Publisher: \(.*\) (company name.*/\1/p' dist/BUILD_INFO.txt | tr -d '\r')
+          if [ -z "$version" ]; then echo "No program version in BUILD_INFO.txt"; exit 1; fi
+          RELEASE_TAG="$RELEASE_TAG_PREFIX$version"
+          title="Transport_FMR v$version"
+          # A version without a release yet: a new release, tagged at this commit.
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$title" --notes "$title" --latest=false --repo "$GITHUB_REPOSITORY"
+          fi
           tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
           cat > notes.md <<EOF
           \`Transport_FMR.exe\`: the FMR and STFMR pages of Transport-all as a program of its own, for Windows 10/11
-          (64-bit), no Python needed and no Transport_all needed. It is rebuilt from the newest
-          \`Transport-FMR\` branch and replaced here after every push that passes its checks.
+          (64-bit), no Python needed and no Transport_all needed. Version $version: it is rebuilt from the
+          \`Transport-FMR\` branch and replaced here after every push that passes its checks, until
+          the version number is raised, which starts a new release.
 
           - Commit: [\`${GITHUB_SHA:0:7}\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA), program version $version
           - Publisher: $publisher (in the file's properties; the .exe is not code-signed)
@@ -215,6 +224,6 @@ jobs:
           gh release upload "$RELEASE_TAG" dist/Transport_FMR.exe dist/Transport_FMR.exe.sha256 \
             dist/Transport_FMR-folder.zip dist/Transport_FMR-folder.zip.sha256 dist/BUILD_INFO.txt \
             --clobber --repo "$GITHUB_REPOSITORY"
-          gh release edit "$RELEASE_TAG" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
+          gh release edit "$RELEASE_TAG" --title "$title" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[] | "\(.name)  \(.size) bytes"'
