@@ -25,7 +25,9 @@ How it decides what to keep (name reachability, on the syntax tree):
   code (other pages); ``STUBS`` gives a name kept code still mentions a
   harmless stand-in.
 * Names the transport package already has (Jiaze Li's modules) are not
-  copied: the app imports them (``PACKAGE_IMPORTS``, in the glue file).
+  copied: the app imports them (``PACKAGE_IMPORTS``, in the glue file).  The
+  glue file's wrappers replace the main program's definitions of the same
+  name where kept code reaches them; they are not roots.
 
 Matching by name keeps too much rather than too little: a method of another
 page stays when a kept method has an attribute of the same name.  The report
@@ -59,8 +61,12 @@ def load_host(host: Path):
     that steer the extraction."""
     methods, top, settings = {}, {}, {}
     load_host_file(host, methods, top, settings)
+    own = set(methods) | set(top)
     for name in settings.get("GLUE_FILES", ()):
         load_host_file(host.parent / name, methods, top, settings)
+    # The glue's definitions replace the main program's only where kept code
+    # reaches them; the host's own are roots.
+    settings["GLUE_NAMES"] = (set(methods) | set(top)) - own
     return methods, top, settings
 
 
@@ -203,19 +209,28 @@ def main(argv) -> int:
         return any(line.startswith(prefix) for prefix in init_drop)
 
     kept_top: set[int] = set()            # ids of kept top-level nodes
-    kept_methods: set[str] = {"__init__", *host_methods}
+    glue = settings["GLUE_NAMES"]
+    kept_methods: set[str] = {"__init__", *(name for name in host_methods if name not in glue)}
     kept_init: set[int] = set()
-    forced = {APP_CLASS, *keep_always, *host_top} | ({page_class} if page_class else set())
+    forced = {APP_CLASS, *keep_always, *(name for name in host_top if name not in glue)} | ({page_class} if page_class else set())
     forced |= {name for name in (*top_defs, *app_methods) if any(re.search(pattern, name) for pattern in keep_patterns)}
     referenced = Names(forced, forced)
-    for sub in (*host_trees.values(), *host_top_trees.values(), *app_other):
+    for name, sub in (*host_trees.items(), *host_top_trees.items()):
+        if name not in glue:
+            referenced.add_all(names_in(sub))
+    for sub in app_other:
         referenced.add_all(names_in(sub))
+    kept_host_top: set[str] = set()
     referenced.add_all(names_in(ast.Module(body=init.args.defaults + [init.args], type_ignores=[])))
 
     changed = True
     while changed:
         changed = False
         for name in list(referenced - drop):
+            if name in host_top and name not in kept_host_top:
+                kept_host_top.add(name)
+                referenced.add_all(names_in(host_top_trees[name]))
+                changed = True
             if name in host_top or name in packaged:
                 continue
             for node in top_defs.get(name, ()):
@@ -224,9 +239,9 @@ def main(argv) -> int:
                     referenced.add_all(names_in(node))
                     changed = True
         for name in list(referenced.attrs - drop):
-            if name in app_methods and name not in kept_methods:
+            if (name in app_methods or name in host_methods) and name not in kept_methods:
                 kept_methods.add(name)
-                referenced.add_all(names_in(app_methods[name]))
+                referenced.add_all(names_in(host_trees[name] if name in host_methods else app_methods[name]))
                 changed = True
         for statement in init.body:
             if id(statement) in kept_init or init_statement_dropped(statement):
@@ -279,7 +294,8 @@ def main(argv) -> int:
                 if not isinstance(item, ast.FunctionDef):
                     out.append(text(item))
                 elif item.name in host_methods:
-                    out.append(host_methods[item.name])
+                    if item.name in kept_methods:
+                        out.append(host_methods[item.name])
                 elif item.name == "__init__":
                     out.append("\n".join(lines[first_line(item) - 1:item.body[0].lineno - 1]))
                     for statement in item.body:
@@ -288,7 +304,7 @@ def main(argv) -> int:
                 elif item.name in kept_methods and item.name not in drop:
                     out.append(text(item))
             for name, code in host_methods.items():
-                if name not in app_methods:
+                if name not in app_methods and name in kept_methods:
                     out.append(code)
             continue
         names = bound_names(node)

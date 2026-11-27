@@ -114,7 +114,52 @@ class ManualKeithleyTests(unittest.TestCase):
         return warning
 
 class PulseTests(unittest.TestCase):
-    pass
+    def test_the_level_is_checked_after_the_pulse_not_inside_it(self):
+        meter = FakeSourceMeter()
+        controller = connected_controller(meter)
+        events = []
+        original_query, original_write = meter.query, meter.write
+        meter.query = lambda command: (events.append(("query", command)), original_query(command))[1]
+        meter.write = lambda command: (events.append(("write", command)), original_write(command))[1]
+        controller._wait = lambda duration, stop: events.append(("wait", duration))
+        with mock.patch.object(app.time, "sleep", lambda seconds: None):
+            controller.apply_voltage_pulse(5.0, 0.1, threading.Event())
+        level_at = events.index(("write", ":SOUR:VOLT 5"))
+        self.assertEqual(events[level_at + 1], ("wait", 0.1),
+                         "the full width, with no error check between the level and the wait")
+        self.assertEqual(meter.commands[-2:], [":SOUR:VOLT 0", ":OUTP OFF"])
+        self.assertIn(("query", "SYST:ERR?"), events[level_at + 2:], "the level is checked after the pulse")
+
+    def test_a_rejected_level_fails_after_the_output_is_off(self):
+        meter = FakeSourceMeter()
+        controller = connected_controller(meter)
+        original_query = meter.query
+        state = {"pulsed": False}
+
+        def query(command):
+            if command == "SYST:ERR?" and state["pulsed"] and meter.output == 0:
+                return '-222,"Data out of range"'
+            return original_query(command)
+
+        meter.query = query
+        controller._wait = lambda duration, stop: state.update(pulsed=True)
+        with mock.patch.object(app.time, "sleep", lambda seconds: None), \
+                self.assertRaisesRegex(RuntimeError, "Data out of range"):
+            controller.apply_voltage_pulse(5.0, 0.1, threading.Event())
+        self.assertEqual(meter.output, 0)
+
+    def test_a_stop_before_the_pulse_never_switches_the_output_on(self):
+        meter = FakeSourceMeter()
+        controller = connected_controller(meter)
+        stop = threading.Event()
+        stop.set()
+        with mock.patch.object(app.time, "sleep", lambda seconds: None):
+            with self.assertRaises(app.NonLocalVIStopped):
+                controller.apply_voltage_pulse(5.0, 0.1, stop)
+            with self.assertRaises(app.NonLocalVIStopped):
+                controller.measure_resistance(stop)
+        self.assertNotIn(":OUTP ON", meter.commands)
+
 
 class ZurichControllerTests(unittest.TestCase):
     def controller(self):

@@ -61,43 +61,6 @@ class DisplayTests(unittest.TestCase):
         # DDEF i, j, k: CH1 j = 0 X (1 R); CH2 j = 0 Y (1 theta); k = 0 no ratio.
         self.assertEqual(app.SR830_DISPLAY_XY_COMMANDS, ("DDEF 1,0,0", "DDEF 2,0,0"))
 
-    def test_no_page_sets_r_and_theta_any_more(self):
-        source = inspect.getsource(app)
-        code = [line.split("#")[0] for line in source.splitlines()]
-        self.assertEqual([line.strip() for line in code if "DDEF 1,1" in line or "DDEF 2,1" in line], [])
-        # The commands and the Connect's helper, then ST-FMR's Start,
-        # Non-local's Start and the PPMS / SHHV Connect.
-        self.assertEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
-
-    def test_stfmr_connect_shows_x_and_y(self):
-        session = Session()
-        self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
-        self.assertEqual(controller.connect("GPIB0::8::INSTR"), SR830)
-        # Nothing before the identity is known, then the display alone: the
-        # rest of the set-up (range, time constant ...) still comes with Start.
-        self.assertEqual(session.log, [("query", "*IDN?"), *SHOW_XY])
-        self.assertTrue(controller.connected)
-
-    def test_a_device_that_is_not_an_sr830_is_sent_nothing(self):
-        session = Session("KEITHLEY INSTRUMENTS INC.,MODEL 2400")
-        self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
-        with self.assertRaisesRegex(RuntimeError, "is not Stanford SR830"):
-            controller.connect("GPIB0::8::INSTR")
-        self.assertEqual(session.log, [("query", "*IDN?")])
-        self.assertTrue(session.closed)
-
-    def test_a_display_write_that_fails_does_not_undo_the_connection(self):
-        session = Session(refuse="DDEF")
-        self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
-        self.assertEqual(controller.connect("GPIB0::8::INSTR"), SR830)
-        self.assertTrue(controller.connected)
-        self.assertFalse(session.closed)
-        self.assertEqual(self.logged[-1],
-                         "STFMR SR830: the display was not set to X and Y: VI_ERROR_TMO")
-
     def test_the_ppms_and_shv_controller_writes_nothing_itself(self):
         """Their Connect's own set-up follows at once and holds the display
         commands, each checked (test_ppms_sr830_tc)."""

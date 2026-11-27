@@ -33,55 +33,59 @@ class SharedHelperTests(unittest.TestCase):
         self.assertEqual(app.format_nice_tick(10005.0, 2.5), "10005.0")
         self.assertEqual(app.format_nice_tick(3000.0, 5.0), "3000")
 
-    def test_a_scan_axis_does_not_repeat_its_end(self):
-        self.assertEqual(app.ppms_scan_axis(0.1, 0.4, 0.1)[-2:], (0.30000000000000004, 0.4))
-        self.assertEqual(len(app.ppms_scan_axis(0.1, 0.4, 0.1)), 4)
-
     def test_the_short_gpib_spelling_shares_the_lease(self):
         self.assertEqual(app.instrument_lease_key("GPIB0::30"), app.instrument_lease_key("GPIB0::30::INSTR"))
 
 
 class MokeTests(unittest.TestCase):
-    pass
+    def test_magnet_disconnect_writes_0_a_first(self):
+        a = bare_app()
+        calls = []
+        bop = mock.Mock(connected=True)
+        bop.set_current.side_effect = lambda value: calls.append(("0 A", value))
+        channel = mock.Mock(bop=bop)
+        channel.close.side_effect = lambda: calls.append("close")
+        a.magnet_channels = {"OUT": channel, "IN": mock.Mock(bop=None)}
+        a.magnet_auto_poll_var = Var(True)
+        a._submit_magnet_task = lambda label, worker, success: calls.append(("result", worker()))
+        a.disconnect_magnets()
+        self.assertEqual(calls[:2], [("0 A", 0.0), "close"])
+        self.assertEqual(calls[-1], ("result", []), "no warnings")
+
+    def test_a_frame_goes_into_the_scan_samples_once(self):
+        window = app.TkCameraWindow.__new__(app.TkCameraWindow)
+        window.roi = {"cx": 5.0, "cy": 5.0, "w": 4.0, "h": 4.0, "angle": 0.0}
+        window.selecting_roi, window.roi_start, window.roi_end = False, None, None
+        window.mapping = object()
+        window.app = mock.Mock()
+        image = np.ones((10, 10), dtype=float)
+        frame = types.SimpleNamespace(raw=image, difference=image, display_difference=None)
+        with mock.patch.object(app, "np", np):
+            for _redraw in range(3):   # e.g. pan, zoom, a CLim edit
+                window._ingest_roi_values(frame)
+            self.assertEqual(window.app.ingest_2410_roi_sample.call_count, 1)
+            window._ingest_roi_values(types.SimpleNamespace(raw=image, difference=image, display_difference=None))
+        self.assertEqual(window.app.ingest_2410_roi_sample.call_count, 2, "a new frame counts")
+
+    def test_moke_24_keithley_goes_off_before_its_range_changes(self):
+        controller = app.Keithley2410Controller.__new__(app.Keithley2410Controller)
+        controller.lock = threading.RLock()
+        controller.instrument = object()
+        controller.output_enabled = True       # a manual Write left it on
+        controller.model = "2410"
+        controller.compliance_a = 1e-3
+        calls = []
+        controller._write_checked = calls.append
+        controller._configure_voltage_source_locked = lambda v: calls.append(f"configure {v:g}")
+        controller.enable_output(100.0)
+        self.assertEqual(calls, [":SOUR:VOLT 0", ":OUTP OFF", "configure 100", ":OUTP ON"])
+
 
 class StfmrTests(unittest.TestCase):
-    def test_the_overload_latched_by_a_range_change_is_dropped(self):
-        controller = app.STFMRSR830Controller.__new__(app.STFMRSR830Controller)
-        controller.lock = threading.RLock()
-        controller.auto_range_enabled = True
-        controller.sensitivity_index = 17
-        controller.low_range_count = controller.range_cooldown = 0
-        snap = "0.9e-3,0,0.95e-3,0,17.3"   # near full scale of SENS 17 (1 mV)
-        controller.instrument = Recorder({
-            "SNAP? 1,2,3,4,9": [snap, "1e-4,0,1e-4,0,17.3"],
-            "LIAS?": ["0", "4", "0"],   # 4: latched by the range change
-            "SENS?": "18",
-        })
-        controller.read_sample(17.3)                      # steps up to 18
-        sample = controller.read_sample(17.3)
-        self.assertEqual(controller.sensitivity_index, 18, "no further step")
-        self.assertEqual(sample["status"], 0, "the latched bit was read and dropped")
+    pass
 
 class PpmsTests(unittest.TestCase):
-
-    def test_a_typed_temperature_rate_is_kept(self):
-        a = bare_app()
-        a.ppms_temperature_target_var, a.ppms_temperature_rate_var = Var("300"), Var("2")
-        # Set T reads the rate as typed above 10 K, and lowers it below.
-        with mock.patch.object(app.CombinedControlApp, "set_ppms_temperature",
-                               app.CombinedControlApp.set_ppms_temperature):
-            try:
-                a.set_ppms_temperature()
-            except Exception:
-                pass   # nothing connected here; only the rate matters
-        self.assertEqual(a.ppms_temperature_rate_var.get(), "2")
-        a.ppms_temperature_target_var.set("5")
-        try:
-            a.set_ppms_temperature()
-        except Exception:
-            pass
-        self.assertEqual(a.ppms_temperature_rate_var.get(), "1")
-
+    pass
 
 if __name__ == "__main__":
     unittest.main()

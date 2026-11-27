@@ -1,23 +1,23 @@
-# The standalone PPMS application as an installable package: Transport_PPMS.py
+# The standalone MOKE application as an installable package: Transport_MOKE.py
 # plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
-# adds the `transport-ppms` command; `python Transport_PPMS.py` in a copied
-# folder works too.  The version follows APP_VERSION in transport/ppms/app.py.
+# adds the `transport-moke` command; `python Transport_MOKE.py` in a copied
+# folder works too.  The version follows APP_VERSION in transport/moke/app.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "transport-ppms"
+name = "transport-moke"
 version = "1.0.2"
-description = "PPMS transport measurement control program (Tk GUI): the PPMS page of Transport-all as a program of its own"
+description = "Magneto-optic Kerr imaging and current-induced domain-wall motion control program (Tk GUI): the MOKE and CIDWM pages of Transport-all as a program of their own"
 readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 # As on the development Mac and in CI.  Instrument libraries that need a
-# vendor install (zhinst for the MFLI, pythonnet and MultiPyVu for the PPMS)
+# vendor install (see requirements.txt)
 # are added on the lab PC (requirements.txt).
-dependencies = ["numpy", "pillow", "pyvisa"]
+dependencies = ["numpy", "pillow", "pyvisa", "pyserial", "opencv-python"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
@@ -26,17 +26,18 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/nbb2026/Transport-all/tree/Transport-PPMS"
+Homepage = "https://github.com/nbb2026/Transport-all/tree/Transport-MOKE"
 
 [project.scripts]
-transport-ppms = "transport.ppms.app:run"
+transport-moke = "transport.moke.app:run"
 
 [tool.setuptools]
-py-modules = ["Transport_PPMS"]
+py-modules = ["Transport_MOKE"]
 packages = [
     "transport",
     "transport.common",
     "transport.core",
+    "transport.moke",
     "transport.ppms",
     "transport.ppms.controllers",
 ]

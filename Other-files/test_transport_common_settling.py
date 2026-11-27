@@ -12,7 +12,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import transport.ppms.app as app
+import transport.moke.app as app
 from transport.common import (
     DEFAULT_LOCKIN_SETTLE_TAUS,
     calculate_lockin_settle_s,
@@ -22,23 +22,6 @@ from transport.common import (
 
 
 class TestTransportCommonSettling(unittest.TestCase):
-    def test_default_constant(self):
-        self.assertEqual(DEFAULT_LOCKIN_SETTLE_TAUS, 1.0)
-        self.assertEqual(app.LOCKIN_SETTLE_TAUS, 1.0)
-
-    def test_original_public_signatures_preserved(self):
-        """Requirement 3: Keep original public function signatures in Transport_all.py exactly unchanged."""
-        sig_settle = inspect.signature(app.ppms_lockin_settle_s)
-        self.assertEqual(list(sig_settle.parameters.keys()), ["settle_s", "time_constants_s"])
-
-        sig_status = inspect.signature(app.ppms_settle_status_text)
-        self.assertEqual(list(sig_status.parameters.keys()), ["seconds"])
-
-        sig_text = inspect.signature(app.ppms_lockin_settle_text)
-        self.assertEqual(
-            list(sig_text.parameters.keys()),
-            ["settle_s", "effective_s", "slowest_tc_s", "meter"],
-        )
 
     def test_pure_function_signatures(self):
         """Requirement 3: The new pure calculation functions accept an explicit settle_taus argument."""
@@ -91,33 +74,6 @@ class TestTransportCommonSettling(unittest.TestCase):
         self.assertEqual(str(calculate_lockin_settle_s(0.0, [3e-5], settle_taus=7.0)), "0.00021")
         self.assertEqual(str(calculate_lockin_settle_s(0.0, [1e-5])), "1e-05")
 
-    def test_calculate_lockin_settle_exception_preservation(self):
-        """Requirement 1: Preserve original exception behavior. Do not silently ignore None or invalid strings."""
-        for fn in (calculate_lockin_settle_s, app.ppms_lockin_settle_s):
-            with self.subTest(fn=fn.__name__):
-                # None in time constants raises TypeError
-                with self.assertRaises(TypeError):
-                    fn(0.5, [None])
-                with self.assertRaises(TypeError):
-                    fn(0.5, [1.0, None])
-
-                # Invalid string raises ValueError
-                with self.assertRaises(ValueError):
-                    fn(0.5, ["not_a_number"])
-                with self.assertRaises(ValueError):
-                    fn(0.5, [1.0, "bad"])
-
-                # Invalid settle_s raises TypeError or ValueError
-                with self.assertRaises(TypeError):
-                    fn(None, [1.0])
-                with self.assertRaises(ValueError):
-                    fn("bad_settle", [1.0])
-
-                # Non-finite numbers are ignored without exception
-                self.assertAlmostEqual(fn(0.0, [float("nan"), 1e-3]), 1e-3)
-                self.assertAlmostEqual(fn(0.0, [float("inf"), 1e-3]), 1e-3)
-                self.assertAlmostEqual(fn(0.0, [-float("inf"), 1e-3]), 1e-3)
-
     def test_format_settle_status_text(self):
         self.assertEqual(format_settle_status_text(7.0), "7")
         self.assertEqual(format_settle_status_text(0.7), "0.7")
@@ -132,45 +88,6 @@ class TestTransportCommonSettling(unittest.TestCase):
         self.assertEqual(format_settle_status_text(123.4), "123")
         self.assertEqual(format_settle_status_text(12345.7), "12346")
         self.assertEqual(format_settle_status_text(86400.0), "86400")
-
-    def test_format_lockin_settle_text_equivalence(self):
-        """Requirement 2: Preserve original numerical, formatting, and exception behavior of ppms_lockin_settle_text."""
-        for fn in (
-            lambda s, e, tc, m: format_lockin_settle_text(s, e, tc, m),
-            app.ppms_lockin_settle_text,
-        ):
-            # Settle s longer
-            self.assertEqual(
-                fn(12.0, 12.0, 1.0, "the Zurich"),
-                "12 s (Settle s; 1 x the slowest lock-in time constant, 1 s on the Zurich, is 1 s)",
-            )
-            # Lock-in TC longer
-            self.assertEqual(
-                fn(0.5, 1.0, 1.0, "SR830-1"),
-                "1 s (1 x 1 s, the time constant of SR830-1, the slowest lock-in measured; Settle s is 0.5 s)",
-            )
-            # Falsy slowest_tc_s
-            self.assertEqual(fn(0.5, 0.5, 0.0, ""), "0.5 s (Settle s)")
-            self.assertEqual(fn(0.5, 0.5, 0, ""), "0.5 s (Settle s)")
-            self.assertEqual(fn(0.5, 0.5, None, ""), "0.5 s (Settle s)")
-
-        # Custom settle_taus in format_lockin_settle_text
-        self.assertEqual(
-            format_lockin_settle_text(0.5, 0.7, 0.1, "SR830-1", settle_taus=7.0),
-            "0.7 s (7 x 0.1 s, the time constant of SR830-1, the slowest lock-in measured; Settle s is 0.5 s)",
-        )
-
-    def test_patching_app_lockin_settle_taus_affects_wrappers(self):
-        """Requirement 4: Preserve runtime behavior of monkeypatching Transport_all.LOCKIN_SETTLE_TAUS."""
-        with mock.patch.object(app, "LOCKIN_SETTLE_TAUS", 7.0):
-            self.assertEqual(app.ppms_lockin_settle_s(0.5, [0.1]), 0.7)
-            self.assertEqual(str(app.ppms_lockin_settle_s(0.5, [0.1])), "0.7")
-            text = app.ppms_lockin_settle_text(0.5, 0.7, 0.1, "SR830-1")
-            self.assertIn("7 x 0.1 s", text)
-
-        self.assertEqual(app.LOCKIN_SETTLE_TAUS, 1.0)
-        self.assertEqual(app.ppms_lockin_settle_s(0.5, [0.1]), 0.5)
-
 
 if __name__ == "__main__":
     unittest.main()

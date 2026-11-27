@@ -1,16 +1,18 @@
-# Python packages of Transport_PPMS.py, the standalone PPMS application.
+# Python packages of Transport_MOKE.py, the standalone MOKE application.
 # The versions are those of the main program's verified Windows build
-# (Transport_all, branch main); GitHub Actions builds Transport_PPMS.exe with
-# exactly these (.github/workflows/ppms-windows-exe.yml).
+# (Transport_all, branch main); GitHub Actions builds Transport_MOKE.exe with
+# exactly these (.github/workflows/moke-windows-exe.yml).
 #
 # Lab PC, to run the .py instead of the .exe (64-bit Python 3.11):
 #     py -3.11 -m pip install -r requirements.txt
 # Mac (development, no instruments): the same command installs the first
-# three; the instrument vendors' packages below are Windows-only and skipped.
+# lines; the instrument vendors' packages below are Windows-only and skipped.
 numpy==2.4.6
 Pillow==12.3.0
+opencv-python==5.0.0.93
 PyVISA==1.16.2
+pyserial==3.5
 # Instrument vendors' Python packages.
+pco==2.6.0; sys_platform == "win32"  # PCO camera (SDK DLLs inside the wheel)
 zhinst==26.4.1; sys_platform == "win32"  # Zurich MFLI; LabOne 18.12 uses the Python 3.7 bridge instead
-pythonnet==3.1.0; sys_platform == "win32"  # .NET: QDInstrument (PPMS), LabOne .NET API
-MultiPyVu==3.6.1; sys_platform == "win32"  # optional PPMS backend
+pythonnet==3.1.0; sys_platform == "win32"  # .NET: Thorlabs Kinesis, LabOne .NET API
