@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-27T16:40:37.812Z",
+  "updatedAt": "2026-11-27T16:46:16.339Z",
   "task": {
     "id": "fix/ppms-zurich-close-handoff",
     "branch": "fix/ppms-zurich-close-handoff",
@@ -8,15 +8,26 @@
     "task": "Development branch: fix/ppms-zurich-close-handoff",
     "started": "2026-11-28T00:38:18+08:00",
     "status": "In progress",
-    "current": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff",
+    "current": "fix(ppms): drain zurich_executor before MFLI disconnect and preserve fix in ppms_host REPLACE",
     "next": "Review Draft PR #3 and authorize marking Ready for review",
-    "history": [],
+    "history": [
+      {
+        "at": "2026-11-28T00:45:58+08:00",
+        "text": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff"
+      }
+    ],
     "commits": [
       {
         "sha": "0e2edca1ae0dd4a453867f044854235f1c9b8f2b",
         "branch": "fix/ppms-zurich-close-handoff",
         "timestamp": "2026-11-28T00:38:18+08:00",
         "message": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff"
+      },
+      {
+        "sha": "7df432f3203dd27b85373f96e1e4301d996680df",
+        "branch": "fix/ppms-zurich-close-handoff",
+        "timestamp": "2026-11-28T00:45:58+08:00",
+        "message": "fix(ppms): drain zurich_executor before MFLI disconnect and preserve fix in ppms_host REPLACE"
       }
     ],
     "pr": {
