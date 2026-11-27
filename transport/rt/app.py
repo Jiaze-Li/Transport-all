@@ -24,10 +24,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, simpledialog, ttk
 from typing import Callable
-from transport.core.scan_sequences import build_round_trip_values, lakeshore_ramp_seconds, ppms_scan_axis
+from transport.core.scan_sequences import lakeshore_ramp_seconds, ppms_scan_axis
 from transport.core.scan_recording import WINDOWS_RESERVED_FILE_NAMES, ScanRunRecorder as _CoreScanRunRecorder, make_scan_run_folder as _make_scan_run_folder, scan_file_stem as _scan_file_stem, scan_log_line as _scan_log_line
 from transport.core.scan_lifecycle import ScanCloseHandoff, zero_scan_outputs, scan_end_outputs_text
-from transport.ppms.protocol import PPMS_FIELD_LIMIT_OE, PPMS_TEMPERATURE_LOW_BOUNDARY_K, PPMS_TEMPERATURE_LOW_MAX_RATE_K_MIN, PPMS_TEMPERATURE_MAX_RATE_K_MIN, ppms_scan_temperature_segments, validate_ppms_field_command, validate_ppms_temperature_command
+from transport.ppms.protocol import PPMS_TEMPERATURE_LOW_BOUNDARY_K, PPMS_TEMPERATURE_LOW_MAX_RATE_K_MIN, PPMS_TEMPERATURE_MAX_RATE_K_MIN, ppms_scan_temperature_segments, validate_ppms_field_command, validate_ppms_temperature_command
 from transport.ppms.controllers.multivu import PPMSMultiVuReadbackController
 from transport.common.harmonics import DEFAULT_HARMONIC_CHOICES, DEFAULT_HARMONIC_LABELS, DEFAULT_HARMONIC_MODE_ORDERS, DEFAULT_HARMONIC_ORDERS, DEFAULT_SR830_HARMONIC_SETTING_KEYS, parse_harmonic_mode, schedule_harmonic_passes
 from transport.common.settling import calculate_lockin_settle_s, format_lockin_settle_text, format_settle_status_text
@@ -4560,27 +4560,6 @@ def parse_ppms_macro(text):
     if not commands:
         raise ValueError("No runnable commands")
     return commands
-def build_ppms_field_scan_sequence(start_oe: float, end_oe: float, step_oe: float, loops: int):
-    """Build PPMS start→end→start field targets for each loop."""
-    start_oe = float(start_oe)
-    end_oe = float(end_oe)
-    step_oe = abs(float(step_oe))
-    loops = int(loops)
-    if not all(math.isfinite(value) for value in (start_oe, end_oe, step_oe)):
-        raise ValueError("PPMS start field, end field and step must be finite values")
-    if step_oe <= 0:
-        raise ValueError("PPMS field step must be greater than 0 Oe")
-    if not 1 <= loops <= 1000:
-        raise ValueError("PPMS scan loop count must be between 1 and 1000")
-    if abs(start_oe) > PPMS_FIELD_LIMIT_OE or abs(end_oe) > PPMS_FIELD_LIMIT_OE:
-        raise ValueError(f"PPMS start/end field must be within ±{PPMS_FIELD_LIMIT_OE:g} Oe")
-    cycle = build_round_trip_values(
-        start_oe, end_oe, step_oe, decimals=9, max_total_points=max(1, 100_000 // loops),
-        too_many_message="PPMS total scan points exceed 100000; please increase the step or reduce the loop count")
-    if len(cycle) * loops > 100000:
-        raise ValueError("PPMS total scan points exceed 100000; please increase the step or reduce the loop count")
-    return [(loop_index, point_index, len(cycle), float(target))
-            for loop_index in range(1, loops + 1) for point_index, target in enumerate(cycle, start=1)]
 def ppms_lockin_settle_s(settle_s, time_constants_s) -> float:
     """The wait before a scan point is read: Settle s, or LOCKIN_SETTLE_TAUS
     time constants of the slowest lock-in measured if that is longer."""

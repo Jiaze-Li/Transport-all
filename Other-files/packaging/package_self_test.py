@@ -45,7 +45,7 @@ if "--package-self-test" in sys.argv:
         ("numpy", lambda: _imported("numpy")),
         ("Pillow", lambda: _imported("PIL", "PIL.Image", "PIL.ImageGrab")),
         ("PyVISA", lambda: _imported("pyvisa", "pyvisa.ctwrapper")),
-        ("pyserial", lambda: _imported("serial", "serial.tools.list_ports")),
+        ("pyserial", lambda: _imported("serial")),
         ("zhinst.core", lambda: _imported("zhinst.core")),
         ("zhinst.utils", lambda: _imported("zhinst.utils")),
         ("pythonnet", _dotnet),

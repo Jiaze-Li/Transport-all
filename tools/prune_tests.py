@@ -19,12 +19,17 @@ import sys
 from pathlib import Path
 
 # Modules other test modules import their stand-ins from: kept with no test left.
-KEEP_AS_HELPERS = ("test_nonlocal_keithley", "test_rte_panel", "test_rte_angle_scan")
+KEEP_AS_HELPERS = ("test_nonlocal_keithley", "test_rte_panel", "test_rte_angle_scan", "test_ppms_motor_debug",
+                   "test_ppms_two_panels", "test_ppms_frequency_scan", "test_ppms_sr830_tc", "test_ppms_run_save_zero",
+                   "test_moke_cidwm_runs", "test_nonlocal_scan_runs", "test_rte_angle_end_to_end", "test_fmr_scan_run",
+                   "test_stfmr_scan_convention", "test_fmr_stfmr_review")
 HEADER = re.compile(r"^(ERROR|FAIL): (\w+) \(([\w.]+)\)", re.M)
 
 
 def run(module: str) -> str:
-    done = subprocess.run([sys.executable, "ci/run_suite.py", "--module", module], capture_output=True, text=True)
+    # In Other-files the suite's own runner; elsewhere (Other-files/test) plain unittest.
+    command = ["ci/run_suite.py", "--module", module] if Path("ci/run_suite.py").exists() else ["-m", "unittest", "-v", module]
+    done = subprocess.run([sys.executable, *command], capture_output=True, text=True)
     return done.stdout + done.stderr
 
 
