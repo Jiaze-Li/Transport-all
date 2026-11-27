@@ -1,5 +1,27 @@
 # Transport-all
 
+## Download the Windows programs
+
+No Python needed (Windows 10/11, 64-bit). Each link is the newest build of its branch.
+
+| | Program | One file | One folder (starts faster) | Source |
+|---|---|---|---|---|
+| <img src="Other-files/assets/Magneto_Electro_Optical_Microwave_Transport_NH_icon_64.png" width="32" alt=""> | **Transport_all**: the whole program, every page | [Transport_all.exe](https://github.com/nbb2026/Transport-all/releases/download/windows-exe/Transport_all.exe) | [Transport_all-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/windows-exe/Transport_all-folder.zip) | [`main`](https://github.com/nbb2026/Transport-all/tree/main) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-PPMS/Other-files/assets/Transport_PPMS_icon_64.png" width="32" alt=""> | **Transport_PPMS**: the PPMS page | [Transport_PPMS.exe](https://github.com/nbb2026/Transport-all/releases/download/ppms-windows-exe/Transport_PPMS.exe) | [Transport_PPMS-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/ppms-windows-exe/Transport_PPMS-folder.zip) | [`Transport-PPMS`](https://github.com/nbb2026/Transport-all/tree/Transport-PPMS) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-RT/Other-files/assets/Transport_RT_icon_64.png" width="32" alt=""> | **Transport_RT**: the SHHV & Switch page | [Transport_RT.exe](https://github.com/nbb2026/Transport-all/releases/download/rt-windows-exe/Transport_RT.exe) | [Transport_RT-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/rt-windows-exe/Transport_RT-folder.zip) | [`Transport-RT`](https://github.com/nbb2026/Transport-all/tree/Transport-RT) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-MOKE/Other-files/assets/Transport_MOKE_icon_64.png" width="32" alt=""> | **Transport_MOKE**: MOKE light, MOKE motor, MOKE magnet, CIDWM, MOKE-24 | [Transport_MOKE.exe](https://github.com/nbb2026/Transport-all/releases/download/moke-windows-exe/Transport_MOKE.exe) | [Transport_MOKE-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/moke-windows-exe/Transport_MOKE-folder.zip) | [`Transport-MOKE`](https://github.com/nbb2026/Transport-all/tree/Transport-MOKE) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-FMR/Other-files/assets/Transport_FMR_icon_64.png" width="32" alt=""> | **Transport_FMR**: the FMR and STFMR pages | [Transport_FMR.exe](https://github.com/nbb2026/Transport-all/releases/download/fmr-windows-exe/Transport_FMR.exe) | [Transport_FMR-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/fmr-windows-exe/Transport_FMR-folder.zip) | [`Transport-FMR`](https://github.com/nbb2026/Transport-all/tree/Transport-FMR) |
+
+The four smaller programs are single pages of Transport_all as programs of their own; they do not need
+Transport_all. Each release page gives the commit and the SHA-256 of its files:
+[all](https://github.com/nbb2026/Transport-all/releases/tag/windows-exe), [PPMS](https://github.com/nbb2026/Transport-all/releases/tag/ppms-windows-exe), [RT](https://github.com/nbb2026/Transport-all/releases/tag/rt-windows-exe),
+[MOKE](https://github.com/nbb2026/Transport-all/releases/tag/moke-windows-exe), [FMR](https://github.com/nbb2026/Transport-all/releases/tag/fmr-windows-exe).
+
+Do not run two of these programs on the same instruments at once: only pages inside one program know
+which of them holds an instrument.
+
+## What it is
+
 Instrument control and acquisition for magneto-electro-optical transport
 experiments: magneto-optic Kerr imaging, harmonic Hall transport in a PPMS,
 room-temperature electrical measurement, and ferromagnetic and spin-torque
