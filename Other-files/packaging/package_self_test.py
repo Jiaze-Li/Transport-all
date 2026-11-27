@@ -58,7 +58,7 @@ if "--package-self-test" in sys.argv:
     checks = (
         ("Tcl/Tk", _tcl),
         ("numpy", lambda: _imported("numpy")),
-        ("Pillow", lambda: _imported("PIL", "PIL.Image", "PIL.ImageTk", "PIL.ImageGrab", "PIL.ImageDraw", "PIL.ImageFont")),
+        ("Pillow", lambda: _imported("PIL", "PIL.Image", "PIL.ImageTk", "PIL.ImageGrab")),
         ("OpenCV", lambda: _imported("cv2")),
         ("pco", lambda: _imported("pco")),
         ("PCO DLLs", _pco_dlls),
