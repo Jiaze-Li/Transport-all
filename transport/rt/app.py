@@ -1900,6 +1900,16 @@ SWITCH_LIST_MODES = (SWITCH_SCAN_MODE, SWITCH2_SCAN_MODE)
 SWITCH_6221_MODES = (SWITCH_SCAN_MODE, SWITCH_LOOP_SCAN_MODE)
 SWITCH_LOOP_DEFAULT_RANGE = ('14', '-14', '2')
 RTE_TAB_TITLE = 'SHHV & Switch'
+RTE_MEASUREMENTS = {
+    "PHE": ("Angle+Field", "Angle+Current"),
+    "AHE": ("Field", "Field+Angle", "Field+Current"),
+    "NLH": ("Current",),
+    "SHHV": ("Angle+Field", "Angle+Current"),
+    "Switch": ("Switch", "Switch-loop", "Switch2"),
+}
+RTE_DEFAULT_MEASUREMENT = "SHHV"
+RTE_SCAN_BOX_FIRST = True
+RTE_PLOT_TITLE_TAIL = 'X, Y, phase vs measured field / excitation current / sample angle / pulse current'
 RTE_LIVE_BESIDE_PAD_PX = 10
 RTE_FIELD_OUTER_MODES = ('Angle+Field', *SWITCH_MODES)
 RTE_FIELD_LIST_MODES = ('Angle+Field', *SWITCH_MODES)
@@ -7660,13 +7670,23 @@ class CombinedControlApp:
         notebook_pad = self._ui_px(3, 2)
         self.notebook = ttk.Notebook(self.root, padding=(notebook_pad, notebook_pad, notebook_pad, 0))
         self.notebook.grid(row=0, column=0, sticky="nsew")
+        # One page for every measurement: its tab is the chosen measurement's, the other measurements' tabs are
+        # empty frames, and choosing one of them moves the page there (_rte_measurement_tab_changed).
         self.rte_panel_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)
+        self.rte_measurement_spare_tabs = []
+        for name in RTE_MEASUREMENTS:
+            if name == RTE_DEFAULT_MEASUREMENT:
+                self.notebook.add(self.rte_panel_tab, text=name)
+            else:
+                self.rte_measurement_spare_tabs.append(ttk.Frame(self.notebook))
+                self.notebook.add(self.rte_measurement_spare_tabs[-1], text=name)
         self.log_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.log_tab, text="Log")
         self.log_tab.rowconfigure(0, weight=1)
         self.log_tab.columnconfigure(0, weight=1)
         self.rte_panel = RTEPanel(self, self.rte_panel_tab)
+        self.notebook.select(self.rte_panel_tab)
+        self.notebook.bind("<<NotebookTabChanged>>", self._rte_measurement_tab_changed, add="+")
         self.led_log_frame = ttk.LabelFrame(self.log_tab, text="Program communication log", padding=5)
         self.led_log_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         self.led_log_frame.rowconfigure(0, weight=1)
@@ -12147,6 +12167,30 @@ class CombinedControlApp:
                 self.executor.shutdown(wait=False, cancel_futures=True)
                 self.post_ui(finish_window_close)
         threading.Thread(target=close_everything, name="rt-safe-shutdown", daemon=True).start()
+    def _rte_measurement_tab_changed(self, _event=None) -> None:
+        try:
+            shown = self.notebook.nametowidget(self.notebook.select())
+        except (tk.TclError, KeyError):
+            return
+        if shown not in self.rte_measurement_spare_tabs:
+            return
+        names = tuple(RTE_MEASUREMENTS)
+        wanted = self.notebook.index(shown)
+        held = self.notebook.index(self.rte_panel_tab)
+        if wanted >= len(names):
+            return
+        if self.rte_panel.rte_set_measurement(names[wanted]):
+            # The page takes the chosen tab's place and the empty frame the page's old place.
+            self.notebook.insert(wanted, self.rte_panel_tab)
+            self.notebook.insert(held, shown)
+            for index, name in enumerate(names):
+                self.notebook.tab(index, text=name)
+            self.append_log(f"Measurement: {names[wanted]} (scans: {', '.join(RTE_MEASUREMENTS[names[wanted]])})")
+        else:
+            self.rte_panel._rte_dialog(
+                "Measurement", f"The measurement stays {names[held]} while a scan runs or the page is busy. "
+                f"Stop the scan, or wait, then choose {names[wanted]}.", show=messagebox.showinfo)
+        self.notebook.select(self.rte_panel_tab)
 class PPMSPanel(CombinedControlApp):
     ppms_page_name = "PPMS"
     def __init__(self, parent, tab):
@@ -13720,7 +13764,7 @@ class RTEPanel(PPMSPanel):
         self.rte_controllers['newmark'].owner_scope = self.ppms_page_name
         self.rte_controllers['avtech'].owner_scope = self.ppms_page_name
         self.rte_controllers['newmark'].share_stop_record(self._newmark_stage_ownership())
-        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: X, Y, phase vs measured field / excitation current / sample angle / pulse current')
+        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: {RTE_PLOT_TITLE_TAIL}')
         self.ppms_transport_current_var.set(f'{RTE_TRANSPORT_CURRENT_RMS_MA:g}')
         self.ppms_transport_frequency_var.set(f'{RTE_TRANSPORT_FREQUENCY_HZ:g}')
         self.ppms_transport_compliance_var.set(f'{RTE_TRANSPORT_COMPLIANCE_V:g}')
@@ -13737,6 +13781,8 @@ class RTEPanel(PPMSPanel):
         self.rte_settle_default_shown = f'{RTE_SETTLE_S:g}'
         self.ppms_simple_mode.set(self.rte_default_scan_mode)
         self._rte_mode_changed()
+        if RTE_MEASUREMENTS:
+            self.rte_set_measurement(RTE_DEFAULT_MEASUREMENT if RTE_DEFAULT_MEASUREMENT in RTE_MEASUREMENTS else next(iter(RTE_MEASUREMENTS)))
         self.rte_magnet_choice_var.set(RTE_MAGNET_CHOICES[1])
         self._rte_magnet_choice_changed()
         frame = ttk.LabelFrame(self.ppms_plot_frame, text=SWITCH_TIME_ROW_TITLE, padding=2)
@@ -13981,9 +14027,9 @@ class RTEPanel(PPMSPanel):
             self._rte_arrange_connection_columns(measurement, rack, instruments, [live_lines[0], live_lines[1], field_set])
         controls = ttk.Frame(outer)
         controls.grid(row=2, column=0, sticky='ew')
-        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(0 if RTE_SCAN_BOX_FIRST else 1, weight=1)
         settings = ttk.LabelFrame(controls, text='Settings', padding=4)
-        settings.grid(row=0, column=0, sticky='nsew')
+        settings.grid(row=0, column=1 if RTE_SCAN_BOX_FIRST else 0, sticky='nsew')
         body = ttk.Frame(settings)
         body.grid(row=0, column=0, sticky='new')
         settings.columnconfigure(0, weight=1)
@@ -14100,7 +14146,7 @@ class RTEPanel(PPMSPanel):
         if laid_out:
             live.configure(wraplength=32 * tkfont.nametofont('TkDefaultFont', root=live).measure('0'))
         scan = ttk.LabelFrame(controls, text='Scan', padding=4)
-        scan.grid(row=0, column=1, sticky='nsew', padx=(6, 0))
+        scan.grid(row=0, column=0 if RTE_SCAN_BOX_FIRST else 1, sticky='nsew', padx=(0, 6) if RTE_SCAN_BOX_FIRST else (6, 0))
         scan.columnconfigure(0, weight=1)
         scan_rows = ttk.Frame(scan)
         scan_rows.grid(row=0, column=0, sticky='new')
@@ -14112,6 +14158,7 @@ class RTEPanel(PPMSPanel):
         combo = ttk.Combobox(scan_rows, textvariable=self.ppms_simple_mode, values=self.rte_scan_modes, state='readonly', width=13)
         combo.grid(row=0, column=0)
         combo.bind('<<ComboboxSelected>>', self._rte_mode_changed)
+        self.rte_scan_mode_combo = combo
         self.rte_edit_widgets.append((combo, 'readonly'))
         variables = [*self.ppms_simple_range, self.ppms_field_scan_loop_var, self.ppms_field_scan_stable_var, self.ppms_acquisition_time_var]
         self.rte_range_widgets = []
@@ -14253,7 +14300,10 @@ class RTEPanel(PPMSPanel):
                 return self._pair_inset(scan) + max(scan_rows_width(), scan_status.winfo_reqwidth(), scan_notes.winfo_reqwidth(), note_label.winfo_reqwidth())
             def settings_without_block():
                 return self._pair_inset(settings) + params.winfo_reqwidth() + lockins.winfo_reqwidth()
-            self._arrange_pair_by_width(controls, settings, scan, gap=controls_gap, stack_gap=4, right_width=scan_stacked_width, left_width=settings_without_block)
+            if RTE_SCAN_BOX_FIRST:
+                self._arrange_pair_by_width(controls, scan, settings, gap=controls_gap, stack_gap=4, left_width=scan_stacked_width, right_width=settings_without_block)
+            else:
+                self._arrange_pair_by_width(controls, settings, scan, gap=controls_gap, stack_gap=4, right_width=scan_stacked_width, left_width=settings_without_block)
             def arrange_stage_block(_event=None):
                 try:
                     side = getattr(body, '_pair_side_by_side', None)
@@ -14286,9 +14336,9 @@ class RTEPanel(PPMSPanel):
             def keep_settings_room(_event=None):
                 room = 0
                 if getattr(controls, '_pair_side_by_side', False) is True:
-                    room = self._pair_natural_width(settings) + controls_gap
-                    room = max(room, min(room + 4, controls.winfo_width() - scan_stacked_width()))
-                controls.columnconfigure(0, minsize=room)
+                    room = self._pair_natural_width(settings) + (0 if RTE_SCAN_BOX_FIRST else controls_gap)
+                    room = max(room, min(room + 4, controls.winfo_width() - scan_stacked_width() - (controls_gap if RTE_SCAN_BOX_FIRST else 0)))
+                controls.columnconfigure(1 if RTE_SCAN_BOX_FIRST else 0, minsize=room)
             def arrange_pulse_row(_event=None):
                 side = getattr(body, '_pair_side_by_side', None)
                 stage_place = getattr(stage_box, '_rte_stage_place', None)
@@ -14455,6 +14505,34 @@ class RTEPanel(PPMSPanel):
                 pass
         measurement.bind('<Configure>', place, add='+')
         place()
+    def rte_measurement_busy(self) -> bool:
+        state = self.__dict__
+        return bool(state.get('ppms_environment_busy') or state.get('ppms_field_scan_running') or state.get('rte_closed') or state.get('rte_stage_prompt_open'))
+    def rte_set_measurement(self, name) -> bool:
+        scans = RTE_MEASUREMENTS.get(name)
+        if not scans:
+            return False
+        state = self.__dict__
+        was = state.get('rte_measurement')
+        if was == name:
+            return True
+        if was is not None and self.rte_measurement_busy():
+            return False
+        kept = state.setdefault('rte_measurement_scans', {})
+        if was is not None:
+            kept[was] = self.ppms_simple_mode.get()
+        self.rte_measurement = name
+        combo = state.get('rte_scan_mode_combo')
+        if combo is not None:
+            combo.configure(values=scans)
+        scan = kept.get(name) if kept.get(name) in scans else scans[0]
+        if scan != self.ppms_simple_mode.get():
+            self.ppms_simple_mode.set(scan)
+            self._rte_mode_changed()
+        frame = state.get('ppms_plot_frame')
+        if frame is not None:
+            frame.configure(text=f'{name}: {RTE_PLOT_TITLE_TAIL}')
+        return True
     def _rte_mode_changed(self, _event=None):
         mode = self.ppms_simple_mode.get()
         current = mode == 'Current'
@@ -16126,7 +16204,7 @@ class RTEPanel(PPMSPanel):
         round_trip = state.get('rte_round_trip')
         return dict(
             program=Path(_PROGRAM_FILE).name, app_version=APP_VERSION, python_version=sys.version,
-            file_name=typed_name, mode=mode,
+            file_name=typed_name, **({'measurement': state['rte_measurement']} if state.get('rte_measurement') else {}), mode=mode,
             plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var' if mode == SWITCH2_SCAN_MODE else 'rte_switch_pulses_var'))) if mode in SWITCH_LIST_MODES else dict(start=values[0] if values else None, end=values[1] if len(values) > 1 else None, step=values[2] if len(values) > 2 else None)),
                       unit='A (KEPCO)' if mode in RTE_FIELD_SWEEP_MODES else 'deg (stage)' if mode in RTE_ANGLE_MODES
                       else 'mA (6221 pulse)' if mode in SWITCH_6221_MODES else 'V (Avtech pulse)' if mode == SWITCH2_SCAN_MODE else 'mA RMS (6221)',
@@ -16491,7 +16569,7 @@ class RTEPanel(PPMSPanel):
                     stage_target_deg=step_value if field_angle else target, stage_angle_deg=stage_state['angle_deg'],
                     stage_position_steps=stage_state['px'],
                     stage_steps_per_degree=stage_state['steps_per_degree'])
-                row = dict(module=self.ppms_page_name, scan_mode=mode, loop=loop, point=point,
+                row = dict(module=self.ppms_page_name, **({'measurement': self.rte_measurement} if self.__dict__.get('rte_measurement') else {}), scan_mode=mode, loop=loop, point=point,
                     harmonic_pass=settings.get('harmonic_pass', 1),
                     elapsed_s=time.monotonic() - self.ppms_field_scan_started_at,
                     kepco_programmed_current_a=supply.programmed_current_a(),

@@ -48,10 +48,31 @@ beside this one.
 
 ## What is in the window
 
-- **SHHV & Switch**: the page as in Transport-all, with the same scans (Field,
-  Current, Angle+Field, Angle+Current, Field+Angle, Field+Current, Switch,
-  Switch-loop, Switch2), Set field, the stage controls and the pulse row. Files,
-  columns, run logs and start questions are the main program's.
+The first five tabs are the measurements; each offers its own scans in the
+Scan box (user, 2026-11-27):
+
+| Tab | Scans |
+|---|---|
+| **PHE** | Angle+Field, Angle+Current |
+| **AHE** | Field, Field+Angle, Field+Current |
+| **NLH** | Current |
+| **SHHV** | Angle+Field, Angle+Current |
+| **Switch** | Switch, Switch-loop, Switch2 |
+
+- They are one page: the instruments stay connected, and the settings stay as
+  they are, when another measurement's tab is chosen. Only the list of scans
+  and the plots' title follow the measurement. The program starts on SHHV.
+- A measurement comes back on the scan it was left on. A scan that is also in
+  the new measurement (Angle+Field in PHE and SHHV) keeps what was typed.
+- While a scan runs, or the page is busy, the measurement cannot be changed:
+  the page stays where it is and says so. The Log tab can always be opened.
+- The Scan box is on the left and the Settings box on the right (stacked, Scan
+  first, in a narrow window).
+- Everything else is the SHHV & Switch page of Transport-all: Set field, the
+  stage controls, the pulse row, the files, run logs and start questions. The
+  saved rows and the run's settings have one more entry, `measurement` (PHE,
+  AHE, NLH, SHHV or Switch); the `module` column and the results folder still
+  say SHHV.
 - **Log**: the communication log, with pause, copy and save.
 
 Closing the window stops a running scan and the stage, switches the 6221 (and
@@ -90,7 +111,8 @@ method they reach, and nothing of the other pages: about 16,700 of the
 main program's 40,500 lines. Two small files steer it:
 
 - [`tools/rt_host.py`](tools/rt_host.py): the window of this program
-  and its close, and the list of parts left out.
+  with its measurement tabs (`RTE_MEASUREMENTS`: which scans each offers) and
+  its close, and the list of parts left out.
 - [`tools/ppms_package_glue.py`](tools/ppms_package_glue.py): which names come
   from the `transport` package, and the thin wrappers that keep the main
   program's names and signatures.

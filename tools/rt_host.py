@@ -65,6 +65,20 @@ REPLACE = {
 MAIN_WINDOW_TITLE = "Transport_RT_NH"
 # Its own icon (Other-files/assets): the main program's picture in another colour, with the name on it.
 APPLICATION_ICON_BASENAME = "Transport_RT"
+# The measurements of this program, in tab order, each with the scans it offers (user, 2026-11-27: "split SHHV
+# and Switch to two modes. also add modes named NLH, AHE, PHE. In the order: PHE, AHE, NLH, SHHV, Switch").
+# They are tabs of one page: the instruments stay connected when the measurement changes.
+RTE_MEASUREMENTS = {
+    "PHE": ("Angle+Field", "Angle+Current"),
+    "AHE": ("Field", "Field+Angle", "Field+Current"),
+    "NLH": ("Current",),
+    "SHHV": ("Angle+Field", "Angle+Current"),
+    "Switch": ("Switch", "Switch-loop", "Switch2"),
+}
+# The program starts on SHHV: the page's start-up settings (2nd harmonic, Angle+Field) are that measurement's.
+RTE_DEFAULT_MEASUREMENT = "SHHV"
+# The Scan box on the left and the Settings box on the right (user, same request).
+RTE_SCAN_BOX_FIRST = True
 
 
 class CombinedControlApp:
@@ -75,13 +89,23 @@ class CombinedControlApp:
         notebook_pad = self._ui_px(3, 2)
         self.notebook = ttk.Notebook(self.root, padding=(notebook_pad, notebook_pad, notebook_pad, 0))
         self.notebook.grid(row=0, column=0, sticky="nsew")
+        # One page for every measurement: its tab is the chosen measurement's, the other measurements' tabs are
+        # empty frames, and choosing one of them moves the page there (_rte_measurement_tab_changed).
         self.rte_panel_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)
+        self.rte_measurement_spare_tabs = []
+        for name in RTE_MEASUREMENTS:
+            if name == RTE_DEFAULT_MEASUREMENT:
+                self.notebook.add(self.rte_panel_tab, text=name)
+            else:
+                self.rte_measurement_spare_tabs.append(ttk.Frame(self.notebook))
+                self.notebook.add(self.rte_measurement_spare_tabs[-1], text=name)
         self.log_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.log_tab, text="Log")
         self.log_tab.rowconfigure(0, weight=1)
         self.log_tab.columnconfigure(0, weight=1)
         self.rte_panel = RTEPanel(self, self.rte_panel_tab)
+        self.notebook.select(self.rte_panel_tab)
+        self.notebook.bind("<<NotebookTabChanged>>", self._rte_measurement_tab_changed, add="+")
         self.led_log_frame = ttk.LabelFrame(self.log_tab, text="Program communication log", padding=5)
         self.led_log_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         self.led_log_frame.rowconfigure(0, weight=1)
@@ -102,6 +126,31 @@ class CombinedControlApp:
         ttk.Button(log_tools, text="Copy shown log", command=self.copy_displayed_log).pack(side="left", padx=5)
         ttk.Button(log_tools, text="Save full log", command=self.save_communication_log).pack(side="left")
         ttk.Label(log_tools, text="Pausing only freezes the display; logging continues and catches up on resume.").pack(side="left", padx=8)
+
+    def _rte_measurement_tab_changed(self, _event=None) -> None:
+        try:
+            shown = self.notebook.nametowidget(self.notebook.select())
+        except (tk.TclError, KeyError):
+            return
+        if shown not in self.rte_measurement_spare_tabs:
+            return
+        names = tuple(RTE_MEASUREMENTS)
+        wanted = self.notebook.index(shown)
+        held = self.notebook.index(self.rte_panel_tab)
+        if wanted >= len(names):
+            return
+        if self.rte_panel.rte_set_measurement(names[wanted]):
+            # The page takes the chosen tab's place and the empty frame the page's old place.
+            self.notebook.insert(wanted, self.rte_panel_tab)
+            self.notebook.insert(held, shown)
+            for index, name in enumerate(names):
+                self.notebook.tab(index, text=name)
+            self.append_log(f"Measurement: {names[wanted]} (scans: {', '.join(RTE_MEASUREMENTS[names[wanted]])})")
+        else:
+            self.rte_panel._rte_dialog(
+                "Measurement", f"The measurement stays {names[held]} while a scan runs or the page is busy. "
+                f"Stop the scan, or wait, then choose {names[wanted]}.", show=messagebox.showinfo)
+        self.notebook.select(self.rte_panel_tab)
 
     def _redraw_active_tab(self) -> None:
         # The main program redraws other pages' plots here, never this page's.

@@ -1938,8 +1938,11 @@ class AnglePageTests(unittest.TestCase):
         combo = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_simple_mode)
         # Angle+Field after Angle+Field (user, 2026-11-17); Switch (user,
         # 2026-11-22) and Switch2, the Avtech's (user, 2026-11-23), last.
-        self.assertEqual(combo.options["values"],
+        self.assertEqual(app.RTE_SCAN_MODES,
                          ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch-loop", "Switch2"))
+        # In this program the list holds the chosen measurement's scans; it starts on SHHV (user, 2026-11-27;
+        # test_rt_measurements.py).
+        self.assertEqual(combo.options["values"], ("Angle+Field", "Angle+Current"))
         # The button states are as they were in the rack and settings rows.
         states = lambda: tuple(w.options["state"] for w in (entry, connect, disconnect, target, move, stop, zero, go))
         self.assertEqual(states(), ("normal", "normal", "disabled", "normal", "normal", "disabled", "normal", "normal"),

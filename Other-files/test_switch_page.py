@@ -184,7 +184,8 @@ class SwitchPageTests(unittest.TestCase):
         self.assertEqual(app.RTEPanel.ppms_page_name, "SHHV")
         with open(app.__file__, encoding="utf-8") as source:
             text = source.read()
-        self.assertIn("self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)", text)
+        # In this program the page's tab is the chosen measurement's (user, 2026-11-27; test_rt_measurements.py).
+        self.assertIn("self.notebook.add(self.rte_panel_tab, text=name)", text)
         self.assertNotIn("switch_panel", text)
         panel = self.switch_page()
         self.assertEqual({c.owner_scope for c in panel.rte_controllers.values()}, {"SHHV"})

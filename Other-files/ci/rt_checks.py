@@ -8,9 +8,12 @@ never talks to instruments.
     python Other-files/ci/rt_checks.py --shots DIR
 
 For each emulated lab screen it builds the whole application at 96 DPI,
-checks that the window is this program (its title and its pages), and reports any widget that sticks out past
-the page and any label, button or Zurich list entry whose text does not fit.
-It saves a screenshot of each page at the lab PC's windows.
+checks that the window is this program (its title and its tabs: the five
+measurements, then Log), that choosing a measurement's tab brings the page
+there with that measurement's scans, and reports any widget that sticks out
+past the page and any label, button or Zurich list entry whose text does not
+fit.  It saves a screenshot of the window's tabs and page for every
+measurement and scan at the lab PC's windows.
 
 Exit status is 1 if the application does not build, a page is missing, or the
 log shows an error from building the page.  Clipped widgets and cut text are
@@ -32,7 +35,14 @@ SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (1920, 1080, 0),
     (1600, 1586, 0),
 )
-PAGES = ('SHHV & Switch', 'Log')
+MEASUREMENTS = {  # user, 2026-11-27: the tabs in this order, each with these scans
+    'PHE': ('Angle+Field', 'Angle+Current'),
+    'AHE': ('Field', 'Field+Angle', 'Field+Current'),
+    'NLH': ('Current',),
+    'SHHV': ('Angle+Field', 'Angle+Current'),
+    'Switch': ('Switch', 'Switch-loop', 'Switch2'),
+}
+PAGES = (*MEASUREMENTS, 'Log')
 
 
 def build(module, screen_w, screen_h, window_w):
@@ -193,26 +203,43 @@ def main():
                 failed.append(f"window {root.title()!r} with pages {titles}")
             if type(app.rte_panel) is not module.RTEPanel or not app.rte_panel.rte_controllers:
                 failed.append("no SHHV & Switch panel with its instrument controllers")
+            if dict(module.RTE_MEASUREMENTS) != MEASUREMENTS or tuple(module.RTE_MEASUREMENTS) != tuple(MEASUREMENTS):
+                failed.append(f"measurements {module.RTE_MEASUREMENTS}")
             app.append_log("SHHV & Switch checks: the log page shows this line")
-            for name in PAGES:
+            panel = app.rte_panel
+            if titles[notebook.index("current")] != module.RTE_DEFAULT_MEASUREMENT or panel.rte_measurement != module.RTE_DEFAULT_MEASUREMENT:
+                failed.append(f"starts on {titles[notebook.index('current')]} / {panel.rte_measurement}")
+            # The default measurement last, so the window is left as it starts.
+            order = [name for name in PAGES if name != module.RTE_DEFAULT_MEASUREMENT] + [module.RTE_DEFAULT_MEASUREMENT]
+            for name in order:
                 tab = show(root, notebook, name)
+                if name in MEASUREMENTS:
+                    offered = tuple(panel.rte_scan_mode_combo.cget("values"))
+                    now = tuple(notebook.tab(index, "text") for index in range(notebook.index("end")))
+                    if (tab is not app.rte_panel_tab or panel.rte_measurement != name or offered != MEASUREMENTS[name]
+                            or now != PAGES or notebook.tab("current", "text") != name
+                            or panel.ppms_simple_mode.get() not in offered):
+                        failed.append(f"{name}: page {tab is app.rte_panel_tab}, measurement {panel.rte_measurement}, scans {offered}, "
+                                      f"scan {panel.ppms_simple_mode.get()}, tabs {now}")
                 clipped, cut, pairs = inspect(tab)
                 marker = "note" if clipped or cut else "ok  "
-                print(f"  {marker} {name:5s} layouts {pairs} | clipped {clipped or 'none'} | text cut {cut or 'none'}")
+                print(f"  {marker} {name:6s} layouts {pairs} | clipped {clipped or 'none'} | text cut {cut or 'none'}")
                 if args.shots and screen_w == 2560:
                     args.shots.mkdir(parents=True, exist_ok=True)
-                    shot = args.shots / f"{name.replace(' & ', '-').replace(' ', '_')}_{root.winfo_width()}px.png"
-                    print(f"       screenshot: {screenshot(root, tab, shot)}")
-                    if name == "SHHV & Switch":
-                        # Every scan mode builds its rows; each is shot.
-                        panel, was = app.rte_panel, app.rte_panel.ppms_simple_mode.get()
-                        for mode in (*module.RTE_SCAN_MODES, was):
-                            panel.ppms_simple_mode.set(mode)
+                    if name not in MEASUREMENTS:
+                        shot = args.shots / f"{name}_{root.winfo_width()}px.png"
+                        print(f"       screenshot: {screenshot(root, notebook, shot)}")
+                        continue
+                    # Every scan of the measurement builds its rows; each is shot, with the tabs above the page.
+                    was = panel.ppms_simple_mode.get()
+                    for scan in (*MEASUREMENTS[name], was):
+                        if scan != panel.ppms_simple_mode.get():
+                            panel.ppms_simple_mode.set(scan)
                             panel._rte_mode_changed()
                             root.update()
-                            if mode != was:
-                                shot = args.shots / f"SHHV-Switch_{mode.replace('+', '-')}-mode_{root.winfo_width()}px.png"
-                                print(f"       screenshot: {screenshot(root, tab, shot)}")
+                        shot = args.shots / f"{name}_{scan.replace('+', '-')}_{root.winfo_width()}px.png"
+                        if not shot.exists():
+                            print(f"       screenshot: {screenshot(root, notebook, shot)}")
             shown = app.log_text.get("1.0", "end")
             if "SHHV & Switch checks: the log page shows this line" not in shown:
                 failed.append("the log page did not take a line")
