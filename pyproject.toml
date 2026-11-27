@@ -1,5 +1,5 @@
 # The standalone FMR application as an installable package: Transport_FMR.py
-# plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
+# plus the transport package beside it.  `pip install transport_fmr-<version>-py3-none-any.whl`
 # adds the `transport-fmr` command; `python Transport_FMR.py` in a copied
 # folder works too.  The version follows APP_VERSION in transport/fmr/app.py.
 [build-system]

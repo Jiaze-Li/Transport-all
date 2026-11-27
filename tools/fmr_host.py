@@ -156,7 +156,7 @@ class CombinedControlApp:
 
 
 def run() -> None:
-    """The installed command (pyproject.toml: transport-ppms)."""
+    """The installed command (pyproject.toml: transport-fmr)."""
     main()
 
 
