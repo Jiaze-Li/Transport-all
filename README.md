@@ -54,12 +54,10 @@ beside this one.
 Closing the window stops a running scan and the stage, switches the 6221 (and
 the Avtech) off and zeroes the magnet supply. The stage stays where it is.
 
-**Do not run it beside Transport_all (or another Transport program) on the
-same instruments.** Inside one program, a page cannot take an instrument
-another page is driving. Two programs do not know of each other: both could
-connect to the same 6221, SR830, KEPCO or stage, and closing one would switch outputs off
-under the other's scan. Close the other program, or at least disconnect the
-shared instruments there, first.
+**Beside Transport_all or another Transport program:** both can be open at
+once. An instrument one program has connected is refused to the others, with
+the holder's name, until it is disconnected there (a named object of Windows
+per instrument address; it goes when the holder disconnects, closes or dies).
 
 ## How it is put together
 
