@@ -61,7 +61,10 @@ Base: `Transport-PPMS@c0c26345c9a55fa8ef576f1a3952b8190d3c3c8f`; original full-a
   1. When closing during an active Zurich scan, `zurich_executor` runs `disconnect_mfli()` **before** the scan worker reaches `ScanCloseHandoff.end()`, clearing `mfli_daq` / `mfli_bridge` / `mfli_device` and releasing `LABONE::<device>` while the scan worker is still active.
   2. Any subsequent in-flight worker Zurich read fails with not-connected state instead of completing/exiting cleanly via `ppms_field_scan_stop_event`.
   3. Meanwhile, `ScanCloseHandoff` still properly defers `ppms_instrument_controllers` and `ppms_environment_controller` until `end()` (including on scan cancellation and worker exceptions).
-- **Runnable reproduction**: `Other-files/test_ppms_zurich_close_order.py` (5 deterministic `threading.Event`-synchronized tests; 4 pass + 1 `@unittest.expectedFailure` `test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3` with removal condition: *remove `@unittest.expectedFailure` once the separate A2-3 fix PR coordinates `zurich_controller.disconnect_mfli` with `ScanCloseHandoff`*).
+- **Runnable reproduction**: `Other-files/test_ppms_zurich_close_order.py` (5 deterministic `threading.Event` / `zurich_executor.shutdown(wait=True)` synchronized tests; 4 pass + 1 `@unittest.expectedFailure` `test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3` with `addCleanup` guard so unrelated exceptions are never masked).
+  - **A2-3 fix PR sync checklist**: When the separate A2-3 fix PR coordinates `zurich_controller.disconnect_mfli` with `ScanCloseHandoff`, both tests must be updated together:
+    1. Remove `@unittest.expectedFailure` from `test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3`.
+    2. Update `test_active_scan_close_defers_visa_env_but_disconnects_mfli_early` (which characterizes the pre-fix early disconnect) to assert `worker_errors == []` and `worker:finished` before `disconnect:mfli`.
 - **D1 gating**: **A separate targeted fix PR for A2-3 is a blocking prerequisite before D1 implementation** (no production fix is made in T1).
 
 ---
