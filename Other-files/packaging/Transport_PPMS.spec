@@ -35,7 +35,7 @@ from PyInstaller.utils.win32.versioninfo import (
 
 PACKAGING = Path(SPECPATH).resolve()
 ROOT = PACKAGING.parents[1]
-ICON = "Magneto_Electro_Optical_Microwave_Transport_NH"
+ICON = "Transport_PPMS"
 ASSETS = ROOT / "Other-files" / "assets"
 # The publisher, stored as the company name in the .exe's version information
 # (user, 2026-11-12).  Windows shows it as "Company" (Explorer tooltip and
