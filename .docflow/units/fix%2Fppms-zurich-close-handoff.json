@@ -19,7 +19,14 @@
         "message": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff"
       }
     ],
-    "pr": null,
+    "pr": {
+      "number": 3,
+      "state": "open",
+      "title": "fix(ppms): defer Zurich disconnect until scan close handoff (A2-3)",
+      "url": "https://github.com/Jiaze-Li/Transport-all/pull/3",
+      "merged": false,
+      "updatedAt": "2026-11-27T16:38:22Z"
+    },
     "completed": null,
     "outcome": null
   }
