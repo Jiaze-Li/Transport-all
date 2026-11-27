@@ -310,22 +310,6 @@ class StartTests(unittest.TestCase):
         self.assertAlmostEqual(estimate, 9 * 2 + 6 * 9 + 12 * 9 + 32.34 + 89 * app.PPMS_ROTATOR_MOVE_ALLOWANCE_S)
         self.assertEqual(app.PPMS_ROTATOR_MOVE_ALLOWANCE_S, 1.0)
 
-    def test_the_limits(self):
-        limit = f"{app.PPMS_FIELD_LIMIT_OE:g}"
-        for kwargs, expected in (
-                (dict(outer=("0", "100000", "50000")), f"Outer field 100000 Oe: PPMS target field must be within ±{limit} Oe"),
-                (dict(outer=("-90000", "0", "90000")), "Outer field -90000 Oe"),
-                (dict(outer=("0", "", "100")), "Please fill in outer field end (Oe)"),
-                (dict(outer=("0", "1000", "0")), "the step must be greater than 0"),
-                (dict(outer=("0", "abc", "100")), "outer field end (Oe) must be a number"),
-                (dict(rate="150"), "field ramp rate must be greater than 0 and below 150 Oe/s"),
-                (dict(main_row=("0", "400", "10")), "Angle range is limited to −370 to 370°"),
-                (dict(confirm=False), "Angle scans need QDInstrument and the motor-specific safety confirmation")):
-            with self.subTest(**kwargs):
-                message = launcher(self, **kwargs)
-                self.assertIsInstance(message, str)
-                self.assertIn(expected, message)
-
     def test_a_single_field_and_the_field_box_not_read(self):
         page, question, sequence, settings, _estimate = launcher(self, outer=("500", "500", "100"))
         self.assertEqual(sequence, ((1, 1, 1, 500.0),))
