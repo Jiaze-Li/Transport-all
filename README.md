@@ -61,12 +61,10 @@ Closing the window switches the 6221 output off and disconnects the
 instruments. If a field scan is running, it first asks the PPMS to zero the
 field.
 
-**Do not run it beside Transport_all (or another Transport program) on the
-same instruments.** Inside one program, a page cannot take an instrument
-another page is driving. Two programs do not know of each other: both could
-connect to the same 6221 or SR830, and closing one would switch the output
-off under the other's scan. Close the other program, or at least disconnect
-the shared instruments there, first.
+**Beside Transport_all or another Transport program:** both can be open at
+once. An instrument one program has connected is refused to the others, with
+the holder's name, until it is disconnected there (a named object of Windows
+per instrument address; it goes when the holder disconnects, closes or dies).
 
 ## How it is put together
 
