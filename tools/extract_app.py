@@ -38,7 +38,9 @@ window's own, built by the host's build_ui), APP_NAME, OUTPUT, GLUE_FILES,
 KEEP_PATTERNS, DROP,
 STUBS, INIT_DROP, KEEP, PACKAGE_IMPORTS, EXTRA_IMPORTS, REPLACE (literal text of
 the generated module to replace; each must occur), APP_VERSION (the
-application's own version, in place of the main program's).  Its other top-level
+application's own version, in place of the main program's), SOURCE_REPLACE
+(pairs of old and new text of the main program, changed before the extraction
+for what only this application has; each old text must occur once).  Its other top-level
 definitions replace, or add to, the main program's; the methods of its
 ``class CombinedControlApp`` replace that class's.
 """
@@ -52,7 +54,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 APP_CLASS = "CombinedControlApp"
 SETTINGS = ("DROP", "STUBS", "INIT_DROP", "PACKAGE_IMPORTS", "KEEP", "EXTRA_IMPORTS", "PAGE_CLASS", "OUTPUT",
-            "GLUE_FILES", "KEEP_PATTERNS", "APP_NAME", "REPLACE", "APP_VERSION")
+            "GLUE_FILES", "KEEP_PATTERNS", "APP_NAME", "REPLACE", "APP_VERSION", "SOURCE_REPLACE")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -173,9 +175,13 @@ def main(argv) -> int:
         return 2
     host_path, source_path = Path(argv[1]).resolve(), Path(argv[2])
     source = source_path.read_text(encoding="utf-8")
+    host_methods, host_top, settings = load_host(host_path)
+    for old, new in tuple(settings.get("SOURCE_REPLACE", ())):
+        if source.count(old) != 1:
+            raise SystemExit(f"SOURCE_REPLACE: {source.count(old)} occurrences of {old[:80]!r} in the main program")
+        source = source.replace(old, new)
     lines = source.split("\n")
     tree = ast.parse(source)
-    host_methods, host_top, settings = load_host(host_path)
     page_class = settings.get("PAGE_CLASS", "")      # "" when the pages are the main window's own
     app_name = settings.get("APP_NAME", page_class)
     output = HERE.parent / settings["OUTPUT"]

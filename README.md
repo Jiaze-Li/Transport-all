@@ -112,7 +112,10 @@ main program's 40,500 lines. Two small files steer it:
 
 - [`tools/rt_host.py`](tools/rt_host.py): the window of this program
   with its measurement tabs (`RTE_MEASUREMENTS`: which scans each offers) and
-  its close, and the list of parts left out.
+  its close, the list of parts left out, and `SOURCE_REPLACE`: what this
+  program's page has and the main program's does not (the measurements, the
+  Scan box on the left), as changes to the main program's text made before
+  the extraction. The main program itself is not changed for them.
 - [`tools/ppms_package_glue.py`](tools/ppms_package_glue.py): which names come
   from the `transport` package, and the thin wrappers that keep the main
   program's names and signatures.

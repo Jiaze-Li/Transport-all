@@ -62,6 +62,120 @@ REPLACE = {
     "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportRT'",
 }
 
+# Changes to the main program's text made before the extraction (old text, new text; each old text occurs once).
+# The main program is not changed for this program's measurement tabs (user, 2026-11-27: "no need to main"), so
+# what its SHHV & Switch page needs for them is put in here: the three settings below it reads
+# (RTE_MEASUREMENTS, RTE_DEFAULT_MEASUREMENT, RTE_SCAN_BOX_FIRST; the values further down replace them),
+# rte_set_measurement, the Scan box before the Settings box, and the measurement in the saved rows and settings.
+SOURCE_REPLACE = (
+    ("RTE_TAB_TITLE = 'SHHV & Switch'\n",
+     (
+         "RTE_TAB_TITLE = 'SHHV & Switch'\n"
+         'RTE_MEASUREMENTS = {}\n'
+         "RTE_DEFAULT_MEASUREMENT = ''\n"
+         'RTE_SCAN_BOX_FIRST = False\n'
+         "RTE_PLOT_TITLE_TAIL = 'X, Y, phase vs measured field / excitation current / sample angle / pulse current'\n"
+     )),
+    ("        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: X, Y, phase vs measured field / excitation current / sample angle / pulse current')\n",
+     "        self.ppms_plot_frame.configure(text=f'{self.ppms_page_name}: {RTE_PLOT_TITLE_TAIL}')\n"),
+    ((
+        '        self.ppms_simple_mode.set(self.rte_default_scan_mode)\n'
+        '        self._rte_mode_changed()\n'
+    ),
+     (
+         '        self.ppms_simple_mode.set(self.rte_default_scan_mode)\n'
+         '        self._rte_mode_changed()\n'
+         '        if RTE_MEASUREMENTS:\n'
+         '            self.rte_set_measurement(RTE_DEFAULT_MEASUREMENT if RTE_DEFAULT_MEASUREMENT in RTE_MEASUREMENTS else next(iter(RTE_MEASUREMENTS)))\n'
+     )),
+    ((
+        '        controls.columnconfigure(1, weight=1)\n'
+        "        settings = ttk.LabelFrame(controls, text='Settings', padding=4)\n"
+        "        settings.grid(row=0, column=0, sticky='nsew')\n"
+    ),
+     (
+         '        controls.columnconfigure(0 if RTE_SCAN_BOX_FIRST else 1, weight=1)\n'
+         "        settings = ttk.LabelFrame(controls, text='Settings', padding=4)\n"
+         "        settings.grid(row=0, column=1 if RTE_SCAN_BOX_FIRST else 0, sticky='nsew')\n"
+     )),
+    ((
+        "        scan = ttk.LabelFrame(controls, text='Scan', padding=4)\n"
+        "        scan.grid(row=0, column=1, sticky='nsew', padx=(6, 0))\n"
+    ),
+     (
+         "        scan = ttk.LabelFrame(controls, text='Scan', padding=4)\n"
+         "        scan.grid(row=0, column=0 if RTE_SCAN_BOX_FIRST else 1, sticky='nsew', padx=(0, 6) if RTE_SCAN_BOX_FIRST else (6, 0))\n"
+     )),
+    ((
+        "        combo.bind('<<ComboboxSelected>>', self._rte_mode_changed)\n"
+        "        self.rte_edit_widgets.append((combo, 'readonly'))\n"
+    ),
+     (
+         "        combo.bind('<<ComboboxSelected>>', self._rte_mode_changed)\n"
+         '        self.rte_scan_mode_combo = combo\n'
+         "        self.rte_edit_widgets.append((combo, 'readonly'))\n"
+     )),
+    ('            self._arrange_pair_by_width(controls, settings, scan, gap=controls_gap, stack_gap=4, right_width=scan_stacked_width, left_width=settings_without_block)\n',
+     (
+         '            if RTE_SCAN_BOX_FIRST:\n'
+         '                self._arrange_pair_by_width(controls, scan, settings, gap=controls_gap, stack_gap=4, left_width=scan_stacked_width, right_width=settings_without_block)\n'
+         '            else:\n'
+         '                self._arrange_pair_by_width(controls, settings, scan, gap=controls_gap, stack_gap=4, right_width=scan_stacked_width, left_width=settings_without_block)\n'
+     )),
+    ((
+        '                    room = self._pair_natural_width(settings) + controls_gap\n'
+        '                    room = max(room, min(room + 4, controls.winfo_width() - scan_stacked_width()))\n'
+        '                controls.columnconfigure(0, minsize=room)\n'
+    ),
+     (
+         '                    room = self._pair_natural_width(settings) + (0 if RTE_SCAN_BOX_FIRST else controls_gap)\n'
+         '                    room = max(room, min(room + 4, controls.winfo_width() - scan_stacked_width() - (controls_gap if RTE_SCAN_BOX_FIRST else 0)))\n'
+         '                controls.columnconfigure(1 if RTE_SCAN_BOX_FIRST else 0, minsize=room)\n'
+     )),
+    ('    def _rte_mode_changed(self, _event=None):\n',
+     (
+         '    def rte_measurement_busy(self) -> bool:\n'
+         '        state = self.__dict__\n'
+         "        return bool(state.get('ppms_environment_busy') or state.get('ppms_field_scan_running') or state.get('rte_closed') or state.get('rte_stage_prompt_open'))\n"
+         '    def rte_set_measurement(self, name) -> bool:\n'
+         '        scans = RTE_MEASUREMENTS.get(name)\n'
+         '        if not scans:\n'
+         '            return False\n'
+         '        state = self.__dict__\n'
+         "        was = state.get('rte_measurement')\n"
+         '        if was == name:\n'
+         '            return True\n'
+         '        if was is not None and self.rte_measurement_busy():\n'
+         '            return False\n'
+         "        kept = state.setdefault('rte_measurement_scans', {})\n"
+         '        if was is not None:\n'
+         '            kept[was] = self.ppms_simple_mode.get()\n'
+         '        self.rte_measurement = name\n'
+         "        combo = state.get('rte_scan_mode_combo')\n"
+         '        if combo is not None:\n'
+         '            combo.configure(values=scans)\n'
+         '        scan = kept.get(name) if kept.get(name) in scans else scans[0]\n'
+         '        if scan != self.ppms_simple_mode.get():\n'
+         '            self.ppms_simple_mode.set(scan)\n'
+         '            self._rte_mode_changed()\n'
+         "        frame = state.get('ppms_plot_frame')\n"
+         '        if frame is not None:\n'
+         "            frame.configure(text=f'{name}: {RTE_PLOT_TITLE_TAIL}')\n"
+         '        return True\n'
+         '    def _rte_mode_changed(self, _event=None):\n'
+     )),
+    ('                row = dict(module=self.ppms_page_name, scan_mode=mode, loop=loop, point=point,\n',
+     "                row = dict(module=self.ppms_page_name, **({'measurement': self.rte_measurement} if self.__dict__.get('rte_measurement') else {}), scan_mode=mode, loop=loop, point=point,\n"),
+    ((
+        '            file_name=typed_name, mode=mode,\n'
+        "            plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var'"
+    ),
+     (
+         "            file_name=typed_name, **({'measurement': state['rte_measurement']} if state.get('rte_measurement') else {}), mode=mode,\n"
+         "            plan=dict(**(dict(typed=box(state.get('rte_switch2_pulses_var'"
+     )),
+)
+
 MAIN_WINDOW_TITLE = "Transport_RT_NH"
 # Its own icon (Other-files/assets): the main program's picture in another colour, with the name on it.
 APPLICATION_ICON_BASENAME = "Transport_RT"
