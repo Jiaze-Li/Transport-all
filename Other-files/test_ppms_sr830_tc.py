@@ -331,6 +331,14 @@ class PageTests(NoWindows):
         # cell, and the rack, keep their width (the CI GUI test measures it).
         self.assertEqual(len(row.children), 3)
 
+    def test_the_zurich_row_says_tc_s_on_ppms(self):
+        panel, ttk = build_ppms_panel()
+        (name,) = [w for w in ttk.made if w.options.get("text") == "Zurich MFLI"]
+        row = [w.options.get("text") for w in name.master.children if w.kind == "Label"]
+        self.assertIn("TC (s)", row)
+        self.assertNotIn("Time constant s", self.texts(ttk))
+        self.assertIn(panel.zurich_timeconstant, [w.options.get("textvariable") for w in name.master.children])
+
 class ConnectTests(NoWindows):
     def connect(self, panel, key="830_a", label=None, keeps=None):
         if label is not None:
@@ -876,6 +884,18 @@ class StartSettleTests(NoWindows):
         self.assertTrue(message.endswith("\n\nContinue to choose the run folder and start the scan?"))
         self.assertEqual(ask.call_args.kwargs["icon"], "question")
         self.assertFalse(obj.ppms_field_scan_running, "No: nothing starts")
+
+    def test_every_choice_waits_1_time_constant_or_settle_s(self):
+        for label, code in app.STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
+            with self.subTest(label=label):
+                tau = app.SR830_TIME_CONSTANTS_S[code]
+                settle, slowest, meter = self.settle(label, 0.5)
+                self.assertEqual((slowest, meter), (tau, "SR830-1"))
+                self.assertAlmostEqual(settle, max(0.5, 1.0 * tau))
+        self.assertEqual(self.settle(None, 0.5)[0], 1.0, "the 1 s default: 1 s, not 0.5 s")
+        self.assertEqual(self.settle("3 s", 0.5)[0], 3.0, "a 3 s choice: 3 s")
+        self.assertEqual(self.settle("10 s", 100.0)[0], 100.0, "a longer Settle s is kept")
+        self.assertEqual(self.settle("10 s", 0.5, lockins=())[0], 0.5, "no lock-in: Settle s alone")
 
 
 class WheelTests(NoWindows):
