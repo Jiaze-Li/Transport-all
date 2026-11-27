@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-27T16:46:16.339Z",
+  "updatedAt": "2026-11-27T16:48:14.756Z",
   "task": {
     "id": "fix/ppms-zurich-close-handoff",
     "branch": "fix/ppms-zurich-close-handoff",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T00:38:18+08:00",
     "status": "In progress",
     "current": "fix(ppms): drain zurich_executor before MFLI disconnect and preserve fix in ppms_host REPLACE",
-    "next": "Review Draft PR #3 and authorize marking Ready for review",
+    "next": "Review Draft PR #3 (7df432f) and authorize marking Ready for review",
     "history": [
       {
         "at": "2026-11-28T00:45:58+08:00",
