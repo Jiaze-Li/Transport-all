@@ -76,7 +76,7 @@ Base: `Transport-PPMS@c0c26345c9a55fa8ef576f1a3952b8190d3c3c8f`; original full-a
   - Inspect included/excluded modules: `cd Other-files && python3 ci/run_suite.py --list-no-gui`
 - **Selection policy & guard (`Other-files/ci/run_suite.py`)**:
   - Default `python3 ci/run_suite.py` is **unchanged** and runs all 51 modules (used by Linux `xvfb-run` and Windows CI).
-  - `--no-gui` excludes only the 5 modules in `GUI_ONLY_MODULES` that genuinely instantiate live `tk.Tk()` / `CombinedControlApp(root)` / `Toplevel` windows (`test_commercial_look`, `test_folder_dialog`, `test_plot_redraw_performance`, `test_scan_start_window`, `test_zurich_choice`), printing each excluded module and reason.
+  - `--no-gui` excludes only the 4 modules in `GUI_ONLY_MODULES` that genuinely instantiate live `tk.Tk()` / `CombinedControlApp(root)` / `Toplevel` windows (`test_folder_dialog`, `test_plot_redraw_performance`, `test_scan_start_window`, `test_zurich_choice`), printing each excluded module and reason. (`test_commercial_look` uses stand-in widget trees and `FakeStyle` without a Tk window, so it remains included and passes under `--no-gui`.)
   - Unknown/new `test_*.py` modules are **included by default** in `--no-gui` and guarded by `install_no_gui_guard()`, which patches `tkinter.Tk.__init__` and `tkinter.Toplevel.__init__` to raise `RuntimeError("Tk window creation is forbidden in --no-gui mode")`.
   - `Other-files/test_ci_runner_no_gui.py` (3 tests) verifies default discovery, fail-fast Tk guard (negative control), and nonzero failure propagation.
 
@@ -84,14 +84,25 @@ Base: `Transport-PPMS@c0c26345c9a55fa8ef576f1a3952b8190d3c3c8f`; original full-a
 
 ## Verification
 
+### Before vs After counts (per platform / mode)
+
+| Platform / Mode | Before (`Transport-PPMS@c0c2634` / `8369a29e`) | After (PR #2) | Skips / Expected failures / Notes |
+| --- | --- | --- | --- |
+| **macOS local (`ci/run_suite.py --no-gui`)** | Not available (`T-1` missing) | **47 modules, 596 tests ran, 0 failed, 0 skipped, 1 expected failure** | Excludes 4 GUI-only modules (`test_folder_dialog`, `test_plot_redraw_performance`, `test_scan_start_window`, `test_zurich_choice`); 1 `expectedFailure` (`test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3`). |
+| **Linux CI (`xvfb-run python ci/run_suite.py`)** | 46 modules, 610 tests ran, 0 failed, 3 skipped | **51 modules, 640 tests ran, 0 failed, 3 skipped, 1 expected failure** | 3 skipped: Windows-only `win32` lease tests; 1 `expectedFailure` (A2-3). Layout (`ppms_checks.py`): `PPMS CHECKS OK`. Wheel build/install + `transport-ppms` CLI: OK. |
+| **Windows CI (`python ci/run_suite.py`)** | 46 modules, 610 tests ran, 0 failed, 4 skipped | **51 modules, 640 tests ran, 0 failed, 4 skipped, 1 expected failure** | 4 skipped: POSIX/macOS-only `fcntl` lease tests + `test_a_program_that_dies_leaves_nothing_held`; 1 `expectedFailure` (A2-3). Layout (`ppms_checks.py`): `PPMS CHECKS OK`. |
+
+### Exact commands & CI links
 - **Local macOS (`--no-gui`, no real hardware)**:
-  - `cd Other-files && python3 ci/run_suite.py --no-gui`: **46 modules, 576 tests ran, 0 failed, 0 skipped, 1 expected failure (`test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3`)**, 5 GUI-only modules excluded, exit `0`.
-  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_qdinstrument`: **5 tests ran, 0 failed**, exit `0`.
-  - `cd Other-files && python3 ci/run_suite.py --module test_visa_shared_manager`: **7 tests ran, 0 failed**, exit `0`.
-  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_scan_plot_snapshots`: **6 tests ran, 0 failed**, exit `0`.
-  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_zurich_close_order`: **5 tests ran, 0 failed, 1 expected failure**, exit `0`.
-  - `cd Other-files && python3 ci/run_suite.py --module test_ci_runner_no_gui`: **3 tests ran, 0 failed**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --no-gui` → exit `0` (**47 modules, 596 tests ran, 0 failed, 0 skipped, 1 expected failure**, 4 GUI-only modules excluded).
+  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_qdinstrument` → **5 tests ran, 0 failed**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --module test_visa_shared_manager` → **7 tests ran, 0 failed**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_scan_plot_snapshots` → **6 tests ran, 0 failed**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --module test_ppms_zurich_close_order` → **5 tests ran, 0 failed, 1 expected failure**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --module test_commercial_look --no-gui` → **20 tests ran, 0 failed**, exit `0`.
+  - `cd Other-files && python3 ci/run_suite.py --module test_ci_runner_no_gui --no-gui` → **3 tests ran, 0 failed**, exit `0`.
 - **Production source invariance**:
   - `git diff Transport-PPMS -- transport/ Transport_PPMS.py` is empty (0 production source changes).
-- **GitHub Actions CI**:
-  - Full Linux (`xvfb-run`) + Windows GUI/layout suite (`Other-files/ci/run_suite.py` + `Other-files/ci/ppms_checks.py`) runs on push to PR #2.
+- **GitHub Actions CI (`Jiaze-Li/Transport-all`, PR #2)**:
+  - `829f29f2294245308ee7c26d0f88fd4b3adeba80`: `PPMS tests` ([run 46011810730](https://github.com/Jiaze-Li/Transport-all/actions/runs/46011810730)) — **success** (`linux` + `windows` full 51-module suite, `ppms_checks.py`, wheel build/install).
+  - Final PR #2 checks: [PR #2 checks](https://github.com/Jiaze-Li/Transport-all/pull/2/checks) (triggered on push of this commit).

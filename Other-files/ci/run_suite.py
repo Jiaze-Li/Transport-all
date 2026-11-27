@@ -37,7 +37,6 @@ MODULE_S = 1800
 # behavior/fixture reason.  Full GUI/layout coverage runs in default mode
 # (e.g. Linux Xvfb and Windows CI).
 GUI_ONLY_MODULES = {
-    "test_commercial_look": "Instantiates tk.Tk() and CombinedControlApp(root) to inspect live widget styling and layout",
     "test_folder_dialog": "Instantiates tk.Tk() and EditableFolderDialog(Toplevel) to test live modal folder dialog geometry",
     "test_plot_redraw_performance": "Instantiates tk.Tk() and CombinedControlApp(root) to benchmark live Tk plot canvas redraws",
     "test_scan_start_window": "Instantiates tk.Tk() and CombinedControlApp(root) to test live window startup and close dialogs",
