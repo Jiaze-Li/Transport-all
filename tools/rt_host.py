@@ -12,7 +12,7 @@ PAGE_CLASS = "RTEPanel"
 APP_NAME = "the SHHV & Switch page"
 # This program's own version (user, 2026-11-27: "name PPMS, RT, MOKE, FMR exe all as v1.0"), not the
 # main program's.  It is in the .exe's properties and in every results file, and it names the release
-# ("Transport_RT v1.0"): raise it here, and in pyproject.toml, to start a new release.
+# ("Transport_RT v1.0"): raise it here, and in pyproject.toml, and push the tag rt-v<version>, to start a new release.
 APP_VERSION = "1.0"
 OUTPUT = "transport/rt/app.py"
 GLUE_FILES = ("ppms_package_glue.py",)
