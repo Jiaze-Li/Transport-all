@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "activatedAt": "2026-11-27T15:24:11.591Z",
+  "branches": [
+    "Transport-FMR",
+    "Transport-MOKE",
+    "Transport-PPMS",
+    "Transport-RT",
+    "ci/refactor-instruments",
+    "docflow-state",
+    "fix/ppms-zurich-close-handoff",
+    "main"
+  ],
+  "tips": {
+    "Transport-FMR": "c95249f0d458ed3dab6f4567f1b706fc22694667",
+    "Transport-MOKE": "9942d69533c4396b1472f52bef4a3df2aad4450f",
+    "Transport-PPMS": "12108a46b387bbb3c42854296240c5f5796370c8",
+    "Transport-RT": "806b98f68f115035b271aecb1e27bf05df5f9da7",
+    "ci/refactor-instruments": "2f7e8e88fdf1b3e8f1542bbb4aa452f710a629a6",
+    "docflow-state": "c3649c80cd8b1861ec85a804165fc838c6db4a9d",
+    "fix/ppms-zurich-close-handoff": "629e00bfe1991af95dac51e4046bc916ee57a402",
+    "main": "56908d88feb69597499b1c270bcf9a0f88b26972"
+  }
+}
