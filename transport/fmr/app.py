@@ -1562,7 +1562,7 @@ class LabOneCAPIAdapter:
             self._destroy()
 APP_VERSION = "1.0.2"
 MAIN_WINDOW_TITLE = "Transport_FMR_NH"
-APPLICATION_ICON_BASENAME = "Magneto_Electro_Optical_Microwave_Transport_NH"
+APPLICATION_ICON_BASENAME = "Transport_FMR"
 def program_directory() -> Path:
     frozen = getattr(sys, "frozen", False) or "__compiled__" in globals()
     return Path(sys.argv[0] if frozen else _PROGRAM_FILE).resolve().parent
