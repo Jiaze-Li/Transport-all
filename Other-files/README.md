@@ -15,7 +15,11 @@
 - Inside one program nothing changes: the same refusal and message as before. If the system cannot make the object,
   the connect goes on without it. Serial devices (LED controller, magnets) were already one program at a time: a COM
   port opens once. `Local\` is one Windows log-on session; two users logged on at once are not covered.
-- MS-fourState.py has the same code (its copied instrument core). The standalone page programs get it when their
+- Review, 2026-11-27: a program run with other Windows rights (as administrator) cannot open the holder's object;
+  that is a refusal too, not a connect without the lock. The message says what to do about a leftover process ("if
+  no such window is open, end that process in Task Manager").
+- MS-fourState.py (its copied instrument core) and Test_Microwave_NH_dev.py have the same lock under the same
+  object names, so they and Transport_all refuse each other too. The standalone page programs get it when their
   branch is generated again from this program.
 - Tests: `test_instrument_lease_across_programs.py`, with a second Python process as the other program.
 

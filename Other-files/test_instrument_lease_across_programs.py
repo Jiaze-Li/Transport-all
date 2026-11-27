@@ -16,6 +16,7 @@ program file; no instrument, port or VISA session is opened.
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 import unittest.mock
@@ -25,7 +26,7 @@ from test_ppms_motor_debug import app
 
 SOURCE = Path(app.__file__).resolve()
 CHILD = r"""
-import importlib.util, sys
+import importlib.util, os, sys
 spec = importlib.util.spec_from_file_location("lease_child", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
@@ -36,7 +37,7 @@ try:
 except RuntimeError as error:
     print("REFUSED " + str(error), flush=True)
     raise SystemExit(0)
-print("HELD", flush=True)
+print("HELD %d" % os.getpid(), flush=True)
 line = sys.stdin.readline()
 if line.strip() == "release":
     module.release_instrument_lease(sys.argv[2], owner)
@@ -50,8 +51,12 @@ def other_program(resource):
     env = dict(os.environ)
     roots = [str(SOURCE.parent), str(SOURCE.parents[2])]      # the one-file program, or a page program in the package
     env["PYTHONPATH"] = os.pathsep.join([*roots, env.get("PYTHONPATH", "")])
-    return subprocess.Popen([sys.executable, "-c", CHILD, str(SOURCE), resource], stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    # Its errors go to a file: a pipe nobody reads would stop a noisy import.
+    errors = tempfile.TemporaryFile(mode="w+")
+    child = subprocess.Popen([sys.executable, "-c", CHILD, str(SOURCE), resource], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=errors, text=True, env=env)
+    child.errors = errors
+    return child
 
 
 class LeaseAcrossProgramsTests(unittest.TestCase):
@@ -66,13 +71,15 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
             if child.poll() is None:
                 child.kill()
             child.communicate()
+            child.errors.close()
 
     def start(self, resource=None):
         child = other_program(resource or self.resource)
         self.children.append(child)
         line = child.stdout.readline().strip()
         if not line:
-            self.fail("the other program did not start: " + child.stderr.read()[-2000:])
+            child.errors.seek(0)
+            self.fail("the other program did not start: " + child.errors.read()[-2000:])
         return child, line
 
     def acquire_soon(self, owner, seconds=10.0):
@@ -88,14 +95,16 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
 
     def test_an_instrument_held_by_another_program_is_refused_with_its_name(self):
         child, line = self.start()
-        self.assertEqual(line, "HELD")
+        self.assertTrue(line.startswith("HELD "), line)
+        pid = int(line.split()[1])      # the program's own process (a venv's python.exe is only its launcher)
         owner = object()
         with self.assertRaises(RuntimeError) as caught:
             app.acquire_instrument_lease(self.resource, owner, "This program / 6221")
         message = str(caught.exception)
         self.assertIn(f"{self.resource} is in use by another Transport program on this PC", message)
         self.assertIn("Other program / 6221", message)
-        self.assertIn(f"process {child.pid}", message)
+        self.assertIn(f"process {pid}", message)
+        self.assertIn("if no such window is open, end that process in Task Manager", message)
         self.assertIn('then connect from "This program / 6221"', message)
         self.assertNotIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES, "nothing taken here")
         # The other program disconnects: the instrument is free.
@@ -118,11 +127,11 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
             app.release_instrument_lease(self.resource, owner)
         # Released here: the other program can take it.
         _child, line = self.start()
-        self.assertEqual(line, "HELD")
+        self.assertTrue(line.startswith("HELD "), line)
 
     def test_a_program_that_dies_leaves_nothing_held(self):
         child, line = self.start()
-        self.assertEqual(line, "HELD")
+        self.assertTrue(line.startswith("HELD "), line)
         child.kill()
         child.communicate()
         owner = object()
@@ -130,13 +139,10 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         app.release_instrument_lease(self.resource, owner)
 
     def test_the_same_address_written_another_way_is_the_same_instrument(self):
-        self.resource = f"GPIB0::{20 + os.getpid() % 9}::INSTR"
-        key = app.instrument_lease_key(self.resource)
-        if key in app._process_instrument_leases():
-            self.skipTest("this address is held in this process by another test")
-        board, primary = key.split("::")[:2]
-        _child, line = self.start(f"gpib::{int(primary):02d}")
-        self.assertEqual(line, "HELD")
+        # A board number no real program uses, so nothing else on the PC holds it.
+        self.resource = f"GPIB{os.getpid()}::5::INSTR"
+        _child, line = self.start(f"gpib{os.getpid()}::05")
+        self.assertTrue(line.startswith("HELD "), line)
         with self.assertRaisesRegex(RuntimeError, "in use by another Transport program"):
             app.acquire_instrument_lease(self.resource, object(), "This program / 6221")
 

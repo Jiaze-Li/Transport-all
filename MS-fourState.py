@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 # The instrument code MS-fourState shares with the main program, copied so
 # this file runs on its own.  Do not edit here: fix the main program and run
 # Other-files/tools/ms_fourstate_copy_core.py.
-# Copied from Transport_all.py, SHA-256 ddf453e3447f…
+# Copied from Transport_all.py, SHA-256 85b942f05181…
 import ctypes
 
 
@@ -1122,6 +1122,10 @@ def _process_instrument_leases() -> dict:
     return sys.__dict__.setdefault('_transport_instrument_process_leases', {})
 
 
+def _process_instrument_lease_lock():
+    return sys.__dict__.setdefault('_transport_instrument_process_lease_lock', threading.RLock())
+
+
 def _instrument_lease_object_name(key: str) -> str:
     return 'TransportInstrumentLease_' + re.sub('[^A-Za-z0-9]+', '_', key)
 
@@ -1139,23 +1143,31 @@ def hold_instrument_for_this_process(key: str, owner_label: str):
             kernel.MapViewOfFile.argtypes = (ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_size_t)
             kernel.UnmapViewOfFile.argtypes = (ctypes.c_void_p,)
             kernel.CloseHandle.argtypes = (ctypes.c_void_p,)
+            ctypes.set_last_error(0)
             handle = kernel.CreateFileMappingW(ctypes.c_void_p(-1), None, 4, 0, INSTRUMENT_LEASE_TEXT_BYTES, 'Local\\' + name)
-            exists = ctypes.get_last_error() == 183
-        except (OSError, AttributeError):
+            error = ctypes.get_last_error()
+        except Exception:
             return None
         if not handle:
+            if error == 5:
+                raise RuntimeError('a program run with other Windows rights, e.g. as administrator')
             return None
-        view = kernel.MapViewOfFile(handle, 6, 0, 0, INSTRUMENT_LEASE_TEXT_BYTES)
-        try:
-            if not exists:
-                if view:
-                    ctypes.memmove(view, text + b'\0', len(text) + 1)
-                return ('win32', handle)
-            holder = ctypes.string_at(view, INSTRUMENT_LEASE_TEXT_BYTES).split(b'\0', 1)[0].decode('utf-8', 'replace') if view else ''
-        finally:
+        if error != 183:
+            view = kernel.MapViewOfFile(handle, 6, 0, 0, INSTRUMENT_LEASE_TEXT_BYTES)
             if view:
+                ctypes.memmove(view, text + b'\0', len(text) + 1)
                 kernel.UnmapViewOfFile(view)
-        kernel.CloseHandle(handle)
+            return ('win32', handle)
+        holder = ''
+        try:
+            view = kernel.MapViewOfFile(handle, 4, 0, 0, INSTRUMENT_LEASE_TEXT_BYTES)
+            if view:
+                try:
+                    holder = ctypes.string_at(view, INSTRUMENT_LEASE_TEXT_BYTES).split(b'\0', 1)[0].decode('utf-8', 'replace')
+                finally:
+                    kernel.UnmapViewOfFile(view)
+        finally:
+            kernel.CloseHandle(handle)
     else:
         try:
             import fcntl
@@ -1207,14 +1219,15 @@ def acquire_instrument_lease(resource: str, owner: object, owner_label: str) -> 
         current = _INSTRUMENT_LEASES.get(key)
         if current is not None:
             raise RuntimeError(f'{resource} is already connected by "{current[1]}"; please disconnect it in that module first, then connect from "{owner_label}"')
-        held = _process_instrument_leases()
-        entry = held.get(key)
-        if entry is None:
-            try:
-                entry = held[key] = [hold_instrument_for_this_process(key, str(owner_label)), 0]
-            except RuntimeError as other:
-                raise RuntimeError(f'{resource} is in use by another Transport program on this PC ({other}); disconnect it there or close that program first, then connect from "{owner_label}"') from None
-        entry[1] += 1
+        with _process_instrument_lease_lock():
+            held = _process_instrument_leases()
+            entry = held.get(key)
+            if entry is None:
+                try:
+                    entry = held[key] = [hold_instrument_for_this_process(key, str(owner_label)), 0]
+                except RuntimeError as other:
+                    raise RuntimeError(f'{resource} is in use by another Transport program on this PC ({other}); disconnect it there or close that program first (if no such window is open, end that process in Task Manager), then connect from "{owner_label}"') from None
+            entry[1] += 1
         _INSTRUMENT_LEASES[key] = (owner, str(owner_label))
     return key
 
@@ -1227,13 +1240,14 @@ def release_instrument_lease(resource: str, owner: object) -> None:
         current = _INSTRUMENT_LEASES.get(key)
         if current is not None and current[0] is owner:
             _INSTRUMENT_LEASES.pop(key, None)
-            held = _process_instrument_leases()
-            entry = held.get(key)
-            if entry is not None:
-                entry[1] -= 1
-                if entry[1] <= 0:
-                    held.pop(key, None)
-                    let_go_of_instrument_for_this_process(entry[0])
+            with _process_instrument_lease_lock():
+                held = _process_instrument_leases()
+                entry = held.get(key)
+                if entry is not None:
+                    entry[1] -= 1
+                    if entry[1] <= 0:
+                        held.pop(key, None)
+                        let_go_of_instrument_for_this_process(entry[0])
 
 
 class SafeVisaIdentityController:
