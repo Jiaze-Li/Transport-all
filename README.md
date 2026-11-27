@@ -54,12 +54,10 @@ Closing the window stops a running scan, zeroes the magnet supply and
 switches its output off, switches the RF source off and disconnects the
 instruments.
 
-**Do not run it beside Transport_all (or another Transport program) on the
-same instruments.** Inside one program, a page cannot take an instrument
-another page is driving. Two programs do not know of each other: both could
-connect to the same magnet supply, gaussmeter, lock-in or stage, and closing one would switch outputs off
-under the other's scan. Close the other program, or at least disconnect the
-shared instruments there, first.
+**Beside Transport_all or another Transport program:** both can be open at
+once. An instrument one program has connected is refused to the others, with
+the holder's name, until it is disconnected there (a named object of Windows
+per instrument address; it goes when the holder disconnects, closes or dies).
 
 ## How it is put together
 
