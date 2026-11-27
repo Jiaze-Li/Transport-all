@@ -28,6 +28,8 @@ REPLACE = {
 }
 
 MAIN_WINDOW_TITLE = "Transport_MOKE_NH"
+# Its own icon (Other-files/assets): the main program's picture in another colour, with the name on it.
+APPLICATION_ICON_BASENAME = "Transport_MOKE"
 
 
 class CombinedControlApp:
