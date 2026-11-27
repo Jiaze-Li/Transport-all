@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-27T15:24:28.429Z",
+  "task": {
+    "id": "Transport-PPMS",
+    "branch": "Transport-PPMS",
+    "title": "Transport-PPMS",
+    "task": "Development branch: Transport-PPMS",
+    "started": "2026-11-27T23:24:15+08:00",
+    "status": "In progress",
+    "current": "Enable DocFlow progress ingestion",
+    "next": "",
+    "history": [],
+    "commits": [
+      {
+        "sha": "2bb939ee5a3a3d943cb5b377b8397111b3cf4786",
+        "branch": "Transport-PPMS",
+        "timestamp": "2026-11-27T23:24:15+08:00",
+        "message": "Enable DocFlow progress ingestion"
+      }
+    ],
+    "pr": null,
+    "completed": null,
+    "outcome": null
+  }
+}
