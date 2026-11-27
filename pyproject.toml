@@ -1,14 +1,14 @@
 # The standalone SHHV & Switch application as an installable package: Transport_RT.py
 # plus the transport package beside it.  `pip install transport_rt-<version>-py3-none-any.whl`
 # adds the `transport-rt` command; `python Transport_RT.py` in a copied
-# folder works too.  The version follows APP_VERSION in transport/rt/app.py.
+# folder works too.  The version is APP_VERSION of tools/rt_host.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "transport-rt"
-version = "1.0.2"
+version = "1.0"
 description = "Room-temperature harmonic Hall (SHHV) and current-pulse switching measurement control program (Tk GUI): the SHHV & Switch page of Transport-all as a program of its own"
 readme = "README.md"
 license = "GPL-3.0-only"
