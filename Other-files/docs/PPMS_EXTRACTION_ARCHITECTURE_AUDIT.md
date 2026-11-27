@@ -13,7 +13,34 @@ Status: **Completed independent audit** (A1 and A2). This is the single evidence
 ## A1 — Extraction integrity
 
 ### 1. Feature and behavior parity matrix
-AST comparison of `PPMSPanel` and `CombinedControlApp` between `main@56908d88` (`Transport_all.py`) and `Transport-PPMS@8369a29e` (`transport/ppms/app.py`) shows **AST-level structural parity** on PPMS measurement, UI, plotting, recording, and safety logic (note: AST parity + retained offline tests do **not** establish complete runtime behavioral equivalence where tests were pruned or real hardware is required):
+AST comparison of `PPMSPanel` and `CombinedControlApp` between `main@56908d88` (`Transport_all.py`, read directly from git object `56908d88feb69597499b1c270bcf9a0f88b26972:Transport_all.py`) and `Transport-PPMS@8369a29e` (`transport/ppms/app.py`) shows **AST-level structural parity** on PPMS measurement, UI, plotting, recording, and safety logic (note: AST parity + retained offline tests do **not** establish complete runtime behavioral equivalence where tests were pruned or real hardware is required):
+
+Reproducible command (run from repository root):
+```bash
+python3 -c '
+import ast, pathlib, subprocess
+m_src = subprocess.check_output(["git", "show", "56908d88feb69597499b1c270bcf9a0f88b26972:Transport_all.py"], text=True)
+a_src = pathlib.Path("transport/ppms/app.py").read_text(encoding="utf-8")
+m_tree, a_tree = ast.parse(m_src), ast.parse(a_src)
+def methods(tree, cls):
+    c = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls)
+    return {m.name: ast.unparse(m) for m in c.body if isinstance(m, ast.FunctionDef)}
+for cls in ("PPMSPanel", "CombinedControlApp"):
+    m_m, a_m = methods(m_tree, cls), methods(a_tree, cls)
+    mod = sorted(k for k in set(m_m) & set(a_m) if m_m[k] != a_m[k])
+    print(f"{cls}: main={len(m_m)}, app={len(a_m)}, dropped={len(set(m_m)-set(a_m))}, added={len(set(a_m)-set(m_m))}, modified={len(mod)} {mod}")
+m_fn = {n.name: ast.unparse(n) for n in m_tree.body if isinstance(n, ast.FunctionDef)}
+a_fn = {n.name: ast.unparse(n) for n in a_tree.body if isinstance(n, ast.FunctionDef)}
+fn_mod = sorted(k for k in set(m_fn) & set(a_fn) if m_fn[k] != a_fn[k])
+print(f"TopLevelFn: main={len(m_fn)}, app={len(a_fn)}, kept={len(set(m_fn)&set(a_fn))}, added={sorted(set(a_fn)-set(m_fn))}, modified={len(fn_mod)} {fn_mod}")
+'
+```
+Observed output:
+```text
+PPMSPanel: main=28, app=28, dropped=0, added=0, modified=0 []
+CombinedControlApp: main=796, app=158, dropped=638, added=0, modified=8 ['__init__', '_append_ppms_helium_csv', '_ppms_harmonic_orders', '_ppms_harmonic_passes', '_redraw_active_tab', 'build_ui', 'request_close', 'safe_close_hardware']
+TopLevelFn: main=214, app=93, kept=92, added=['run'], modified=12 ['_application_asset_path', 'apply_application_identity', 'build_ppms_field_scan_sequence', 'main', 'make_scan_run_folder', 'ppms_lockin_settle_s', 'ppms_lockin_settle_text', 'ppms_settle_status_text', 'program_directory', 'scan_file_stem', 'scan_log_line', 'validate_ppms_transport_scan_settings']
+```
 
 - `PPMSPanel`: **28 / 28 methods** identical at AST level (0 added, 0 removed, 0 modified).
 - `CombinedControlApp`: **158 methods** kept (of 796 in `main`; 638 non-PPMS methods dropped). The only **8** modified methods are intentional host/glue/pruning changes:
@@ -41,17 +68,25 @@ AST comparison of `PPMSPanel` and `CombinedControlApp` between `main@56908d88` (
 - **Dropped symbols check**: Static scan of `DROP` names in `transport/ppms/app.py` confirms no missing top-level symbol references (`connect`/`disconnect` hits are instrument/method attributes on controllers). Minor residual: `safe_close_ppms` (`L10126`) still checks `("rte_panel", "ppms_panel")` — harmless no-op when `rte_panel` is absent.
 
 ### 3. Test retention, removal, and coverage gaps
-Comparing `main@56908d88` vs `Transport-PPMS@8369a29e` across `Other-files/`:
-- **Retained / added**: 46 test modules (`610` tests run locally, `0` failed, `3` skipped). New unit suites cover `transport.core.*`, `transport.common.*`, `transport.ppms.protocol`, `transport.ppms.controllers.multivu`, `test_package_metadata.py`, and `test_instrument_lease_across_programs.py` (commit `0ab9d0a`).
-- **Helper-only file**: `Other-files/test_nonlocal_keithley.py` has **0 tests** (`KEEP_AS_HELPERS` in `tools/prune_tests.py` so other tests can import its stand-ins).
-- **Coverage regressions from wholesale deletion / pruning (Finding A1-1, A1-2)**:
-  1. `Other-files/test_scan_plot_snapshots.py` was **deleted in full** because it imported non-PPMS helper modules (`shv_runs`, `moke_runs`, `fmr_runs`). This removed `PpmsTests.test_a_scan_saves_one_picture_of_its_plot_box` (`main` lines `375–391`), leaving PPMS PNG snapshot saving (`plot_snapshots`, `run1_plots_snapshot.png`) untested in `Transport-PPMS`.
-  2. `Other-files/test/test_instrument_safety_logic.py` (2,482 lines in `main`) was **deleted in full**. It contained PPMS-specific tests (`main` lines `1668–2269`, `2371–2404`) covering:
-     - `PPMSQDInstrumentReadbackController` (5 tests: pythonnet readback shapes, explicit DLL discovery, .NET assembly loader, ref readback reflection, typed `SetField` reflection) — currently **0 unit tests** in `Transport-PPMS`!
+Comparing `main@56908d88` vs `Transport-PPMS@8369a29e` across `Other-files/` (46 retained modules, **596** AST `test_*` methods, **610** executed test cases in `ci/run_suite.py` including inherited subclass cases; `0` failed, `3` skipped):
+
+- **`KEEP_AS_HELPERS` verification (`tools/prune_tests.py` `L22–25`)**: Per-module AST diff confirms all 5 PPMS helper-listed modules retained their PPMS test suites rather than being emptied:
+  - `test_ppms_motor_debug`: `27 → 27` (0 removed)
+  - `test_ppms_two_panels`: `31 → 31` (0 removed)
+  - `test_ppms_run_save_zero`: `29 → 29` (0 removed)
+  - `test_ppms_frequency_scan`: `35 → 34` (1 removed: `SHVUnchangedTests.test_the_shv_page_keeps_its_own_modes_and_methods`, non-PPMS SHHV page)
+  - `test_ppms_sr830_tc`: `31 → 25` (6 removed: 5 RTE-only methods `PageTests.test_the_zurich_row_says_tc_s_on_both_pages`, `PageTests.test_rte_has_no_sr830_tc_control`, `ConnectTests.test_rte_connect_keeps_oflt_10`, `ScanStartTimeConstantTests.test_rte_reads_it_too`, `ScanStartTimeConstantTests.test_an_rte_front_panel_change_is_seen_logged_and_waited_for`, plus 1 mixed PPMS+RTE method `StartSettleTests.test_every_choice_waits_1_time_constant_or_settle_s`)
+  - `test_nonlocal_keithley`: `35 → 0` (all 35 removed because they test the non-PPMS Non-local/2410 page; retained with 0 tests solely as importable test stand-ins).
+- **Per-module AST `test_*` counts across all 46 retained modules**: `test_angle_plot_xlim` (7), `test_commercial_look` (20), `test_common_robustness` (3), `test_core_modules` (9), `test_folder_dialog` (34), `test_instrument_lease_across_programs` (7), `test_lockin_downrange` (31), `test_lockin_settle_rte_ppms` (20), `test_lockin_time_constant_defaults` (4), `test_log_pause` (1), `test_mfli_connect_message` (4), `test_no_undefined_constants` (2), `test_nonlocal_keithley` (0), `test_nonlocal_review` (7), `test_package_metadata` (4), `test_plot_redraw_performance` (4), `test_ppms_acquisition_default` (4), `test_ppms_angle_field` (24), `test_ppms_current_callbacks` (37), `test_ppms_field_persistent` (20), `test_ppms_frequency_scan` (34), `test_ppms_helium_warning` (5), `test_ppms_macro` (6), `test_ppms_motor_debug` (27), `test_ppms_multivu_controller` (20), `test_ppms_nested` (37), `test_ppms_protocol_module` (8), `test_ppms_rte_review` (10), `test_ppms_run_save_zero` (29), `test_ppms_simple_modes` (14), `test_ppms_sr830_tc` (25), `test_ppms_two_panels` (31), `test_ppms_uncertain_environment` (3), `test_program_directory` (2), `test_review_fixes` (5), `test_rte_panel` (2), `test_scan_run_recorder` (26), `test_scan_sequences_module` (6), `test_scan_start_window` (3), `test_sr830_display_xy` (8), `test_sr830_filters` (1), `test_startup_window` (3), `test_transport_common_harmonics` (13), `test_transport_common_settling` (11), `test_transport_common_validation` (24), `test_zurich_choice` (1).
+- **Coverage regressions evaluated against `tools/prune_tests.py` rule (Finding A1-1, A1-2)**:
+  Under `prune_tests.py` (`L9–11`), only removals caused by *"another page's code is not here"* are expected; wholesale deletion of PPMS tests is an extraction test-coverage regression:
+  1. `Other-files/test_scan_plot_snapshots.py` was **deleted in full** on import because it imported non-PPMS helper modules (`shv_runs`, `moke_runs`, `fmr_runs`). This removed `PpmsTests.test_a_scan_saves_one_picture_of_its_plot_box` (`main` lines `375–391`), leaving PPMS PNG snapshot saving (`plot_snapshots`, `run1_plots_snapshot.png`) untested in `Transport-PPMS`.
+  2. `Other-files/test/test_instrument_safety_logic.py` (2,482 lines in `main`) was **deleted in full**. While most tests targeted non-PPMS hardware (2400/2410/KEPCO/ST-FMR/PNA), it also contained PPMS-specific tests (`main` lines `1668–2269`, `2371–2404`) covering:
+     - `PPMSQDInstrumentReadbackController` (5 tests: pythonnet readback shapes, explicit DLL discovery, .NET assembly loader, ref readback reflection, typed `SetField` reflection) — currently **0 unit tests** in `Transport-PPMS`.
      - `LegacyMFLIBridge` compilation check (`test_legacy_labone_bridge_source_still_compiles`)
      - `SharedVisaIdentityController` / `acquire_shared_visa_manager` lifecycle (`test_shared_visa_manager_survives_one_controller_disconnect`, `test_failed_visa_identity_check_does_not_close_other_session`)
      - `test_safe_close_hardware_continues_after_module_failure`, `test_ui_queue_drain_is_time_sliced`, `test_ppms1_transport_allows_one_sr830_at_address_10`, `test_the_zurich_is_set_up_as_on_ppms`.
-  3. Partial pruning in `test_lockin_settle_rte_ppms.py`, `test_ppms_rte_review.py`, `test_ppms_sr830_tc.py`, `test_zurich_choice.py` mostly removed RTE/SHHV/ST-FMR cross-page tests, though any test referencing both PPMS and RTE in one method was also dropped.
+  3. Partial pruning in `test_lockin_settle_rte_ppms.py`, `test_ppms_rte_review.py`, `test_ppms_sr830_tc.py`, `test_zurich_choice.py` removed RTE/SHHV/ST-FMR cross-page tests (missing other-page attributes), including `StartSettleTests.test_every_choice_waits_1_time_constant_or_settle_s` in `test_ppms_sr830_tc.py` because that single method exercised both PPMS and RTE.
 
 ### 4. Safety contracts (static and offline evidence)
 - **Current output OFF + readback**: `ppms_sources_off` (`L10077–10124`) and `_ppms_zero_6221_after_scan` (`L9143–9153`) call `controller.safe_output_off()` under `controller.lock` and verify `OUTP?` == `0`, raising `RuntimeError` if non-zero.
