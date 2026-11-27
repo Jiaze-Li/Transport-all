@@ -74,11 +74,6 @@ class Rule(unittest.TestCase):
 class SR830RuleTests:
     """The same checks for the ST-FMR and the Non-local SR830 rule."""
 
-    def test_the_rule_is_one_percent_of_the_range(self):
-        self.assertEqual(app.LOCKIN_DOWNRANGE_FRACTION, 0.01)
-        self.assertEqual(app.PPMS_SR830_DOWNRANGE_FRACTION, app.LOCKIN_DOWNRANGE_FRACTION)
-        self.assertEqual(app.LOCKIN_UPRANGE_FRACTION, 0.85)
-
     def test_a_reading_above_one_percent_keeps_the_range(self):
         # 5 % and 1.2 % of the range stepped it down while the rule was 15 %.
         for fraction in (0.012, 0.05, 0.14, 0.5):
@@ -203,6 +198,29 @@ class StfmrSR830Tests(SR830RuleTests, Rule):
         import inspect
         source = inspect.getsource(app.STFMRSR830Controller.configure)
         self.assertIn("self.overload_floor = 0", source)
+
+    def test_each_pass_of_a_sweep_ranges_afresh(self):
+        """Review, 2026-11-16: only a scan's Start forgot the floor, and the
+        overload latched while a pass was set up (the 4886 zeroed and set
+        again) stepped the range up at each pass's first read: 13, 14, 15
+        ... over a sweep of several carriers, never down again."""
+        device, _step = self.make(14, overloads_below=14)
+        controller = self.controller
+        device.r_v = 20e-9
+        for _ in range(60):
+            controller.read_sample(17.0)
+        self.assertEqual((device.index, controller.overload_floor), (14, 14), "one try of 13, and back")
+        device.overloads_below = 0              # the later passes overload nothing
+        actions = []
+        for _pass in range(6):
+            device.latched = [1]                # ... but the set-up between the passes does
+            controller.new_pass()
+            self.assertEqual(controller.overload_floor, 0)
+            actions += [controller.read_sample(17.0)["auto_range"] for _ in range(8)]
+        # Six passes later it is on a finer range, not six codes coarser.
+        self.assertEqual([a for a in actions if "overload" in a], [])
+        self.assertLess(device.index, 14)
+        self.assertIn("new_pass", inspect.getsource(app.CombinedControlApp._prime_stfmr_lockin_scan))
 
     def test_without_new_pass_a_latched_overload_would_step_up(self):
         device, _step = self.make(14)
@@ -463,23 +481,6 @@ class ZurichTests(unittest.TestCase):
         self.assertEqual(app.NonLocalACController.MFLI_RANGE_FRESH_REASONS, ("initial", "STFMR frequency start"))
         import inspect
         self.assertIn("self.forget_mfli_range_guard()", inspect.getsource(app.NonLocalACController.configure_mfli))
-
-    def test_ppms_and_shv_forget_it_where_they_forget_the_sr830_floors(self):
-        """Review, 2026-11-16: a new excitation, pass or sweep forgot the
-        SR830 floors and left the Zurich held back."""
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        page.ppms_sr830_range_states = {}
-        page.zurich_controller = mock.Mock()
-        page._ppms_clear_sr830_range_floor()                              # a pass's or sweep's first point
-        page._ppms_clear_sr830_range_floor(("830_a",), zurich=True)       # a new excitation
-        self.assertEqual(page.zurich_controller.forget_mfli_range_guard.call_count, 2)
-        page._ppms_clear_sr830_range_floor(("830_a",))                    # one SR830 alone
-        self.assertEqual(page.zurich_controller.forget_mfli_range_guard.call_count, 2)
-        del page.zurich_controller                                        # a page without a Zurich
-        page._ppms_clear_sr830_range_floor()
-        import inspect
-        self.assertIn("_ppms_clear_sr830_range_floor(active_lockins, zurich=True)",
-                      inspect.getsource(app.CombinedControlApp._configure_ppms_transport_scan))
 
     def test_the_tick_off_reads_only(self):
         controller, firmware = self.make(0.001, 0.001)

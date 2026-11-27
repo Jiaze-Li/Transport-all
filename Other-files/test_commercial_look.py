@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from test_ppms_motor_debug import app
 
-PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app.py"
+PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "fmr" / "app.py"
 HEX = re.compile(r"#[0-9a-f]{6}")
 
 

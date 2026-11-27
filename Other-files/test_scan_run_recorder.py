@@ -22,7 +22,7 @@ from unittest import mock
 _HERE = Path(__file__).resolve().parent
 if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
-import transport.ppms.app as app
+import transport.fmr.app as app
 
 BOM = "﻿".encode("utf-8")
 
@@ -66,7 +66,7 @@ class RecorderFileTests(Folder):
         (prepared,) = self.lines(recorder)
         self.assertEqual(prepared["event"], "run_prepared")
         datetime.datetime.fromisoformat(prepared["timestamp"])
-        self.assertEqual((prepared["program"], prepared["app_version"]), ("Transport_PPMS.py", app.APP_VERSION))
+        self.assertEqual((prepared["program"], prepared["app_version"]), ("Transport_FMR.py", app.APP_VERSION))
         self.assertTrue(prepared["python_version"])
         self.assertEqual((prepared["file_name"], prepared["run_folder"], prepared["csv_path"], prepared["log_path"]),
                          ("B1", str(recorder.directory), str(recorder.csv_path), str(recorder.log_path)))
@@ -445,9 +445,186 @@ class ScanEndTests(unittest.TestCase):
                          "6221 zero FAILED; KEPCO not connected; 2400 zeroed; magnet zero FAILED: check them")
 
 
-# The comparison of the STFMR and SHHV pages' files with their old recorders
-# is on the main branch, with those pages.
+# SHHV's and STFMR's recorders as they were at 5380ea8, before the shared class,
+# kept here only to show that their files and log lines are unchanged.  A page
+# that changes its recorder on purpose updates or drops its comparison.
+class OldSTFMRScanRecorder:
+    FIELDNAMES = app.STFMRScanRecorder.FIELDNAMES
 
+    def __init__(self, parent, settings, name=""):
+        if name:
+            self.directory = app.make_scan_run_folder(Path(parent), name)
+            stem = self.directory.name
+        else:
+            stamp = app.datetime_module.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            stem = f"STFMR_field_scan_{stamp}"
+            self.directory = Path(parent) / stem
+        self.csv_path = self.directory / f"{stem}.csv"
+        self.log_path = self.directory / f"{stem}.log"
+        self.csv_handle = self.log_handle = None
+        self.rows_written = 0
+        self.closed = False
+        if not name:
+            self.directory.mkdir()
+        self.log_handle = self.log_path.open("x", encoding="utf-8")
+        self.csv_handle = self.csv_path.open("x", newline="", encoding="utf-8-sig")
+        self.writer = csv.DictWriter(self.csv_handle, fieldnames=self.FIELDNAMES)
+        self.writer.writeheader()
+        self._sync(self.csv_handle)
+        self.event("run_prepared", csv_path=str(self.csv_path), settings=settings)
+
+    @staticmethod
+    def _sync(handle):
+        handle.flush()
+        app.os.fsync(handle.fileno())
+
+    def event(self, name, **details):
+        if self.closed:
+            raise RuntimeError("STFMR log is closed")
+        self.log_handle.write(app.scan_log_line(name, details))
+        self._sync(self.log_handle)
+
+    def append_point(self, row):
+        if self.closed:
+            raise RuntimeError("STFMR live CSV is closed")
+        self.writer.writerow(row)
+        self._sync(self.csv_handle)
+        self.rows_written += 1
+
+    def close(self, outcome, **details):
+        if self.closed:
+            return []
+        errors = []
+        try:
+            self.event("run_finished", outcome=outcome, saved_points=self.rows_written, **details)
+        except BaseException as error:
+            errors.append(f"Failed to write the closing log entry: {error}")
+        self.closed = True
+        for name, handle in (("CSV", self.csv_handle), ("log", self.log_handle)):
+            self._sync(handle)
+            handle.close()
+        return errors
+
+
+class OldSHHVScanRecorder:
+    def __init__(self, parent, stem):
+        self.directory = app.make_scan_run_folder(Path(parent), stem)
+        name = self.directory.name
+        self.csv_path = self.directory / f"{name}.csv"
+        self.log_path = self.directory / f"{name}.log"
+        self.lock = threading.Lock()
+        self.failure = None
+        self.closed = False
+        for path, encoding in ((self.csv_path, "utf-8-sig"), (self.log_path, "utf-8")):
+            with path.open("x", encoding=encoding, newline=""):
+                pass
+
+    def _append(self, text):
+        with self.log_path.open("a", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            app.os.fsync(handle.fileno())
+
+    def event(self, name, **details):
+        with self.lock:
+            if self.closed:
+                return False
+            try:
+                self._append(app.scan_log_line(name, details))
+                return True
+            except Exception as error:
+                if self.failure is None:
+                    self.failure = error
+                return False
+
+    def check(self):
+        error = self.failure
+        if error is not None:
+            raise RuntimeError(f"The SHHV log could not be written ({error}); the scan stopped") from error
+
+    def close(self, outcome, **details):
+        with self.lock:
+            if self.closed:
+                return []
+            self.closed = True
+            try:
+                self._append(app.scan_log_line("run_finished", dict(outcome=outcome, **details)))
+            except Exception as error:
+                return [f"Failed to write the closing log entry: {error}"]
+            return []
+
+
+class FixedClock(datetime.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime.datetime(2026, 10, 18, 12, 34, 56, 789012)
+
+
+class UnchangedOutputTests(Folder):
+    """The same calls on the old and the shared recorders, on one fixed
+    clock, in two folders: the same files, byte for byte, and the same
+    answers."""
+
+    def setUp(self):
+        super().setUp()
+        clock = mock.patch.object(app, "datetime_module", types.SimpleNamespace(datetime=FixedClock))
+        clock.start()
+        self.addCleanup(clock.stop)
+
+    def run_both(self, script):
+        outputs = []
+        for kind, make in (("old", script.old), ("new", script.new)):
+            parent = self.folder / kind
+            parent.mkdir()
+            answers = script(make, parent)
+            files = {}
+            for path in sorted(parent.rglob("*")):
+                if path.is_file():
+                    # The folder's path, as it is written in the JSON lines.
+                    escaped = json.dumps(str(parent), ensure_ascii=False)[1:-1].encode("utf-8")
+                    files[path.relative_to(parent).as_posix()] = path.read_bytes().replace(escaped, b"<parent>")
+            outputs.append((answers, files))
+        (old_answers, old_files), (new_answers, new_files) = outputs
+        self.assertTrue(old_files)
+        self.assertEqual(sorted(new_files), sorted(old_files))
+        for name in old_files:
+            self.assertEqual(new_files[name], old_files[name], name)
+        self.assertEqual(new_answers, old_answers)
+        return old_files
+
+    def test_stfmr(self):
+        full = {name: index for index, name in enumerate(app.STFMRScanRecorder.FIELDNAMES)}
+        full.update(meter="MFLI", reference_valid=True, timestamp_iso="2026-10-18T12:34:56", mfli_input_overload=None)
+
+        def script(make, parent):
+            answers = []
+            for name in ("", "sweep A", "sweep A"):
+                recorder = make(parent, {"meter": "MFLI", "file_name": name, "angles_deg": [0.0, 5.0], "unit": "5°"},
+                                name=name)
+                answers.append(recorder.directory.name)
+                recorder.append_point(full)
+                recorder.append_point({"index": 3, "field_g": 0.0, "mfli_input_overload": False})
+                with self.assertRaises(ValueError):
+                    recorder.append_point({"index": 4, "not_a_column": 1})
+                recorder.event("startup_point_discarded", index=1, frequency_ghz=5.0)
+                answers.append(recorder.rows_written)
+                answers.append(recorder.close("completed", error=None, shutdown_errors=[], outputs_off=True))
+                answers.append(recorder.close("again"))
+                # Changed on purpose (2026-10-18, the convention): a log write
+                # no longer raises; a late one is refused (False), a failed
+                # one kept for check(), which the page calls after each record.
+                if make is OldSTFMRScanRecorder:
+                    with self.assertRaisesRegex(RuntimeError, "STFMR log is closed"):
+                        recorder.event("late")
+                else:
+                    self.assertFalse(recorder.event("late"))
+                    self.assertFalse(recorder.note("late"))
+            return answers
+        script.old, script.new = OldSTFMRScanRecorder, app.STFMRScanRecorder
+        files = self.run_both(script)
+        self.assertEqual(sorted(files), ["STFMR_field_scan_20261018_123456_789012/STFMR_field_scan_20261018_123456_789012"
+                                         + suffix for suffix in (".csv", ".log")]
+                         + [f"sweep A{tail}/sweep A{tail}{suffix}" for tail in ("", "_01") for suffix in (".csv", ".log")])
 
 if __name__ == "__main__":
     unittest.main()

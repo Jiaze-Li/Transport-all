@@ -62,26 +62,22 @@ class StfmrTests(unittest.TestCase):
         self.assertEqual(controller.sensitivity_index, 18, "no further step")
         self.assertEqual(sample["status"], 0, "the latched bit was read and dropped")
 
-class PpmsTests(unittest.TestCase):
-
-    def test_a_typed_temperature_rate_is_kept(self):
+    def test_zero_off_stops_a_running_fmr_scan_first(self):
         a = bare_app()
-        a.ppms_temperature_target_var, a.ppms_temperature_rate_var = Var("300"), Var("2")
-        # Set T reads the rate as typed above 10 K, and lowers it below.
-        with mock.patch.object(app.CombinedControlApp, "set_ppms_temperature",
-                               app.CombinedControlApp.set_ppms_temperature):
-            try:
-                a.set_ppms_temperature()
-            except Exception:
-                pass   # nothing connected here; only the rate matters
-        self.assertEqual(a.ppms_temperature_rate_var.get(), "2")
-        a.ppms_temperature_target_var.set("5")
-        try:
-            a.set_ppms_temperature()
-        except Exception:
-            pass
-        self.assertEqual(a.ppms_temperature_rate_var.get(), "1")
+        kepco = mock.Mock(connected=True)
+        a.stfmr_controllers = {"kepco": kepco}
+        a.stfmr_fmr_running, a.stfmr_frequency_running = True, False
+        order = []
+        a.stop_stfmr_fmr_scan = lambda button=None: order.append(("stop", button))
+        kepco.force_output_off.side_effect = lambda: order.append("off") or {}
+        a._apply_stfmr_kepco_readback = lambda result: None
+        a.stfmr_status_var = Var()
+        a.zero_stfmr_kepco_output()
+        self.assertEqual(order, [("stop", "KEPCO Zero / OFF"), "off"])
 
+
+class PpmsTests(unittest.TestCase):
+    pass
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,9 +13,6 @@ from transport.core import scan_lifecycle, scan_recording, scan_sequences
 
 
 class CoreImportsTests(unittest.TestCase):
-    def test_legacy_scan_helpers_are_shared(self):
-        self.assertIs(app.build_round_trip_values, scan_sequences.build_round_trip_values)
-        self.assertIs(app.ppms_scan_axis, scan_sequences.ppms_scan_axis)
 
     def test_scan_planning_unchanged(self):
         self.assertEqual(app.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
@@ -45,17 +42,6 @@ class CoreImportsTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 app.scan_file_stem(invalid)
 
-    def test_scan_close_handoff_is_shared(self):
-        self.assertIs(app.ScanCloseHandoff, scan_lifecycle.ScanCloseHandoff)
-        done = []
-        handoff = app.ScanCloseHandoff()
-        handoff.begin()
-        self.assertTrue(handoff.defer(lambda: done.append("closed")))
-        self.assertEqual(done, [])
-        handoff.end()
-        self.assertEqual(done, ["closed"])
-        self.assertFalse(handoff.defer(lambda: done.append("not scheduled")))
-
     def test_every_zero_is_attempted_after_a_failure(self):
         calls = []
         def fail():
@@ -78,7 +64,7 @@ class RecordingCompatibilityTests(unittest.TestCase):
             recorder = app.ScanRunRecorder(Path(tmp), "PPMS", "sample", {"mode": "Field"})
             try:
                 row = json.loads(recorder.log_path.read_text(encoding="utf-8").splitlines()[0])
-                self.assertEqual(row["program"], "Transport_PPMS.py")
+                self.assertEqual(row["program"], "Transport_FMR.py")
                 self.assertEqual(row["app_version"], app.APP_VERSION)
                 recorder.append_row({"field": 1, "voltage": 2})
                 self.assertEqual(recorder.rows_written, 1)

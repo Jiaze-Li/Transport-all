@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROGRAMS = ("transport/ppms/app.py", "Transport_PPMS.py")
+PROGRAMS = ("transport/fmr/app.py", "Transport_FMR.py")
 
 
 def undefined_constants(source):

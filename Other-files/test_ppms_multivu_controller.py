@@ -32,7 +32,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import transport.ppms.app as app
+import transport.fmr.app as app
 import transport.ppms as ppms_pkg
 import transport.ppms.controllers as controllers_pkg
 from transport.ppms.controllers.multivu import PPMSMultiVuReadbackController
@@ -47,14 +47,6 @@ class DummyStatusEnum(enum.Enum):
 
 class TestMultiVuControllerBasics(unittest.TestCase):
     """Test module exports, backward compatibility, and endpoint validation."""
-
-    def test_module_exports_and_backward_compatibility(self):
-        """Verify PPMSMultiVuReadbackController is exported identically across all access paths."""
-        self.assertIs(app.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
-        self.assertIs(ppms_pkg.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
-        self.assertIs(controllers_pkg.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
-        self.assertIn("PPMSMultiVuReadbackController", ppms_pkg.__all__)
-        self.assertIn("PPMSMultiVuReadbackController", controllers_pkg.__all__)
 
     def test_validate_endpoint_valid_inputs(self):
         """Verify validate_endpoint accepts valid IP addresses, hostnames, and strips whitespace."""

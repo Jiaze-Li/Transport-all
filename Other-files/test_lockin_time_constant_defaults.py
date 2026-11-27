@@ -26,7 +26,7 @@ for _path in (_HERE, _HERE.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import transport.ppms.app as app  # noqa: E402
+import transport.fmr.app as app  # noqa: E402
 import test_ppms_two_panels as two_panels  # noqa: E402  (its own copy of the program)
 
 
@@ -46,18 +46,6 @@ class DefaultsAreOneSecond(NoWindows):
         self.assertEqual(inspect.signature(app.NonLocalACController.configure_mfli)
                          .parameters["timeconstant_s"].default, 1.0)
 
-    def test_the_ppms_and_rte_zurich_box_shows_1(self):
-        """RTEPanel builds its Zurich row through PPMSPanel.__init__, so this
-        is the RT-E "TC (s)" box too."""
-        _parent, panel, controller = two_panels.TwoPanelTests.make_panel(None)
-        self.assertEqual(panel.zurich_timeconstant.get(), "1")
-        panel.zurich_harmonic.set("1+2+3")
-        panel.connect_ppms2_zurich()
-        self.assertEqual(controller.configure_mfli.call_args.kwargs["timeconstant_s"], 1.0)
-        controller.configure_second_harmonic.assert_called_once_with(1.0)
-        controller.configure_third_harmonic.assert_called_once_with(1.0)
-
-
 class OneTimeConstantSettle(NoWindows):
     pass
 
@@ -65,26 +53,21 @@ class OneTimeConstantSettle(NoWindows):
 class WaitsAtTheNewDefaults(NoWindows):
     """The rules are unchanged; these are their values at the 1 s defaults."""
 
-    def test_ppms_zurich_range_wait_falls_back_to_1_s(self):
-        """After a Zurich range change the PPMS / RT-E reading waits
-        max(0.2 s, 10 x TC); with no configured TC, 10 x the 1 s default."""
-        _parent, panel, controller = two_panels.TwoPanelTests.make_panel(None)
-        controller.mfli_config = {}
-        controller.read_stfmr_mfli.side_effect = [
-            {"auto_range": "RANGE 0.01->0.1 V", "X": 999},
-            {"auto_range": "", "X": 1e-6, "input_range_v": 0.1}]
-        clock = [0.0]
-
-        def sleep(seconds):
-            clock[0] += seconds
-
-        module = two_panels.app
-        with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                mock.patch.object(module.time, "sleep", sleep):
-            result = panel._read_ppms2_zurich_ranged(317.3, scanning=True)
-        self.assertEqual(result["X"], 1e-6)
-        self.assertAlmostEqual(clock[0], 10.0, places=6)
-
+    def test_stfmr_points(self):
+        """Since 2026-10-14 a point settles max(Settle s, 1 x the TC of every
+        lock-in read), the user's 1 x TC (7 x TC earlier that day); Wait/pt
+        (0.5 s) and the SR830's 5 x TC are gone.  With Acquire s 2 s a
+        default point takes 1 + 2 = 3 s (9 s at 7 x TC)."""
+        settle = app.CombinedControlApp._stfmr_lockin_effective_settle_s
+        settle_s, code = app.STFMR_LOCKIN_DEFAULT_SETTLE_S, app.STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE
+        mfli_tc = app.STFMR_LOCKIN_MFLI_TIME_CONSTANT_S
+        self.assertEqual(settle("SR830", settle_s, code, mfli_tc), 1.0)        # max(1 s, 1 x 1 s); 5 s before
+        self.assertEqual(settle("MFLI + SR830", settle_s, code, mfli_tc), 1.0)
+        self.assertEqual(settle("MFLI", settle_s, code, mfli_tc), 1.0)         # Wait/pt (0.5 s) before
+        self.assertEqual(settle("MFLI", settle_s, code, mfli_tc) + app.STFMR_LOCKIN_DEFAULT_ACQUIRE_S, 3.0)
+        # An MFLI range change: max(the settle, 10 x MFLI TC, 0.2 s) = 10 s,
+        # unchanged.
+        self.assertEqual(max(1.0, 10.0 * mfli_tc, 0.2), 10.0)
 
 def _step_seen(t_s, tau_s):
     """Fraction of a current step a 12 dB/oct (2nd-order) lock-in shows t_s
@@ -107,60 +90,24 @@ class DefaultSetupsAtTheNewTc(NoWindows):
     out-of-the-box setups read before a 1 s TC has settled (reviewed,
     user, 2026-10-14).  Only documented here; the waits are unchanged."""
 
-    def test_a_ranging_idle_ppms_read_holds_the_zurich_10_s_per_step(self):
-        """The idle readout (after Set 6221 with a current) ranges under the
-        Zurich lock, so Zurich actions and a scan Start's Zurich set-up wait
-        for it: up to 4 x 10 s at the 1 s default, 4 x 1 s at 0.1 s."""
-        for tc_s, held_s in ((app.PPMS_ZURICH_TIME_CONSTANT_S, 40.0), (0.1, 4.0)):
-            with self.subTest(tc_s=tc_s):
-                _parent, panel, controller = two_panels.TwoPanelTests.make_panel(None)
-                panel.connect_ppms2_zurich()
-                self.assertTrue(controller.mfli_connected)
-                clock = [0.0]
-
-                class TimedLock:
-                    """The Zurich RLock, timing each outermost hold."""
-                    def __init__(self):
-                        self.inner = threading.RLock()
-                        self.depth = 0
-                        self.held = []
-
-                    def __enter__(self):
-                        self.inner.acquire()
-                        if self.depth == 0:
-                            self.since = clock[0]
-                        self.depth += 1
-                        return self
-
-                    def __exit__(self, *exc):
-                        self.depth -= 1
-                        if self.depth == 0:
-                            self.held.append(clock[0] - self.since)
-                        self.inner.release()
-                        return False
-
-                controller.lock = TimedLock()
-                controller.mfli_config = {"timeconstant_s": tc_s}
-                controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: {
-                    "auto_range": "RANGE 0.01->0.1 V", "X": 999}
-                panel.ppms_idle_autorange_enabled = True
-                panel.ppms_6221_zero_output = False
-                panel.ppms_field_scan_running = False
-
-                def sleep(seconds):
-                    clock[0] += seconds
-
-                module = two_panels.app
-                with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                        mock.patch.object(module.time, "sleep", sleep):
-                    panel._poll_ppms2_zurich()
-                self.assertEqual(controller.read_stfmr_mfli.call_count, 4)
-                self.assertTrue(all(call.kwargs["auto_range"]
-                                    for call in controller.read_stfmr_mfli.call_args_list))
-                self.assertEqual(len(controller.lock.held), 1)
-                self.assertAlmostEqual(controller.lock.held[0], held_s, places=6)
-                self.assertIn("did not settle", panel.zurich_status.get())
-
+    def test_stfmr_mfli_alone_reads_after_one_time_constant(self):
+        """With Wait/pt (0.5 s) a default MFLI point saw 9 % of its step; it
+        now settles 1 x TC, then averages Acquire s (user, 2026-10-14; 7 x
+        TC earlier that day): an isolated step is about 57 % settled over the
+        2 s window (the README's 57.3 %), and a steady sweep lags by about
+        half a step (the README's 0.48)."""
+        tau = app.STFMR_LOCKIN_MFLI_TIME_CONSTANT_S
+        self.assertAlmostEqual(_step_seen(0.5, tau), 0.09, delta=0.005)
+        settle = app.CombinedControlApp._stfmr_lockin_effective_settle_s(
+            "MFLI", app.STFMR_LOCKIN_DEFAULT_SETTLE_S, app.STFMR_LOCKIN_SR830_TIME_CONSTANT_CODE, tau)
+        self.assertEqual(settle, 1.0)
+        acquire, interval = app.STFMR_LOCKIN_DEFAULT_ACQUIRE_S, app.STFMR_LOCKIN_SAMPLE_INTERVAL_S
+        readings = [settle + k * interval for k in range(int(round(acquire / interval)) + 1)]
+        self.assertEqual(len(readings), 21)
+        self.assertAlmostEqual(sum(_step_seen(t, tau) for t in readings) / 21, 0.573, delta=0.005)
+        period = settle + acquire
+        lag = sum(sum(1.0 - _step_seen(t + m * period, tau) for m in range(200)) for t in readings) / 21
+        self.assertAlmostEqual(lag, 0.48, delta=0.01)
 
 if __name__ == "__main__":
     unittest.main()

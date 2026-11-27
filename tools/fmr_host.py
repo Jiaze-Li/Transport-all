@@ -1,0 +1,169 @@
+"""The host window of the standalone FMR application, and what steers its
+extraction from the main program (tools/extract_app.py reads this file;
+it is not imported by the application).
+
+* Methods of ``CombinedControlApp`` below replace the main program's methods
+  of the same name: the window with the FMR, STFMR and Log pages only, and a
+  close that shuts down those pages only.
+* Top-level definitions below replace, or add to, the main program's.
+"""
+# What is extracted, and where to.
+APP_NAME = "the FMR and STFMR pages"
+OUTPUT = "transport/fmr/app.py"
+GLUE_FILES = ("ppms_package_glue.py",)
+# Everything named after the page is kept, used by kept code or not.
+KEEP_PATTERNS = ("(?i)stfmr", "(?i)(^|_)fmr(_|$)", "(?i)pna")
+
+# Pages and parts of the main program the FMR application does not have.
+# A name here is left out even where kept code still names it.
+DROP = (
+    "RTEPanel", "PPMSPanel", "create_motor_subsystem", "run_pco_dll_self_test",
+    "TkCameraWindow", "CameraAcquisitionWorker", "CameraVideoRecorder", "AutoFocusManager",
+    # The MOKE light page's LED controller and its methods of the main window
+    # (kept by name only: connect, disconnect ... are also instrument methods).
+    "LEDSerialController", "ChannelSettings", "LEDProtocolError", "set_connected_ui", "update_action_state",
+    "set_busy", "run_task", "connect", "disconnect", "load_state", "query_channel", "query_all", "all_off",
+)
+# Stand-ins for dropped names that kept code tests with isinstance().
+STUBS = {}
+# Statements of the main window's __init__ that start other pages.
+INIT_DROP = (
+    "self.nonlocal_vi_mfli_device_var.trace_add(",
+    "self._initialize_ppms_state()",
+    "self.refresh_ports()",
+    "self.set_connected_ui(",
+    "self.update_stage_controls()",
+    "self._update_magnet_controls()",
+    "self.root.after(250, self._magnet_poll_timer)",
+    "self.controller = LEDSerialController(",
+    "self.port_var = ", "self.channel_vars", "self.action_widgets",
+)
+# Names kept whatever the reachability says (helpers only tests call).
+KEEP = ("recycle_bin_available",)
+# Names the transport package already has: imported, not copied.
+PACKAGE_IMPORTS = {}
+# Lines after the imports.  _PROGRAM_FILE stands for the main program's
+# __file__ everywhere in the generated module: the entry script's place (the
+# repository root, or the unpacked folder of the .exe), where the assets,
+# DLLs kept beside the program and the helium history are looked for.
+EXTRA_IMPORTS = (
+    '_PROGRAM_FILE = str(Path(__MODULE_FILE__).resolve().parents[2] / "Transport_FMR.py")',
+    '# Installed with pip, the package is in site-packages: the folder the program is started in stands in.',
+    'if not getattr(sys, "frozen", False) and {"site-packages", "dist-packages"} & set(Path(_PROGRAM_FILE).parts):',
+    '    _PROGRAM_FILE = str(Path.cwd() / "Transport_FMR.py")',
+)
+# Literal text of the generated module to replace.  Its own taskbar identity,
+# so it does not group under the main program's button when both are open.
+REPLACE = {
+    "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportFMR'",
+}
+
+MAIN_WINDOW_TITLE = "Transport_FMR_NH"
+
+
+class CombinedControlApp:
+    def build_ui(self) -> None:
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+        self._configure_ui_styles()
+        notebook_pad = self._ui_px(3, 2)
+        self.notebook = ttk.Notebook(self.root, padding=(notebook_pad, notebook_pad, notebook_pad, 0))
+        self.notebook.grid(row=0, column=0, sticky="nsew")
+        self.stfmr_tab = ttk.Frame(self.notebook)
+        self.stfmr_lockin_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.stfmr_tab, text="FMR")
+        self.notebook.add(self.stfmr_lockin_tab, text="STFMR")
+        for tab in (self.stfmr_tab, self.stfmr_lockin_tab):
+            tab.rowconfigure(0, weight=1)
+            tab.columnconfigure(0, weight=1)
+        self.log_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.log_tab, text="Log")
+        self.log_tab.rowconfigure(0, weight=1)
+        self.log_tab.columnconfigure(0, weight=1)
+        self.build_stfmr_ui()
+        self.build_stfmr_lockin_ui()
+        self.led_log_frame = ttk.LabelFrame(self.log_tab, text="Program communication log", padding=5)
+        self.led_log_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.led_log_frame.rowconfigure(0, weight=1)
+        self.led_log_frame.columnconfigure(0, weight=1)
+        self.log_text = tk.Text(self.led_log_frame, height=5, wrap="none", state="disabled", font=(self.mono_font_family, self.ui_small_font_size), background="#fbfcfd", relief="flat", padx=5, pady=4)
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(self.led_log_frame, command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        xscrollbar = ttk.Scrollbar(self.led_log_frame, orient="horizontal", command=self.log_text.xview)
+        xscrollbar.grid(row=1, column=0, sticky="ew")
+        self.log_text.configure(yscrollcommand=scrollbar.set, xscrollcommand=xscrollbar.set)
+        self.log_display_paused = False
+        self.log_pending_lines = []
+        log_tools = ttk.Frame(self.led_log_frame)
+        log_tools.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self.log_pause_button = ttk.Button(log_tools, text="Pause refresh", command=self.toggle_log_refresh)
+        self.log_pause_button.pack(side="left")
+        ttk.Button(log_tools, text="Copy shown log", command=self.copy_displayed_log).pack(side="left", padx=5)
+        ttk.Button(log_tools, text="Save full log", command=self.save_communication_log).pack(side="left")
+        ttk.Label(log_tools, text="Pausing only freezes the display; logging continues and catches up on resume.").pack(side="left", padx=8)
+
+    def _redraw_active_tab(self) -> None:
+        return
+
+    def safe_close_hardware(self) -> None:
+        for label, operation in (("FMR", self.safe_close_stfmr), ("STFMR", self.safe_close_stfmr_lockin)):
+            try:
+                operation()
+            except BaseException as error:
+                try:
+                    self.append_log(f"{label} safe close incomplete: {error}")
+                except BaseException:
+                    pass
+
+    def request_close(self) -> None:
+        if self.closing:
+            return
+        confirmed = messagebox.askyesno(
+            "Close the FMR program",
+            "Exit the FMR / STFMR control program?\n\n"
+            "The program will stop a running scan, zero the magnet supply and switch its output off, switch the "
+            "RF source off and disconnect the instruments.\n\n"
+            "After exiting, still confirm every instrument output and power supply is in a safe state.",
+            icon="warning",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        self.closing = True
+        for name in ("stfmr_fmr_stop_event", "stfmr_frequency_stop_event", "stfmr_lockin_stop_event",
+                     "stfmr_field_stop_event", "stfmr_lockin_field_stop_event"):
+            event = self.__dict__.get(name)
+            if event is not None:
+                event.set()
+
+        def finish_window_close() -> None:
+            try:
+                self.root.destroy()
+            except tk.TclError:
+                pass
+
+        def close_everything() -> None:
+            try:
+                self.safe_close_hardware()
+            finally:
+                self.file_executor.shutdown(wait=False, cancel_futures=False)
+                self.executor.shutdown(wait=False, cancel_futures=True)
+                self.post_ui(finish_window_close)
+        threading.Thread(target=close_everything, name="fmr-safe-shutdown", daemon=True).start()
+
+
+def run() -> None:
+    """The installed command (pyproject.toml: transport-ppms)."""
+    main()
+
+
+def main() -> None:
+    root = tk.Tk()
+    app = CombinedControlApp(root)
+    root.after_idle(lambda: maximize_main_window(root))
+    try:
+        root.mainloop()
+    finally:
+        app.safe_close_hardware()
+        app.executor.shutdown(wait=False, cancel_futures=True)

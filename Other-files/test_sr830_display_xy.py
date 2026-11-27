@@ -61,14 +61,6 @@ class DisplayTests(unittest.TestCase):
         # DDEF i, j, k: CH1 j = 0 X (1 R); CH2 j = 0 Y (1 theta); k = 0 no ratio.
         self.assertEqual(app.SR830_DISPLAY_XY_COMMANDS, ("DDEF 1,0,0", "DDEF 2,0,0"))
 
-    def test_no_page_sets_r_and_theta_any_more(self):
-        source = inspect.getsource(app)
-        code = [line.split("#")[0] for line in source.splitlines()]
-        self.assertEqual([line.strip() for line in code if "DDEF 1,1" in line or "DDEF 2,1" in line], [])
-        # The commands and the Connect's helper, then ST-FMR's Start,
-        # Non-local's Start and the PPMS / SHHV Connect.
-        self.assertEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
-
     def test_stfmr_connect_shows_x_and_y(self):
         session = Session()
         self.visa(session)
