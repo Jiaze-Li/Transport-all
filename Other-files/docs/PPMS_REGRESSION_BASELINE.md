@@ -106,3 +106,7 @@ Base: `Transport-PPMS@c0c26345c9a55fa8ef576f1a3952b8190d3c3c8f`; original full-a
 - **GitHub Actions CI (`Jiaze-Li/Transport-all`, PR #2)**:
   - `829f29f2294245308ee7c26d0f88fd4b3adeba80`: `PPMS tests` ([run 46011810730](https://github.com/Jiaze-Li/Transport-all/actions/runs/46011810730)) — **success** (`linux` + `windows` full 51-module suite, `ppms_checks.py`, wheel build/install).
   - Final PR #2 checks: [PR #2 checks](https://github.com/Jiaze-Li/Transport-all/pull/2/checks) (triggered on push of this commit).
+
+## A2-3 targeted fix (follow-up to T1)
+
+Status: Pending implementation and GitHub Actions verification. Preserve the T1 evidence above as the pre-fix baseline; record the narrowly scoped fix, updated close-order assertions, CI evidence and remaining limitations here. No physical instrument acceptance is implied.
