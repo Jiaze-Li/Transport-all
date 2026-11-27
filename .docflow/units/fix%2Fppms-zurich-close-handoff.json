@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-27T16:38:32.346Z",
+  "updatedAt": "2026-11-27T16:40:37.812Z",
   "task": {
     "id": "fix/ppms-zurich-close-handoff",
     "branch": "fix/ppms-zurich-close-handoff",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T00:38:18+08:00",
     "status": "In progress",
     "current": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff",
-    "next": "",
+    "next": "Review Draft PR #3 and authorize marking Ready for review",
     "history": [],
     "commits": [
       {
