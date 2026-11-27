@@ -1,0 +1,905 @@
+"""The Switch scan (user, 2026-11-21: "add a Switch module containing 6221,
+830, magnet like SHHV has LS643, Kepco4886, LS475, the motor. 6221 pulse
+write function. to get a switching results like this fig", R_H against the
+pulse current at several fields).  Since 2026-11-22 it is the last mode of
+the "SHHV & Switch" page (user: "add the switch scan to the selection like
+angle + field2 scan"; "change the name of SHHV to SHHV & Switch. delete the
+before Switch module"), and the Switch page is gone.
+
+The real RTEPanel on test_rte_angle_end_to_end's harness: stand-in widgets,
+a real one-thread worker, a KEPCO and an LS475 whose field follows its
+current, and here a 6221 that records every command of the write pulse.  No
+VISA session, no window."""
+import threading
+import types
+import unittest
+from unittest.mock import patch
+
+import test_rte_angle_end_to_end as ete
+from test_ppms_motor_debug import app
+from test_rte_angle_scan import Recorder
+
+setUpModule, tearDownModule = ete.setUpModule, ete.tearDownModule
+
+
+class Fake6221:
+    """The 6221 as the write pulse uses it: every write kept, the waveform
+    settings read back as written, a finite train ending by itself."""
+
+    SETTINGS = ("SOUR:WAVE:AMPL", "SOUR:WAVE:OFFS", "SOUR:WAVE:FREQ", "CURR:COMP", "SOUR:WAVE:DUR:CYCL")
+
+    def __init__(self):
+        self.sent, self.values, self.output, self.event, self.trains = [], {}, 0, 0, []
+        self.sine, self.sines = False, []
+        self.readback = {}          # a setting's wrong read-back, for a test
+        self.compliance_after_train = False
+        self.read_in_compliance = False     # STAT:MEAS:COND? bit 3 with the read current on
+
+    def write(self, command):
+        self.sent.append(command)
+        name, _, value = command.partition(" ")
+        if name in self.SETTINGS:
+            self.values[name] = float(value)
+        elif command in ("OUTP ON", "OUTP OFF"):
+            self.output = int(command == "OUTP ON")
+        elif command == "SOUR:WAVE:FUNC SQU":
+            self.sine = False
+        elif command == "SOUR:WAVE:FUNC SIN":
+            self.sine = True
+        elif command == "SOUR:WAVE:INIT":
+            if self.sine:
+                self.output = 1         # the continuous read current
+                self.sines.append(dict(self.values))
+                return
+            self.trains.append(dict(self.values))
+            self.output = 0
+            if self.compliance_after_train:
+                self.event = 8
+
+    def query(self, command):
+        if command == "SYST:ERR?":
+            return '0,"No error"'
+        if command == "STAT:MEAS:EVEN?":
+            value, self.event = self.event, 0
+            return str(value)
+        if command == "STAT:MEAS:COND?":
+            return "8" if self.read_in_compliance and self.output else "0"
+        if command == "OUTP?":
+            return str(self.output)
+        name = command.rstrip("?")
+        return repr(self.readback.get(name, self.values[name]))
+
+
+class SwitchScan(ete.EndToEnd):
+    def make_switch(self, fields="100, -50", span=("-2", "2", "2"), width="30", pulses="1"):
+        """The page ready for a Switch scan: SR830-1 alone at the first
+        harmonic, 0.5 mA RMS read current, the KEPCO and an LS475 that reads
+        100 G per A of it, the fake 6221, and the field setting's waits made
+        tiny."""
+        h = self.make(meter="sr830")
+        panel = h.panel
+        self.assertIs(type(panel), app.RTEPanel)
+        panel.ppms_transport_current_var.set("0.5")
+        panel.ppms_transport_harmonic_a_var.set("1")
+        h.harmonic["830_a"] = 1
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Switch")
+            panel._rte_mode_changed()
+        # The pulses as typed in "Pulses mA:" (user, 2026-11-23: "change the
+        # switch current pulse input like the outer field").
+        panel.rte_switch_pulses_var.set(", ".join(f"{value:g}" for value in app.ppms_scan_axis(*map(float, span))))
+        # Round trip ticked: the scan tests go back through the list (off at
+        # the start in Switch since 2026-11-24).
+        panel.rte_round_trip.set(True)
+        panel.rte_outer_ranges["Switch"][0].set(fields)
+        panel.rte_pulse_width_us.set(width)
+        panel.rte_pulse_count.set(pulses)
+        h.gauss = ete.FollowingGauss(h.log, h.kepco)
+        panel.rte_controllers["gauss"] = h.gauss
+        for name, value in (("MAGNET_FIELD_SET_SETTLE_S", 0.0), ("MAGNET_FIELD_SET_READ_INTERVAL_S", 1e-4),
+                            ("MAGNET_FIELD_SET_GROUP_GAP_S", 1e-4), ("SWITCH_PULSE_DONE_MARGIN_S", 0.0)):
+            patcher = patch.object(app, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(app.time, "sleep", lambda _seconds: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        h.fake = Fake6221()
+        real_first, real_average = panel._acquire_ppms_first_point, panel._average_ppms_transport_sample
+
+        def traced(result):
+            trace = panel.__dict__.get("ppms_sample_trace")
+            if trace is not None:
+                trace.clear()
+                now = app.time.monotonic()
+                for offset, x in ((0.0, 1e-6), (1.0, 2e-6), (2.0, 3e-6)):
+                    trace.append((now + offset, {"sr830_8_x_v": x, "sr830_8_y_v": -x}))
+            return result
+        panel._acquire_ppms_first_point = lambda *args: traced(real_first(*args))
+        panel._average_ppms_transport_sample = lambda *args: traced(real_average(*args))
+        source = panel.ppms_instrument_controllers["6221"]
+        source.lock, source.instrument = threading.RLock(), h.fake
+
+        def query(key, command, count):
+            if key == "6221":
+                if command == "OUTP?":
+                    h.log.append(("6221", "OUTP?", threading.get_ident()))
+                return (float(h.fake.query(command)),)
+            if command == "FREQ?":      # the SR830's reference, locked to the read current
+                return (float(panel.ppms_transport_frequency_var.get()),)
+            if command == "LIAS?":
+                return (0.0,)
+            assert command == "HARM?", command
+            return (h.harmonic[key],)
+        panel._ppms_query_numbers = query
+        h.configured = []
+
+        def configure(settings):
+            h.configured.append(dict(settings))
+            h.fake.sent.append("FULL SET-UP")
+            h.fake.output = 1
+            h.log.append(("6221", "on", settings["current_rms_ma"], settings["frequency_hz"], threading.get_ident()))
+        panel._configure_ppms_transport_scan = configure
+
+        def off():
+            # The page's output off (SOUR:WAVE:ABOR, CURR 0, OUTP OFF), on the fake.
+            h.log.append(("6221", "off", threading.get_ident()))
+            for command in ("SOUR:WAVE:ABOR", "OUTP OFF"):
+                h.fake.write(command)
+            panel.post_ui(lambda: panel.ppms_transport_status_var.set("Transport acquisition: 6221 output OFF"))
+        panel._stop_ppms_transport_source = off
+        lines = panel.test_transport_lines = []
+        line, real_set = panel.ppms_transport_status_var, panel.ppms_transport_status_var.set
+
+        def record(value):
+            lines.append(value)
+            return real_set(value)
+        line.set = record
+        h.log.clear()
+        return h
+
+
+def status_lines(h):
+    """Every text the page set on its acquisition line, in order (the
+    harness keeps the UI callbacks it ran)."""
+    return h.panel.__dict__.get("test_transport_lines", [])
+
+
+class SwitchPageTests(unittest.TestCase):
+    def switch_page(self):
+        """The page with its Switch mode chosen."""
+        panel = ete.build_page(kepco=False)
+        panel.test_widgets = list(Recorder.made)
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Switch")
+            panel._rte_mode_changed()
+        return panel
+
+    def test_the_tab_is_shhv_and_switch_and_the_switch_page_is_gone(self):
+        """User, 2026-11-22: "change the name of SHHV to SHHV & Switch.
+        delete the before Switch module".  The tab's title only: the page's
+        texts, files, columns and controllers still say SHHV."""
+        self.assertEqual(app.RTE_TAB_TITLE, "SHHV & Switch")
+        self.assertFalse(hasattr(app, "SwitchPanel"))
+        self.assertEqual(app.RTEPanel.ppms_page_name, "SHHV")
+        with open(app.__file__, encoding="utf-8") as source:
+            text = source.read()
+        self.assertIn("self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)", text)
+        self.assertNotIn("switch_panel", text)
+        panel = self.switch_page()
+        self.assertEqual({c.owner_scope for c in panel.rte_controllers.values()}, {"SHHV"})
+        texts = {str(w.options.get("text", "")) for w in panel.test_widgets}
+        self.assertTrue({"Settings", "Scan", "6221 write", "Pulse µs", "Pulses"} <= texts, texts)
+        # All three SR830s and the Zurich keep their rows, the Zurich's
+        # harmonic row under the three.
+        self.assertEqual(panel.zurich_harmonic_combo.grid_options["row"], 3)
+        for key in app.PPMS_SR830_KEYS:
+            self.assertFalse(panel.ppms_device_resource_widgets[key].parent.grid_removed, key)
+
+    def test_the_settings_have_a_pulse_row_and_100_v_compliance(self):
+        """User, 2026-11-22: "add another pulse apply below here RMS
+        continuous settings. Change default compliance to 100V"."""
+        panel = ete.build_page(kepco=False)
+        self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
+        self.assertEqual(app.RTE_TRANSPORT_COMPLIANCE_V, 100.0)
+        # Pulse µs starts at 10 (user, 2026-11-24: "change default as
+        # this"; 20 earlier that day, 50 from 2026-11-22), one pulse per write.
+        self.assertEqual((panel.rte_pulse_width_us.get(), panel.rte_pulse_count.get()), ("10", "1"))
+        parts = panel.rte_apply_pulse_parts
+        self.assertEqual([w.options.get("text") for w, _options in parts if "text" in w.options],
+                         ["Pulse mA", "Pulse µs", "Pulses", "Apply pulse"])
+        entries = [w for w, _options in parts if "textvariable" in w.options]
+        self.assertEqual([w.options["textvariable"] for w in entries],
+                         [panel.rte_pulse_current_ma, panel.rte_pulse_width_us, panel.rte_pulse_count])
+        # Under the 6221's row, in its columns; the 6221's line and its OFF button one line down.
+        rms = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_transport_current_var)
+        params = rms.parent
+        self.assertEqual(rms.grid_options["row"], 2)
+        self.assertEqual({w.grid_options["in_"] for w, _options in parts}, {params})
+        self.assertEqual([(w.grid_options["row"], w.grid_options["column"]) for w, _options in parts],
+                         [(3, column) for column in range(7)])
+        live = next(w for w in Recorder.made if w.options.get("textvariable") is panel.ppms_current_live_var)
+        self.assertEqual((live.grid_options["row"], live.grid_options["column"]), (4, 0))
+        # The scan's own Pulse µs / Pulses boxes are the same two variables.
+        scan_entries = [w for w in panel.rte_pulse_widgets if "textvariable" in w.options]
+        self.assertEqual([w.options["textvariable"] for w in scan_entries],
+                         [panel.rte_pulse_width_us, panel.rte_pulse_count])
+        self.assertIs(parts[-1][0], panel.rte_apply_pulse_button)
+        self.assertEqual(parts[-1][0].options["command"], panel._rte_apply_pulse)
+
+    def test_the_connections_can_go_in_two_columns(self):
+        """User, 2026-11-22: "also two columns for the instruments connection
+        panel".  The supply's line, the LS475's reading and the field setting
+        are the box's children, shown in the rack until the window has the
+        width for two columns (GitHub's window tests check both layouts)."""
+        panel = ete.build_page(kepco=False)
+        rack = panel.rte_connection_widgets["newmark"][0].parent
+        field_set = panel.rte_set_field_button.parent
+        self.assertIs(field_set.parent, rack.parent)
+        self.assertIs(field_set.grid_options["in_"], rack)
+        self.assertEqual((field_set.grid_options["row"], field_set.grid_options["column"]), (2, 6))
+        lines = [w for w in Recorder.made if w.options.get("textvariable") in (panel.rte_field_live,
+                                                                                panel.rte_drive_live)]
+        self.assertEqual(sorted((w.grid_options["row"], w.grid_options["column"]) for w in lines), [(0, 6), (1, 6)])
+        self.assertEqual({w.grid_options["in_"] for w in lines}, {rack})
+        self.assertEqual({w.parent for w in lines}, {rack.parent})
+
+    def test_the_plots_have_a_row_of_x_and_y_against_time(self):
+        """User, 2026-11-21: "add a row to show the SR830 x signal vs time
+        pls"; 2026-11-22: "also add Y vs time": X and Y side by side, in the
+        row under the X and Y plots, with an equal share of the height; it
+        moves down when a second harmonic is measured.  No third pulse plot
+        (user, 2026-11-22: "delete R voltage against the pulse current"): X
+        and Y take the row's width; another mode has its phase plot again."""
+        panel = self.switch_page()
+        frame, canvases = panel.rte_time_frame, panel.rte_time_canvases
+        self.assertEqual(sorted(canvases), ["x", "y"])
+        self.assertIs(frame.parent, panel.ppms_plot_frame)
+        self.assertEqual({canvas.parent for canvas in canvases.values()}, {frame})
+        self.assertEqual([canvases[c].grid_options["column"] for c in ("x", "y")], [0, 1])
+        self.assertEqual(frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
+        self.assertFalse(frame.grid_removed)
+        # SR830-1 is at the second harmonic at the page's start-up.
+        self.assertEqual(frame.options["text"], "X and Y vs time — 2nd harmonic, SR830-1")
+        self.assertIs(panel.ppms_harmonic_plot_frames[(2, "theta")].grid_removed, True)
+        self.assertIs(panel.ppms_harmonic_plot_frames[(2, "x")].grid_removed, False)
+        self.assertIs(canvases["x"].ppms_compact_plot, True)
+        self.assertFalse(panel.ppms_harmonic_canvases[(2, "x")].ppms_hide_x_labels)
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
+            panel.ppms_transport_harmonic_a_var.set("1")
+            panel.ppms_lockin_selection["zurich"].set(True)
+            panel.zurich_harmonic.set("2")
+            panel._refresh_ppms2_plot_layout()
+            self.assertEqual(frame.grid_options["row"], 2)
+            self.assertEqual(frame.options["text"], "X and Y vs time — 1st harmonic, SR830-1")
+            self.assertEqual([call.args[2:5] for call in draw.call_args_list[-2:]],
+                             [("Time (s)", "X voltage", "Waiting for scan data"),
+                              ("Time (s)", "Y voltage", "Waiting for scan data")])
+        # Another mode: the third plot is the phase again.
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Angle+Field")
+            panel._rte_mode_changed()
+        self.assertEqual(panel.ppms_harmonic_plot_frames[(1, "theta")].options["text"], "1st harmonic θ — SR830-1")
+        self.assertIs(panel.ppms_harmonic_plot_frames[(1, "theta")].grid_removed, False)
+
+    def test_the_shhv_page_has_switch_as_its_last_mode(self):
+        """User, 2026-11-22: "change the name of SHHV scan to Scan, and add
+        the switch scan to the selection like angle + field2 scan".  The box
+        is "Scan"; Switch is the last choice; the page still starts on
+        Angle+Field, where the pulse row and the time row are off screen."""
+        panel = ete.build_page(kepco=False)
+        self.assertEqual((panel.ppms_page_name, panel.rte_scan_modes), ("SHHV", app.RTE_SCAN_MODES))
+        self.assertEqual(app.RTE_SCAN_MODES[-5:], ("Field+Angle", "Field+Current", "Switch", "Switch-loop", "Switch2"))
+        self.assertEqual(panel.rte_start_button.parent.parent.options["text"], "Scan")
+        self.assertEqual(panel.ppms_simple_mode.get(), "Angle+Field")
+        self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Angle+Field"][0])
+        pulse_row = panel.rte_pulse_widgets
+        self.assertEqual([w.options.get("text") for w in pulse_row[:2] + pulse_row[3:4]],
+                         ["6221 write", "Pulse µs", "Pulses"])
+        self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+        self.assertTrue(panel.rte_time_frame.grid_removed or not panel.rte_time_frame.grid_options)
+        self.assertIs(panel.rte_time_row_on, False)
+        before = (panel.ppms_transport_current_var.get(), panel.ppms_transport_harmonic_a_var.get())
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series") as draw:
+            # Switch chosen: its range, round trip, fields, the pulse row and
+            # the time row; the 6221 and lock-in boxes are not touched.
+            panel.ppms_simple_mode.set("Switch")
+            panel._rte_mode_changed()
+            # The user's settings (2026-11-25: "default use this setting in
+            # switch"): the loop 14 to -14 to 14 mA in 2 mA steps, field -12
+            # G, Settle s 30, Round trip off.
+            self.assertEqual(panel.rte_switch_pulses_var.get(), "14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -12, -14, -12, -10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14")
+            self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {False})
+            self.assertEqual(panel.rte_switch_pulse_list_widgets[0].options["text"], "Pulses mA:")
+            # Acquire s starts at 30 s in Switch (user, 2026-11-23: "set the
+            # default acquire time in switch as 30s").
+            self.assertEqual(panel.ppms_acquisition_time_var.get(), "30")
+            self.assertIs(panel.rte_round_trip.get(), False)
+            self.assertEqual((str(panel.ppms_field_scan_loop_var.get()), panel.ppms_field_scan_stable_var.get()), ("1", "30"))
+            # Cycles in Round trip's place (user, 2026-11-24: "change the
+            # round trip setting to cycle times and text input in the switch
+            # scan mode"): the Loops count, so the Loops box is off screen.
+            label, cycles = panel.rte_cycles_widgets
+            self.assertEqual((label.options["text"], cycles.options["textvariable"]), ("Cycles", panel.ppms_field_scan_loop_var))
+            self.assertEqual({w.grid_removed for w in panel.rte_cycles_widgets}, {False})
+            self.assertEqual([(w.grid_options["row"], w.grid_options["column"]) for w in panel.rte_cycles_widgets], [(2, 5), (2, 6)])
+            self.assertEqual({w.grid_removed for w in (*panel.rte_loops_widgets, panel.rte_round_trip_check)}, {True})
+            self.assertIs(panel.rte_outer_list_entry.options["textvariable"], panel.rte_outer_ranges["Switch"][0])
+            self.assertEqual(panel.rte_outer_ranges["Switch"][0].get(), "-12")
+            self.assertEqual((panel.rte_scan_units.get(), panel.rte_scan_note.get()),
+                             ("", "Switch: 6221 pulse mA; outer: field G"))
+            self.assertEqual({w.grid_removed for w in pulse_row}, {False})
+            self.assertEqual({w.grid_options["row"] for w in pulse_row}, {4})
+            self.assertEqual(panel.ppms_plot_axis, "pulse")
+            self.assertIs(panel.rte_time_row_on, True)
+            self.assertFalse(panel.rte_time_frame.grid_removed)
+            self.assertEqual(panel.rte_time_frame.grid_options, dict(row=1, column=0, columnspan=3, sticky="nsew"))
+            self.assertIn("Time (s)", {call.args[2] for call in draw.call_args_list})
+            self.assertEqual((panel.ppms_transport_current_var.get(), panel.ppms_transport_harmonic_a_var.get()),
+                             before)
+            # Another mode: both rows go again.
+            draw.reset_mock()
+            panel.ppms_simple_mode.set("Angle+Field")
+            panel._rte_mode_changed()
+            self.assertEqual({w.grid_removed for w in pulse_row}, {True})
+            self.assertEqual(panel.ppms_field_scan_stable_var.get(), "0.5", "Settle s back to 0.5 in the other modes")
+            self.assertEqual({w.grid_removed for w in panel.rte_cycles_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in (*panel.rte_loops_widgets, panel.rte_round_trip_check)}, {False})
+            self.assertEqual({w.grid_removed for w in panel.rte_switch_pulse_list_widgets}, {True})
+            self.assertEqual({w.grid_removed for w in panel.rte_range_widgets}, {False})
+            self.assertTrue(panel.rte_time_frame.grid_removed)
+            self.assertIs(panel.rte_time_row_on, False)
+            self.assertNotIn("Time (s)", {call.args[2] for call in draw.call_args_list})
+
+    def test_the_x_axis_ends_at_the_settings_not_at_a_rounded_tick(self):
+        """User, 2026-11-24: "the xlim should be the maxium of the settings
+        not the readings" (a field sweep to 205 G drawn to 300 G).  The SHHV
+        plots end at the scan's own range: the typed pulses or currents, or,
+        for a measured field (the settings are supply amps), the last field
+        read, not the next round tick."""
+        from test_nonlocal_keithley import Canvas
+        panel = ete.build_page(kepco=False)
+        field = {"a": [(-200.0, 1e-6), (0.0, 2e-6), (205.0, 3e-6)]}
+        canvas = Canvas(900, 300)
+        panel._draw_nonlocal_series(canvas, field, "Measured magnetic field (G)", "X voltage", "wait", x_range=(app.math.inf, -app.math.inf))
+        self.assertIn("200", canvas.texts())
+        self.assertNotIn("300", canvas.texts())
+        panel._draw_nonlocal_series(canvas, field, "Measured magnetic field (G)", "X voltage", "wait")
+        self.assertIn("300", canvas.texts(), "the other pages' plots round out as before")
+        pulses = {"b": [(6.0, 1e-6)]}
+        panel._draw_nonlocal_series(canvas, pulses, "6221 pulse current (mA)", "X voltage", "wait", x_range=(-10.0, 10.0))
+        self.assertTrue({"-10", "10"} <= set(canvas.texts()), canvas.texts())
+
+    def test_the_lockins_start_at_gpib_9_10_and_11(self):
+        """User, 2026-11-25: "default settings as the fig in SHHV & Switch"
+        (SR830-1 GPIB0::9, SR830-2 GPIB0::10, SR830-3 GPIB0::11).  The page
+        takes any GPIB address 1 to 30 for its SR830s; the PPMS page keeps
+        8, 9 and 10."""
+        panel = ete.build_page(kepco=False)
+        self.assertEqual([panel.ppms_resource_vars[key].get() for key in app.PPMS_SR830_KEYS],
+                         ["GPIB0::9::INSTR", "GPIB0::10::INSTR", "GPIB0::11::INSTR"])
+        self.assertEqual([panel._ppms_sr830_address(f"GPIB0::{a}::INSTR") for a in (1, 9, 11, 30)], [1, 9, 11, 30])
+        for bad in ("GPIB0::0::INSTR", "GPIB0::31::INSTR", "ASRL3::INSTR"):
+            with self.assertRaisesRegex(ValueError, "SR830 address must be GPIB0::<1 to 30>::INSTR"):
+                panel._ppms_sr830_address(bad)
+        self.assertEqual([app.PPMS_DEFAULT_RESOURCES[key] for key in app.PPMS_SR830_KEYS],
+                         ["GPIB0::8::INSTR", "GPIB0::9::INSTR", "GPIB0::10::INSTR"])
+        with self.assertRaisesRegex(ValueError, "8, 9 or 10"):
+            app.CombinedControlApp._ppms_sr830_address("GPIB0::11::INSTR")
+
+    def test_the_plan_is_the_pulse_loop(self):
+        plan = app.rte_scan_plan("Switch", "-2", "2", "2", 1, True)
+        self.assertEqual([value for _loop, _point, value in plan], [-2.0, 0.0, 2.0, 0.0, -2.0])
+        # Typed pulses, in the order typed, and back with Round trip.
+        typed = app.rte_pulse_list("10, -5;  0 7.5")
+        self.assertEqual(typed, (10.0, -5.0, 0.0, 7.5))
+        plan = app.rte_scan_plan("Switch", None, None, None, 2, True, values=typed)
+        self.assertEqual([value for _loop, _point, value in plan], [10.0, -5.0, 0.0, 7.5, 0.0, -5.0, 10.0] * 2)
+        self.assertEqual([value for _loop, _point, value in app.rte_scan_plan("Switch", None, None, None, 1, False, values=typed)], list(typed))
+        for text, message in (("", "type the pulse currents"), ("1, x", '"x" is not a number'), ("nan", "not a finite number")):
+            with self.assertRaisesRegex(ValueError, message):
+                app.rte_pulse_list(text)
+        with self.assertRaisesRegex(ValueError, r"within \+/-105 mA; 106 mA is outside"):
+            app.rte_scan_plan("Switch", None, None, None, 1, False, values=(0.0, 106.0))
+        with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
+            app.rte_scan_plan("Switch", "0", "106", "106", 1, False)
+
+
+class AveragingTraceTests(unittest.TestCase):
+    """The real averaging loop keeps each counted reading when the page asks
+    (ppms_sample_trace, the Switch scan's X and Y vs time, user,
+    2026-11-22), the mean is the mean of those readings, an overloaded one
+    is neither kept nor averaged, and a range change starts the window and
+    its trace again.  Without the request nothing is kept."""
+
+    def page(self, readings):
+        page = types.SimpleNamespace()
+        page.ppms_field_scan_stop_event = threading.Event()
+        page.closing = False
+        values = iter(readings)
+        page._read_ppms_transport_sample = lambda frequency, lockins, allow: dict(next(values))
+        return page
+
+    @staticmethod
+    def reading(x, **extra):
+        return dict({"sr830_8_x_v": x, "sr830_8_y_v": -x, "sr830_8_frequency_hz": 317.3,
+                     "sr830_8_reference_valid": True, "sr830_8_overload": False}, **extra)
+
+    def average(self, page, duration=0.12):
+        return app.CombinedControlApp._average_ppms_transport_sample(page, 317.3, ("830_a",), duration)
+
+    def test_the_trace_holds_the_counted_readings_of_the_window(self):
+        page = self.page([self.reading(1e-6, range_settle_s=0.01), self.reading(2e-6),
+                          self.reading(9e-6, sr830_8_overload=True)] + [self.reading(4e-6)] * 50)
+        page.ppms_sample_trace = [("stale", {})]
+        result = self.average(page)
+        trace = page.ppms_sample_trace
+        self.assertNotIn(("stale", {}), trace)
+        xs = [values["sr830_8_x_v"] for _at, values in trace]
+        self.assertEqual(xs[0], 2e-6, "the reading before the range change is not kept")
+        self.assertNotIn(9e-6, xs, "the overloaded reading is not kept")
+        self.assertEqual(result["sample_count"], len(trace))
+        self.assertAlmostEqual(result["sr830_8_x_v"], sum(xs) / len(xs))
+        self.assertEqual(sorted(trace[0][1]), ["sr830_8_x_v", "sr830_8_y_v"])
+        times = [at for at, _values in trace]
+        self.assertEqual(times, sorted(times))
+
+    def test_without_the_request_nothing_is_kept(self):
+        page = self.page([self.reading(1e-6)] * 50)
+        self.average(page, 0.05)
+        self.assertNotIn("ppms_sample_trace", page.__dict__)
+
+
+class SwitchScanTests(SwitchScan):
+    def test_each_point_is_written_with_a_pulse_then_read(self):
+        h = self.make_switch()
+        h.draw.reset_mock()         # the harness drew SHHV's Angle axes while it set the page up
+        self.start(h)
+        panel = h.panel
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV scan")
+        self.assertIn("Field, the OUTER loop: 2 fields in the order typed: +100, -50 G, each within ±2 G", question)
+        self.assertIn("6221 pulse current, the INNER loop: 5 pulses a loop in the order typed, -2, +0, +2 mA and back, "
+                      "1 loop(s). Largest pulse 2 mA.", question)
+        self.assertIn("one write of 1 pulse(s) of 30 µs at the point's current", question)
+        self.assertIn("then the read current on again, 0.5 mA RMS at 317.3 Hz", question)
+        self.assertIn("2 fields x 5 pulses x 1 harmonic pass(es) = 10 points.", question)
+        rows = self.rows(h)
+        self.assertEqual([(r["outer_target_field_g"], r["outer_field_index"], float(r["pulse_current_ma"]))
+                          for r in rows],
+                         [("100.0", "1", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)]
+                         + [("-50.0", "2", v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
+        self.assertEqual({(r["module"], r["scan_mode"]) for r in rows}, {("SHHV", "Switch")})
+        self.assertEqual([r["pulse_in_compliance"] for r in rows[:5]], ["False", "no pulse", "False", "no pulse", "False"])
+        # The latch before each pulse: the read current of the reading before (review, 2026-11-22).
+        self.assertEqual([r["read_in_compliance_before_pulse"] for r in rows[:5]], ["False", "", "False", "", "False"])
+        self.assertEqual({(float(r["pulse_width_s"]), r["pulse_count"]) for r in rows}, {(3e-5, "1")})
+        for r in rows:
+            self.assertAlmostEqual(float(r["measured_field_g"]), float(r["outer_target_field_g"]), delta=2.0)
+            self.assertAlmostEqual(float(r["sr830_8_x_over_i_ohm"]), float(r["sr830_8_x_v"]) / 0.5e-3)
+            self.assertEqual(r["6221_current_rms_ma"], "0.5")
+            # Each reading follows the read current's restart: 5 x the
+            # slowest lock-in's time constant, then Settle s (0 here).
+            self.assertGreater(float(r["slowest_lockin_tc_s"]), 0)
+            self.assertAlmostEqual(float(r["effective_settle_s"]), 5.0 * float(r["slowest_lockin_tc_s"]))
+        self.assertEqual(app.SWITCH_READ_SETTLE_TAUS, 5.0)
+        self.assertIn("(5 x ", question)
+        self.assertIn("then Settle s 0 s) of settling", question)
+        # Six trains (0 mA sends none), each the CIDWM pulse: a 50 % square
+        # of period 2 x 30 us, amplitude |I|/2, offset I/2, one cycle.
+        self.assertEqual(len(h.fake.trains), 6)
+        frequency = 1.0 / (2.0 * 30e-6)
+        for train, current_ma in zip(h.fake.trains, (-2.0, 2.0, -2.0) * 2):
+            self.assertAlmostEqual(train["SOUR:WAVE:AMPL"], abs(current_ma) * 1e-3 / 2.0)
+            self.assertAlmostEqual(train["SOUR:WAVE:OFFS"], current_ma * 1e-3 / 2.0)
+            self.assertAlmostEqual(train["SOUR:WAVE:FREQ"], frequency, delta=frequency * 1e-9)
+            self.assertEqual((train["SOUR:WAVE:DUR:CYCL"], train["CURR:COMP"]),
+                             (1.0, float(h.configured[0]["compliance_v"])))
+        # The scan's one full set-up (the 6221's reset) comes before any
+        # pulse; after each pulse the read current comes back without it.
+        sent = h.fake.sent
+        self.assertEqual(sent.count("FULL SET-UP"), 1)
+        self.assertEqual(sent[0], "FULL SET-UP")
+        self.assertNotIn("*RST", sent)
+        # One pulse's commands, in order, and nothing armed before every
+        # setting is written.
+        first = sent.index("SOUR:WAVE:ARM")
+        self.assertEqual(sent[first - 1], "SOUR:WAVE:DUR:CYCL 1")
+        self.assertEqual(sent[first:first + 3], ["SOUR:WAVE:ARM", "OUTP ON", "SOUR:WAVE:INIT"])
+        self.assertEqual(sent[sent.index("SOUR:WAVE:FUNC SQU") - 2:sent.index("SOUR:WAVE:FUNC SQU") + 2],
+                         ["SOUR:WAVE:ABOR", f"CURR:COMP {float(h.configured[0]['compliance_v']):.12g}",
+                          "SOUR:WAVE:FUNC SQU", "SOUR:WAVE:DCYC 50"])
+        # The read current after it: MS-fourState's sine, armed with the
+        # output off, on at INIT; ten times, once before every reading.
+        sine = sent.index("SOUR:WAVE:FUNC SIN")
+        self.assertEqual(sent[sine - 2:sine + 14], [
+            "SOUR:WAVE:ABOR", f"CURR:COMP {float(h.configured[0]['compliance_v']):.12g}", "SOUR:WAVE:FUNC SIN",
+            "SOUR:WAVE:FREQ 317.3", f"SOUR:WAVE:AMPL {2 ** 0.5 * 0.5e-3:.12e}", "SOUR:WAVE:OFFS 0",
+            "SOUR:WAVE:RANG BEST", "SOUR:WAVE:EXTR OFF", "SOUR:WAVE:DUR:CYCL INF",
+            f"SOUR:WAVE:PMAR {app.NONLOCAL_MARKER_PHASE_DEG:g}", f"SOUR:WAVE:PMAR:OLIN {app.NONLOCAL_MARKER_LINE}",
+            "SOUR:WAVE:PMAR:STAT ON", "OUTP OFF", "SOUR:WAVE:ABOR", "SOUR:WAVE:ARM", "SOUR:WAVE:INIT"])
+        self.assertEqual(len(h.fake.sines), 10, "the read current on again before every reading")
+        self.assertEqual(h.fake.output, 0, "off at the end")
+        # The acquisition line follows the read current (user, 2026-11-24:
+        # "fix the 6221 output OFF line too"): ON before each reading, OFF
+        # for each pulse and at the end.
+        shown = [text for text in status_lines(h) if text.startswith("Transport acquisition: 6221")]
+        self.assertEqual(shown.count("Transport acquisition: 6221 ON, 0.5 mA RMS at 317.3 Hz (read current)"), 10)
+        on = shown.index("Transport acquisition: 6221 ON, 0.5 mA RMS at 317.3 Hz (read current)")
+        self.assertTrue(any("OFF" in text for text in shown[:on]), shown[:on + 1])
+        self.assertIn("OFF", shown[-1])
+        # A pulse is never sent with the read current on: each train's
+        # commands start after an output read back off.
+        for index, command in enumerate(sent):
+            if command == "SOUR:WAVE:FUNC SQU":
+                before = sent[:index]
+                last_sine = max((i for i, c in enumerate(before) if c in ("SOUR:WAVE:INIT", "FULL SET-UP")), default=-1)
+                self.assertIn("SOUR:WAVE:ABOR", before[last_sine + 1:])
+        kinds = [entry[:2] for entry in h.log if entry[0] in ("6221", "lockins")]
+        self.assertEqual(kinds[:3], [("6221", "on"), ("6221", "off"), ("6221", "OUTP?")])
+        # Everything on the page's worker.
+        self.assertEqual({entry[-1] for entry in h.log}, {h.worker})
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Completed; KEPCO and 6221 zeroed")
+        events = ete.RunLogBase.events(h)
+        prepared = events[0]
+        self.assertEqual((prepared["mode"], prepared["plan"]["unit"], prepared["plan"]["points"]),
+                         ("Switch", "mA (6221 pulse)", 5))
+        self.assertEqual({k: prepared["pulse"][k] for k in ("width_s", "count")}, {"width_s": 3e-5, "count": 1})
+        self.assertEqual(prepared["outer"]["values"], [100.0, -50.0])
+        self.assertEqual(prepared["outer"]["order"], "outer first, in the order typed; the pulse loop inner")
+        pulses = [e for e in events if e["event"] == "pulse"]
+        self.assertEqual([(e["step_index"], e["pulse_current_ma"]) for e in pulses],
+                         [(1, v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)] + [(2, v) for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
+        self.assertEqual([e["target_field_g"] for e in events if e["event"] == "field_programmed"], [100.0, -50.0])
+        self.assertEqual(events[-1]["event"], "run_finished")
+        # The pulse plots in volts (user, 2026-11-22: "always use voltage in
+        # the X,Y vs current pulse plot"), X and Y only ("delete R voltage
+        # against the pulse current"); each point the mean of the Acquire s
+        # reading.
+        pulse_calls = [call for call in h.draw.call_args_list if call.args[2] == "6221 pulse current (mA)"]
+        self.assertEqual({call.args[3] for call in pulse_calls}, {"X voltage", "Y voltage"})
+        self.assertEqual({call.kwargs["auto_voltage_unit"] for call in pulse_calls}, {True})
+        self.assertEqual({call.kwargs["x_range"] for call in pulse_calls}, {(-2.0, 2.0)}, "the typed pulses' ends")
+        canvases = h.panel.ppms_harmonic_canvases
+        last_x = [call for call in pulse_calls if call.args[0] is canvases[(1, "x")]][-1]
+        saved = h.panel.ppms_field_scan_rows
+        self.assertEqual(sorted(v for points in last_x.args[1].values() for _x, v in points),
+                         sorted(r["sr830_8_x_v"] for r in saved))
+        self.assertFalse([call for call in pulse_calls if call.args[0] is canvases[(1, "theta")]])
+        # X and Y against time: every sample of each reading, a segment per
+        # reading (user, 2026-11-22: "it should show the voltage in the
+        # period not a single point"), on the time of the scan.
+        self.assertEqual(len(saved), 10)
+        for channel, sign in (("x", 1), ("y", -1)):
+            timed = [call for call in h.draw.call_args_list if call.args[0] is h.panel.rte_time_canvases[channel]][-1]
+            self.assertEqual(timed.args[2:4], ("Time (s)", f"{channel.upper()} voltage"))
+            series = timed.args[1]
+            self.assertEqual(sorted(series), sorted(f"SR830-1 #{index}" for index in range(1, 11)))
+            for points in series.values():
+                self.assertEqual([v for _t, v in points], [sign * 1e-6, sign * 2e-6, sign * 3e-6])
+                self.assertEqual([round(t - points[0][0], 6) for t, _v in points], [0.0, 1.0, 2.0])
+            starts = [series[f"SR830-1 #{index}"][0][0] for index in range(1, 11)]
+            self.assertEqual(starts, sorted(starts))
+        # And in the run folder's trace CSV, with each reading's means.
+        trace = h.panel.rte_switch_trace_path
+        self.assertEqual(trace.name, h.panel.rte_recorder.csv_path.stem + "_trace.csv") if h.panel.__dict__.get(
+            "rte_recorder") else self.assertTrue(trace.name.endswith("_trace.csv"))
+        with trace.open(encoding="utf-8", newline="") as handle:
+            lines = list(app.csv.reader(handle))
+        self.assertEqual(lines[0], ["time_s", "quantity", "value", "unit", "point"])
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 X"), 30)
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 Y"), 30)
+        self.assertEqual(sum(1 for line in lines if line[1] == "SR830 #8 mean X"), 10)
+        self.assertEqual({line[3] for line in lines[1:]}, {"V"})
+        self.assertEqual(lines[1][4], "#1 -2 mA")
+
+    def test_switch_loop_takes_start_end_step_and_loops_like_field(self):
+        """User, 2026-11-26: "add a switch-loop in the scan mode below switch
+        which input start, end, step, loops like field": the Switch scan
+        with its pulse currents from Start / End / Step mA, Loops and Round
+        trip instead of the typed list."""
+        h = self.make_switch(fields="100")
+        panel = h.panel
+        modes = list(app.RTE_SCAN_MODES)
+        self.assertEqual(modes[modes.index("Switch") + 1], "Switch-loop")
+        with patch.object(app.CombinedControlApp, "_draw_nonlocal_series"):
+            panel.ppms_simple_mode.set("Switch-loop")
+            panel._rte_mode_changed()
+        self.assertEqual([v.get() for v in panel.ppms_simple_range], ["14", "-14", "2"])
+        self.assertIs(panel.rte_round_trip.get(), True)
+        self.assertEqual(panel.rte_scan_units.get(), "6221 pulse mA")
+        self.assertEqual(panel.rte_scan_note.get(), "Switch-loop: pulse mA; outer: field G")
+        self.assertEqual(panel.rte_outer_label.get(), "Outer field G:")
+        self.assertEqual(panel.rte_outer_ranges["Switch-loop"][0].get(), "-12")
+        self.assertEqual(panel.ppms_plot_axis, "pulse")
+        self.assertEqual([v for _l, _p, v in app.rte_scan_plan("Switch-loop", "14", "-14", "2", 1, True)],
+                         [14.0 - 2 * i for i in range(15)] + [-12.0 + 2 * i for i in range(14)])
+        panel.ppms_simple_range[0].set("-2")
+        panel.ppms_simple_range[1].set("2")
+        panel.ppms_simple_range[2].set("2")
+        panel.ppms_field_scan_loop_var.set("2")
+        panel.ppms_field_scan_stable_var.set("0")
+        panel.rte_outer_ranges["Switch-loop"][0].set("100")
+        self.start(h)
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertTrue(question.startswith("Switch-loop scan."))
+        self.assertIn("6221 pulse current, the INNER loop: 5 pulses a loop from -2 mA to +2 mA (step 2 mA and back), "
+                      "2 loop(s). Largest pulse 2 mA.", question)
+        self.assertIn("1 fields x 10 pulses x 1 harmonic pass(es) = 10 points.", question)
+        rows = self.rows(h)
+        self.assertEqual([(r["scan_mode"], r["loop"], float(r["pulse_current_ma"])) for r in rows],
+                         [("Switch-loop", loop, v) for loop in ("1", "2") for v in (-2.0, 0.0, 2.0, 0.0, -2.0)])
+        self.assertEqual(len(h.fake.trains), 6, "0 mA sends no pulse")
+        prepared = ete.RunLogBase.events(h)[0]
+        self.assertEqual({k: prepared["plan"][k] for k in ("start", "end", "step", "unit", "loops", "round_trip")},
+                         {"start": "-2", "end": "2", "step": "2", "unit": "mA (6221 pulse)", "loops": 2, "round_trip": True})
+        self.assertEqual(prepared["outer"]["values"], [100.0])
+        self.assertTrue(panel.ppms_field_scan_status_var.get().startswith("Completed"))
+        # A pulse beyond the 6221's limit is refused before anything is sent.
+        with self.assertRaisesRegex(ValueError, r"6221 pulse currents must stay within \+/-105 mA; 106 mA is outside"):
+            app.rte_scan_plan("Switch-loop", "0", "106", "106", 1, False)
+
+    def test_x_and_y_vs_time_follow_the_window_as_it_is_read(self):
+        """User, 2026-11-24: "The X and Y signals versus time should be
+        displayed and updated in real time here."  While a Switch scan runs,
+        a 1 s timer draws the readings of the Acquire window being read
+        beside the saved ones; nothing new, nothing redrawn; the scan over,
+        the timer stops."""
+        h = self.make_switch()
+        panel = h.panel
+        started = app.time.monotonic() - 300.0
+        panel.ppms_field_scan_running, panel.ppms_active_scan_mode = True, "Switch"
+        panel.ppms_field_scan_started_at = started
+        panel.rte_switch_traces = [dict(index=1, pulse_ma=-2.0, harmonics={"8": 1}, times=[0.0, 1.0],
+                                        values=[{"sr830_8_x_v": 1e-6, "sr830_8_y_v": -1e-6}] * 2)]
+        panel.rte_switch_live = dict(index=2, harmonics={"8": 1})
+        panel.ppms_sample_trace = [(started + 305.0, {"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6})]
+        h.root.pending.clear()
+
+        def drawn(channel):
+            calls = [c for c in h.draw.call_args_list if c.args[0] is panel.rte_time_canvases[channel]]
+            return calls[-1].args[1] if calls else None
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        for channel, sign in (("x", 1), ("y", -1)):
+            series = drawn(channel)
+            self.assertEqual(sorted(series), ["SR830-1 #1", "SR830-1 #2"])
+            (at, value), = series["SR830-1 #2"]
+            self.assertAlmostEqual(at, 305.0, places=6)
+            self.assertEqual(value, sign * 5e-6)
+        self.assertEqual([delay for delay, _callback in h.root.pending], [1000])
+        panel.ppms_sample_trace.append((started + 305.4, {"sr830_8_x_v": 6e-6, "sr830_8_y_v": -6e-6}))
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        self.assertEqual([v for _at, v in drawn("x")["SR830-1 #2"]], [5e-6, 6e-6])
+        h.draw.reset_mock()
+        panel._rte_live_time_tick()
+        self.assertIsNone(drawn("x"), "no new reading, no redraw")
+        panel.ppms_field_scan_running = False
+        h.root.pending.clear()
+        panel._rte_live_time_tick()
+        self.assertEqual(h.root.pending, [])
+        # A scan's start sets the timer going.
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        self.start(h)
+        self.assertIn(h.panel._rte_live_time_tick, [callback for _delay, callback in h.root.pending])
+
+    def test_the_time_plot_never_keeps_a_live_trace_that_finishes_mid_redraw(self):
+        """Speed pass, 2026-11-25: finished traces' points are kept between
+        redraws; review: the worker may append the live trace while the x
+        plot is drawn, and its partial points must not be kept for the y
+        plot or later redraws."""
+        h = self.make_switch()
+        panel = h.panel
+        started = app.time.monotonic() - 300.0
+        panel.ppms_field_scan_running, panel.ppms_active_scan_mode = True, "Switch"
+        panel.ppms_field_scan_started_at = started
+        first = dict(index=1, pulse_ma=-2.0, harmonics={"8": 1}, times=[0.0, 1.0],
+                     values=[{"sr830_8_x_v": 1e-6, "sr830_8_y_v": -1e-6}] * 2)
+        panel.rte_switch_traces = [first]
+        panel.rte_switch_live = dict(index=2, harmonics={"8": 1})
+        panel.ppms_sample_trace = [(started + 305.0, {"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6})]
+        whole = dict(index=2, pulse_ma=-4.0, harmonics={"8": 1}, times=[5.0, 6.0],
+                     values=[{"sr830_8_x_v": 5e-6, "sr830_8_y_v": -5e-6}, {"sr830_8_x_v": 7e-6, "sr830_8_y_v": -7e-6}])
+        def finish(canvas, *args, **kwargs):
+            if canvas is panel.rte_time_canvases["x"] and len(panel.rte_switch_traces) == 1:
+                panel.rte_switch_traces.append(whole)      # the worker, during the x plot
+        h.draw.side_effect = finish
+        panel._redraw_switch_time_plot()
+        panel.ppms_field_scan_running, panel.ppms_sample_trace = False, None
+        h.draw.reset_mock()
+        panel._redraw_switch_time_plot()
+        for call in h.draw.call_args_list:
+            self.assertEqual(len(call.args[1]["SR830-1 #2"]), 2, "the whole trace, not the live part")
+        self.assertEqual(len(h.draw.call_args_list), 2)
+
+    def test_apply_pulse_sends_one_pulse_by_hand(self):
+        """User, 2026-11-22: "add another pulse apply below here RMS
+        continuous settings": the settings' Apply pulse sends the "6221
+        Pulse mA" current once, with the Pulse µs / Pulses boxes and the
+        Compliance V box, as the Switch scan sends each pulse; the 6221 is
+        off after it."""
+        h = self.make_switch()
+        panel = h.panel
+        # 10 mA at start-up (user, 2026-11-22: "default pulse 10 mA pls.").
+        self.assertEqual(panel.rte_pulse_current_ma.get(), "10")
+        self.assertEqual(panel.ppms_transport_compliance_var.get(), "100")
+        # 0 mA sends nothing, and says so.
+        panel.rte_pulse_current_ma.set("0")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertEqual(h.showerror.call_args.args[0], "SHHV pulse")
+        self.assertIn('Type the pulse current in the "Pulse mA" box beside Apply pulse', h.showerror.call_args.args[1])
+        h.askyesno.assert_not_called()
+        self.assertEqual(h.fake.sent, [])
+        # +5 mA, 50 µs, once.
+        h.showerror.reset_mock()
+        panel.rte_pulse_current_ma.set("5")
+        panel.rte_pulse_width_us.set("50")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        h.showerror.assert_not_called()
+        title, question = h.askyesno.call_args.args[:2]
+        self.assertEqual(title, "SHHV pulse")
+        self.assertIn("Send 1 pulse(s) of +5 mA, 50 µs each, from the 6221 now (compliance 100 V)?", question)
+        self.assertIn("a current set with Set 6221 ends", question)
+        self.assertEqual(len(h.fake.trains), 1)
+        train = h.fake.trains[0]
+        self.assertEqual((train["SOUR:WAVE:AMPL"], train["SOUR:WAVE:OFFS"], train["SOUR:WAVE:FREQ"],
+                          train["CURR:COMP"], train["SOUR:WAVE:DUR:CYCL"]), (2.5e-3, 2.5e-3, 1e4, 100.0, 1.0))
+        arm = h.fake.sent.index("SOUR:WAVE:ARM")
+        self.assertEqual(h.fake.sent[arm:arm + 3], ["SOUR:WAVE:ARM", "OUTP ON", "SOUR:WAVE:INIT"])
+        self.assertNotIn("SOUR:WAVE:FUNC SIN", h.fake.sent, "no read current after it")
+        self.assertNotIn("*RST", h.fake.sent)
+        self.assertEqual(h.fake.output, 0)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Pulse +5 mA x 1 (50 µs) sent; 6221 off")
+        self.assertIn("SHHV: Pulse +5 mA x 1 (50 µs) sent; 6221 off", h.logged)
+        self.assertIs(panel.ppms_environment_busy, False)
+        self.assertEqual(self.names(h, "6221")[-2:], [("6221", "off"), ("6221", "OUTP?")], "off, read back")
+        # A pulse that reaches the compliance says so.
+        h.fake.compliance_after_train = True
+        panel.rte_pulse_current_ma.set("-5")
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertEqual(panel.ppms_field_scan_status_var.get(),
+                         "Pulse -5 mA x 1 (50 µs) sent; the 6221 REACHED COMPLIANCE (100 V); 6221 off")
+        self.assertEqual(h.fake.trains[-1]["SOUR:WAVE:OFFS"], -2.5e-3)
+
+    def test_apply_pulse_that_fails_after_the_start_says_the_pulse_went_out(self):
+        """Review, 2026-11-22: an error after SOUR:WAVE:INIT was shown as a
+        plain failure, though the pulse had been delivered."""
+        h = self.make_switch()
+        panel = h.panel
+        panel.rte_pulse_current_ma.set("5")
+        real_query = panel._ppms_query_numbers
+
+        def query(key, command, count):
+            if key == "6221" and command == "OUTP?" and h.fake.trains and not h.fake.sent[-1].startswith("OUTP OFF"):
+                raise RuntimeError("VI_ERROR_TMO")
+            return real_query(key, command, count)
+        panel._ppms_query_numbers = query
+        panel._rte_apply_pulse()
+        self.pump(h)
+        message = h.showerror.call_args.args[1]
+        self.assertIn("The +5 mA pulse was started and has most likely been delivered, but its end was not "
+                      "confirmed: VI_ERROR_TMO. The 6221 has been switched off.", message)
+        self.assertEqual(len(h.fake.trains), 1)
+        self.assertEqual(h.fake.output, 0)
+        self.assertIs(panel.ppms_environment_busy, False)
+        # A failure before the start is the plain one.
+        h2 = self.make_switch()
+        h2.panel.rte_pulse_current_ma.set("5")
+        h2.fake.readback["SOUR:WAVE:AMPL"] = 9e-3
+        h2.panel._rte_apply_pulse()
+        self.pump(h2)
+        self.assertIn("6221 pulse amplitude readback mismatch", h2.showerror.call_args.args[1])
+        self.assertNotIn("most likely been delivered", h2.showerror.call_args.args[1])
+        self.assertEqual(h2.fake.trains, [])
+
+    def test_apply_pulse_is_refused_as_a_scan_pulse_is(self):
+        h = self.make_switch()
+        panel = h.panel
+        for current, width, pulses, message in (("200", "30", "1", "6221 current exceeds the software limit ±105 mA"),
+                                                ("5", "x", "1", "Pulse mA, Pulse µs and Compliance V must be numbers"),
+                                                ("5", "30", "0", "6221 pulse count must be between 1 and")):
+            with self.subTest(message=message):
+                panel.rte_pulse_current_ma.set(current)
+                panel.rte_pulse_width_us.set(width)
+                panel.rte_pulse_count.set(pulses)
+                panel._rte_apply_pulse()
+                self.pump(h)
+                self.assertIn(message, h.showerror.call_args.args[1])
+        # No to the question, the safety tick off, the 6221 not connected: nothing sent.
+        panel.rte_pulse_current_ma.set("5")
+        panel.rte_pulse_width_us.set("30")
+        panel.rte_pulse_count.set("1")
+        h.askyesno.return_value = False
+        panel._rte_apply_pulse()
+        self.pump(h)
+        h.askyesno.return_value = True
+        panel.ppms_control_safety_var.set(False)
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertIn("Tick the SHHV rack safety confirmation first", h.showerror.call_args.args[1])
+        panel.ppms_control_safety_var.set(True)
+        panel.ppms_instrument_controllers["6221"].connected = False
+        panel._rte_apply_pulse()
+        self.pump(h)
+        self.assertIn("Connect the Keithley 6221 first", h.showerror.call_args.args[1])
+        self.assertEqual(h.fake.sent, [])
+        self.assertEqual(h.fake.trains, [])
+
+    def test_a_setting_that_does_not_read_back_arms_nothing(self):
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        h.fake.readback["SOUR:WAVE:AMPL"] = 5e-3
+        self.start(h)
+        self.assertIn("6221 pulse amplitude readback mismatch: requested 0.001, read 0.005",
+                      h.showerror.call_args.args[1])
+        self.assertNotIn("SOUR:WAVE:ARM", h.fake.sent)
+        self.assertNotIn("OUTP ON", h.fake.sent)
+        self.assertEqual(h.fake.trains, [])
+        self.assertTrue(h.panel.ppms_field_scan_status_var.get().startswith("Failed: 6221 pulse amplitude"),
+                        h.panel.ppms_field_scan_status_var.get())
+        # The end still zeroes the 6221 and the KEPCO.
+        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
+
+    def test_compliance_during_a_pulse_is_saved_and_logged(self):
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        h.fake.compliance_after_train = True
+        self.start(h)
+        h.showerror.assert_not_called()
+        self.assertEqual([r["pulse_in_compliance"] for r in self.rows(h)], ["True", "True", "True"][:1])
+        self.assertTrue([line for line in h.logged if "SHHV: the 6221 reached compliance" in line
+                         and "+2 mA pulse" in line], h.logged)
+
+    def test_a_read_current_in_compliance_stops_the_scan_naming_it(self):
+        """Review, 2026-11-22: a real Switch scan ended "6221 hit compliance"
+        at a reading; the read current's own compliance is now named, with
+        the resistance it means, right after the read current is on again."""
+        h = self.make_switch(fields="100", span=("2", "2", "1"))
+        h.fake.read_in_compliance = True
+        self.start(h)
+        message = h.showerror.call_args.args[1]
+        self.assertIn("The 6221 is in compliance with the read current on (0.5 mA RMS, 0.707 mA peak, "
+                      "Compliance V 100 V): the sample and leads are above about 1.41e+05 Ω.", message)
+        self.assertEqual(self.rows(h), [], "no point read")
+        self.assertEqual(len(h.fake.trains), 1, "the pulse went out first")
+        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
+
+    def test_start_refuses_a_pulse_beyond_the_limits_before_anything_is_sent(self):
+        for span, width, pulses, message in (
+                (("0", "200", "100"), "30", "1", "6221 pulse currents must stay within +/-105 mA"),
+                (("-2", "2", "2"), "x", "1", "Pulse µs must be a number"),
+                (("-2", "2", "2"), "30", "0", "6221 pulse count must be between 1 and"),
+                (("-2", "2", "2"), "30", "1.5", "6221 pulse count must be an integer")):
+            with self.subTest(message=message):
+                h = self.make_switch(span=span, width=width, pulses=pulses)
+                self.start(h)
+                self.assertEqual(h.showerror.call_args.args[0], "SHHV scan parameters")
+                self.assertIn(message, h.showerror.call_args.args[1])
+                h.askyesno.assert_not_called()
+                self.assertEqual(h.fake.sent, [])
+                self.assertEqual(h.log, [])
+
+    def test_a_stop_during_the_loop_ends_it_zeroed(self):
+        h = self.make_switch(fields="100", span=("-2", "2", "1"))
+        panel = h.panel
+        real = panel._rte_switch_pulse
+
+        def pulse(pulse_ma, settings):
+            if pulse_ma == 0:
+                panel.ppms_field_scan_stop_event.set()
+            return real(pulse_ma, settings)
+        panel._rte_switch_pulse = pulse
+        self.start(h)
+        h.showerror.assert_not_called()
+        self.assertEqual([float(r["pulse_current_ma"]) for r in self.rows(h)], [-2.0, -1.0])
+        self.assertEqual(panel.ppms_field_scan_status_var.get(), "Stopped; KEPCO and 6221 zeroed")
+        self.assertEqual(self.names(h, "6221", "kepco")[-3:], ete.ZEROED)
+
+
+if __name__ == "__main__":
+    unittest.main()

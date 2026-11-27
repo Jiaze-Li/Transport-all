@@ -78,7 +78,7 @@ class RecordingCompatibilityTests(unittest.TestCase):
             recorder = app.ScanRunRecorder(Path(tmp), "PPMS", "sample", {"mode": "Field"})
             try:
                 row = json.loads(recorder.log_path.read_text(encoding="utf-8").splitlines()[0])
-                self.assertEqual(row["program"], "Transport_PPMS.py")
+                self.assertEqual(row["program"], "Transport_RT.py")
                 self.assertEqual(row["app_version"], app.APP_VERSION)
                 recorder.append_row({"field": 1, "voltage": 2})
                 self.assertEqual(recorder.rows_written, 1)

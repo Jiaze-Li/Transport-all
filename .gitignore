@@ -31,8 +31,8 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
-# The recipe of Transport_PPMS.exe is source, not PyInstaller output.
-!Other-files/packaging/Transport_PPMS.spec
+# The recipe of Transport_RT.exe is source, not PyInstaller output.
+!Other-files/packaging/Transport_RT.spec
 
 # Installer logs
 pip-log.txt

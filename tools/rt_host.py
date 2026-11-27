@@ -1,24 +1,24 @@
-"""The host window of the standalone PPMS application, and what steers its
+"""The host window of the standalone SHHV & Switch application, and what steers its
 extraction from the main program (tools/extract_app.py reads this file;
 it is not imported by the application).
 
 * Methods of ``CombinedControlApp`` below replace the main program's methods
-  of the same name: the window with the PPMS page and the log only, and a
-  close that shuts down the PPMS page only.
+  of the same name: the window with the SHHV & Switch page and the log only, and a
+  close that shuts down that page only.
 * Top-level definitions below replace, or add to, the main program's.
 """
 # What is extracted, and where to.
-PAGE_CLASS = "PPMSPanel"
-APP_NAME = "the PPMS page"
-OUTPUT = "transport/ppms/app.py"
+PAGE_CLASS = "RTEPanel"
+APP_NAME = "the SHHV & Switch page"
+OUTPUT = "transport/rt/app.py"
 GLUE_FILES = ("ppms_package_glue.py",)
 # Everything named after the page is kept, used by kept code or not.
-KEEP_PATTERNS = ("(?i)ppms",)
+KEEP_PATTERNS = ("(?i)(^|_)rte(_|$)", "(?i)shhv")
 
-# Pages and parts of the main program the PPMS application does not have.
+# Pages and parts of the main program the SHHV & Switch application does not have.
 # A name here is left out even where kept code still names it.
 DROP = (
-    "RTEPanel", "create_motor_subsystem", "run_pco_dll_self_test",
+    "create_motor_subsystem", "run_pco_dll_self_test",
     "TkCameraWindow", "CameraAcquisitionWorker", "CameraVideoRecorder", "AutoFocusManager",
     # The MOKE light page's LED controller and its methods of the main window
     # (kept by name only: connect, disconnect ... are also instrument methods).
@@ -47,18 +47,18 @@ PACKAGE_IMPORTS = {}
 # repository root, or the unpacked folder of the .exe), where the assets,
 # DLLs kept beside the program and the helium history are looked for.
 EXTRA_IMPORTS = (
-    '_PROGRAM_FILE = str(Path(__MODULE_FILE__).resolve().parents[2] / "Transport_PPMS.py")',
+    '_PROGRAM_FILE = str(Path(__MODULE_FILE__).resolve().parents[2] / "Transport_RT.py")',
     '# Installed with pip, the package is in site-packages: the folder the program is started in stands in.',
     'if not getattr(sys, "frozen", False) and {"site-packages", "dist-packages"} & set(Path(_PROGRAM_FILE).parts):',
-    '    _PROGRAM_FILE = str(Path.cwd() / "Transport_PPMS.py")',
+    '    _PROGRAM_FILE = str(Path.cwd() / "Transport_RT.py")',
 )
 # Literal text of the generated module to replace.  Its own taskbar identity,
 # so it does not group under the main program's button when both are open.
 REPLACE = {
-    "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportPPMS'",
+    "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportRT'",
 }
 
-MAIN_WINDOW_TITLE = "Transport_PPMS_NH"
+MAIN_WINDOW_TITLE = "Transport_RT_NH"
 
 
 class CombinedControlApp:
@@ -69,14 +69,14 @@ class CombinedControlApp:
         notebook_pad = self._ui_px(3, 2)
         self.notebook = ttk.Notebook(self.root, padding=(notebook_pad, notebook_pad, notebook_pad, 0))
         self.notebook.grid(row=0, column=0, sticky="nsew")
-        self.ppms_panel_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.ppms_panel_tab, text="PPMS")
+        self.rte_panel_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.rte_panel_tab, text=RTE_TAB_TITLE)
         self.log_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.log_tab, text="Log")
         self.log_tab.rowconfigure(0, weight=1)
         self.log_tab.columnconfigure(0, weight=1)
-        self.ppms_panel = PPMSPanel(self, self.ppms_panel_tab)
-        self.led_log_frame = ttk.LabelFrame(self.log_tab, text="Program communication log (PPMS / Zurich / instruments)", padding=5)
+        self.rte_panel = RTEPanel(self, self.rte_panel_tab)
+        self.led_log_frame = ttk.LabelFrame(self.log_tab, text="Program communication log", padding=5)
         self.led_log_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         self.led_log_frame.rowconfigure(0, weight=1)
         self.led_log_frame.columnconfigure(0, weight=1)
@@ -98,7 +98,7 @@ class CombinedControlApp:
         ttk.Label(log_tools, text="Pausing only freezes the display; logging continues and catches up on resume.").pack(side="left", padx=8)
 
     def _redraw_active_tab(self) -> None:
-        # The main program redraws other pages' plots here, never the PPMS page's.
+        # The main program redraws other pages' plots here, never this page's.
         return
 
     def safe_close_hardware(self) -> None:
@@ -106,7 +106,7 @@ class CombinedControlApp:
             self.safe_close_ppms()
         except BaseException as error:
             try:
-                self.append_log(f"PPMS safe close incomplete: {error}")
+                self.append_log(f"SHHV safe close incomplete: {error}")
             except BaseException:
                 pass
 
@@ -114,11 +114,10 @@ class CombinedControlApp:
         if self.closing:
             return
         confirmed = messagebox.askyesno(
-            "Close the PPMS program",
-            "Exit the PPMS control program?\n\n"
-            "The program will switch off the 6221 output and disconnect the external instruments. If a field scan "
-            "is running, it requests field zeroing first; otherwise it disconnects the PPMS client and keeps the "
-            "temperature and field setpoints.\n\n"
+            "Close the SHHV & Switch program",
+            "Exit the SHHV & Switch control program?\n\n"
+            "The program will stop a running scan and the stage, switch the 6221 (and the Avtech) off, zero the "
+            "magnet supply and disconnect the instruments. The stage stays where it is.\n\n"
             "After exiting, still confirm every instrument output and power supply is in a safe state.",
             icon="warning",
             parent=self.root,
@@ -126,13 +125,14 @@ class CombinedControlApp:
         if not confirmed:
             return
         self.closing = True
-        panel = self.__dict__.get("ppms_panel")
+        panel = self.__dict__.get("rte_panel")
         for owner in (self, panel):
             if owner is None:
                 continue
-            event = owner.__dict__.get("ppms_field_scan_stop_event")
-            if event is not None:
-                event.set()
+            for name in ("ppms_field_scan_stop_event", "rte_stage_stop_event"):
+                event = owner.__dict__.get(name)
+                if event is not None:
+                    event.set()
 
         def finish_window_close() -> None:
             try:
@@ -147,7 +147,7 @@ class CombinedControlApp:
                 self.file_executor.shutdown(wait=False, cancel_futures=False)
                 self.executor.shutdown(wait=False, cancel_futures=True)
                 self.post_ui(finish_window_close)
-        threading.Thread(target=close_everything, name="ppms-safe-shutdown", daemon=True).start()
+        threading.Thread(target=close_everything, name="rt-safe-shutdown", daemon=True).start()
 
 
 def run() -> None:

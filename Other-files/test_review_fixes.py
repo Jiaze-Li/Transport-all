@@ -63,6 +63,27 @@ class StfmrTests(unittest.TestCase):
         self.assertEqual(sample["status"], 0, "the latched bit was read and dropped")
 
 class PpmsTests(unittest.TestCase):
+    def test_rte_zero_off_acts_on_an_output_switched_on_elsewhere(self):
+        panel = app.RTEPanel.__new__(app.RTEPanel)
+        panel.ppms_field_scan_stop_event = threading.Event()
+        panel.rte_closed = False
+        kepco = mock.Mock()
+        panel.rte_controllers = {"kepco": kepco}
+
+        class Now:
+            def submit(self, function):
+                future = mock.Mock()
+                future.result.return_value = function()
+                future.add_done_callback.side_effect = lambda callback: callback(future)
+                return future
+
+        panel.ppms_executor = Now()
+        panel.post_ui = lambda callback: callback()
+        panel.rte_drive_live = Var()
+        panel._rte_zero()
+        kepco.force_output_off.assert_called_once()
+        kepco.zero_output.assert_not_called()
+        self.assertEqual(panel.rte_drive_live.get(), "KEPCO: zeroed and output OFF")
 
     def test_a_typed_temperature_rate_is_kept(self):
         a = bare_app()

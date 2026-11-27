@@ -26,7 +26,7 @@ for _path in (_HERE, _HERE.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import transport.ppms.app as app  # noqa: E402
+import transport.rt.app as app  # noqa: E402
 import test_ppms_two_panels as two_panels  # noqa: E402  (its own copy of the program)
 
 

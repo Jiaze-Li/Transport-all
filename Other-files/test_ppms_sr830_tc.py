@@ -286,6 +286,17 @@ class NoWindows(unittest.TestCase):
 
 
 class PageTests(NoWindows):
+    def test_the_zurich_row_says_tc_s_on_both_pages(self):
+        for build in (build_ppms_panel, build_rte_panel):
+            with self.subTest(page=build.__name__):
+                panel, ttk = build()
+                (name,) = [w for w in ttk.made if w.options.get("text") == "Zurich MFLI"]
+                row = [w.options.get("text") for w in name.master.children if w.kind == "Label"]
+                self.assertIn("TC (s)", row)
+                self.assertNotIn("Time constant s", self.texts(ttk))
+                # The entry beside it keeps the Zurich TC (its default is
+                # not this change's business).
+                self.assertIn(panel.zurich_timeconstant, [w.options.get("textvariable") for w in name.master.children])
 
     def test_one_sr830_tc_dropdown_defaults_to_1_s_with_the_stfmr_choices(self):
         panel, ttk = build_ppms_panel()
@@ -330,6 +341,16 @@ class PageTests(NoWindows):
         # address, Connect, Disconnect, lamp and 13-character status: the
         # cell, and the rack, keep their width (the CI GUI test measures it).
         self.assertEqual(len(row.children), 3)
+
+    def test_rte_has_no_sr830_tc_control(self):
+        panel, ttk = build_rte_panel()
+        self.assertNotIn("SR830 TC", self.texts(ttk))
+        for name in ("ppms_sr830_time_constant_var", "ppms_sr830_time_constant_combo"):
+            self.assertNotIn(name, panel.__dict__)
+        self.assertEqual(panel._ppms_sr830_time_constant_code(), 10)
+        panel._ppms_apply_sr830_time_constant()  # nothing to apply
+        self.assertFalse(panel.ppms_environment_busy)
+
 
 class ConnectTests(NoWindows):
     def connect(self, panel, key="830_a", label=None, keeps=None):
@@ -384,6 +405,17 @@ class ConnectTests(NoWindows):
         self.assertEqual(combo.options["state"], "readonly")
         self.assertEqual(panel.ppms_instrument_controllers["830_b"].instrument.writes,
                          connect_setup(10, harmonic=2))
+
+    def test_rte_connect_keeps_oflt_10(self):
+        panel, _ttk = build_rte_panel()
+        panel.ppms_resource_vars["830_a"].set("GPIB0::8::INSTR")
+        panel.connect_ppms_device("830_a")
+        controller = panel.ppms_instrument_controllers["830_a"]
+        self.assertTrue(controller.connected)
+        harmonic = panel._ppms_harmonic_value("830_a")
+        self.assertEqual(controller.instrument.writes, connect_setup(10, harmonic=harmonic))
+        self.error.assert_not_called()
+
 
 class ChangeTests(NoWindows):
     def connected_panel(self, keys=("830_a", "830_c")):
@@ -822,6 +854,30 @@ class ScanStartTimeConstantTests(NoWindows):
             self.configure(panel)
         self.assertNotIn("830_a", panel.ppms_sr830_time_constant_codes)
 
+    def test_rte_reads_it_too(self):
+        """RT-E has no such choice and no per-SR830 column, but each reading
+        waits LOCKIN_SETTLE_TAUS (1) of these time constants (user,
+        2026-10-14), so it reads
+        OFLT? at the scan start too: one query, the same writes."""
+        panel = self.connected(build_rte_panel)
+        sr830 = self.configure(panel)
+        self.assertEqual(sr830.writes, ["ILIN 0", "SYNC 0"], "the scan start's writes, unchanged")
+        self.assertEqual(sr830.queries.count("OFLT?"), 1)
+        self.assertLess(sr830.queries.index("RSLP?"), sr830.queries.index("OFLT?"))
+        self.assertLess(sr830.queries.index("OFLT?"), sr830.queries.index("FREQ?"), "before the 6221 starts")
+        self.assertEqual(panel.ppms_sr830_time_constant_codes["830_a"], 10, "what Connect set")
+        panel.thread_log.assert_not_called()
+
+    def test_an_rte_front_panel_change_is_seen_logged_and_waited_for(self):
+        panel = self.connected(build_rte_panel)
+        self.configure(panel, front_panel_code=12)
+        self.assertEqual(panel.ppms_sr830_time_constant_codes["830_a"], 12, "10 s, as the SR830 reads")
+        message = panel.thread_log.call_args.args[0]
+        self.assertTrue(message.startswith("SHHV SR830-1: the time constant reads 10 s (OFLT 12), "
+                                           "not the 1 s last set"), message)
+        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a",), False), (10.0, 10.0, "SR830-1"))
+
+
 class StartSettleTests(NoWindows):
     """The scan-start confirmation used to note a Settle s shorter than 5
     time constants of a 3 s or 10 s choice, and the scan itself was not
@@ -835,6 +891,19 @@ class StartSettleTests(NoWindows):
         if label is not None:
             panel.ppms_sr830_time_constant_var.set(label)
         return panel._ppms_lockin_settle(settle_s, lockins, False)
+
+    def test_every_choice_waits_1_time_constant_or_settle_s(self):
+        for label, code in app.STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
+            with self.subTest(label=label):
+                tau = app.SR830_TIME_CONSTANTS_S[code]
+                settle, slowest, meter = self.settle(label, 0.5)
+                self.assertEqual((slowest, meter), (tau, "SR830-1"))
+                self.assertAlmostEqual(settle, max(0.5, 1.0 * tau))
+        self.assertEqual(self.settle(None, 0.5)[0], 1.0, "the 1 s default: 1 s, not 0.5 s")
+        self.assertEqual(self.settle("3 s", 0.5)[0], 3.0, "a 3 s choice: 3 s")
+        self.assertEqual(self.settle("10 s", 100.0)[0], 100.0, "a longer Settle s is kept")
+        self.assertEqual(self.settle(None, 0.5, build=build_rte_panel)[0], 1.0, "SHHV: OFLT 10 = 1 s")
+        self.assertEqual(self.settle("10 s", 0.5, lockins=())[0], 0.5, "no lock-in: Settle s alone")
 
     def test_the_wait_is_in_the_scan_time_estimate(self):
         obj = app.CombinedControlApp.__new__(app.CombinedControlApp)

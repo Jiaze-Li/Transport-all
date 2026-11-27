@@ -8,11 +8,11 @@ import types
 import unittest
 from unittest.mock import patch
 
-# The standalone PPMS application's module, in the transport package.
+# The standalone SHHV & Switch application's module, in the transport package.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-source = ROOT / "transport" / "ppms" / "app.py"
+source = ROOT / "transport" / "rt" / "app.py"
 spec = importlib.util.spec_from_file_location("transport_motor_test", source)
 app = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = app

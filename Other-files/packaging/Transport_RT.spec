@@ -1,28 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller recipe for Transport_PPMS.exe: the standalone PPMS application
-# (Transport_PPMS.py and the transport package) as one Windows file that runs
+# PyInstaller recipe for Transport_RT.exe: the standalone SHHV & Switch application
+# (Transport_RT.py and the transport package) as one Windows file that runs
 # without Python.  It is the main program's recipe (Transport_all.spec, branch
-# main) without the camera, serial and OpenCV parts the PPMS page never uses.
+# main) with only the libraries this application uses.
 #
-# GitHub Actions builds it on every push to the branch Transport-PPMS
-# (.github/workflows/ppms-windows-exe.yml).  To build it by hand on a Windows PC,
+# GitHub Actions builds it on every push to the branch Transport-RT
+# (.github/workflows/rt-windows-exe.yml).  To build it by hand on a Windows PC,
 # from the repository root:
 #     py -3.11 -m pip install -r requirements.txt pyinstaller==6.22.3
-#     py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_PPMS.spec
-# The program is then dist\Transport_PPMS.exe.  With the environment variable
+#     py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_RT.spec
+# The program is then dist\Transport_RT.exe.  With the environment variable
 # TRANSPORT_ONE_FOLDER=1 it makes the one-folder build instead,
-# dist\Transport_PPMS\Transport_PPMS.exe with its libraries in _internal,
+# dist\Transport_RT\Transport_RT.exe with its libraries in _internal,
 # which starts faster (nothing is unpacked on each start).
 #
-# Still needed on the PC, outside the .exe: the vendor drivers and runtimes
-# (NI-VISA and GPIB, LabOne, MultiVu / QDInstrument), as for the .py program.
+# Still needed on the PC, outside the .exe: the instruments' vendor drivers and
+# runtimes, and DLLs kept beside the main program, as for the .py program.
 
 import os
 import re
-import sysconfig
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 from PyInstaller.utils.win32.versioninfo import (
     FixedFileInfo,
     StringFileInfo,
@@ -46,7 +45,7 @@ PUBLISHER = "HengNiu & ClaudeCode"
 # the copyright, so the publisher is named there too (user, 2026-11-12).
 COPYRIGHT = f"© 2026 {PUBLISHER}"
 VERSION = re.search(
-    r'^APP_VERSION = "(.+)"', (ROOT / "transport" / "ppms" / "app.py").read_text(encoding="utf-8"), re.M
+    r'^APP_VERSION = "(.+)"', (ROOT / "transport" / "rt" / "app.py").read_text(encoding="utf-8"), re.M
 ).group(1)
 VERSION_NUMBERS = tuple((list(map(int, re.findall(r"\d+", VERSION))) + [0, 0, 0, 0])[:4])
 
@@ -61,19 +60,11 @@ datas += copy_metadata("pyvisa")
 hiddenimports = collect_submodules("pyvisa") + collect_submodules("transport")
 # The program imports these by name at run time (importlib).
 hiddenimports += ["zhinst.core", "zhinst.utils"]
-# MultiPyVu, the optional PPMS backend, also loaded by name.
-multipyvu_datas, multipyvu_binaries, multipyvu_imports = collect_all("MultiPyVu")
-datas += multipyvu_datas
-binaries += multipyvu_binaries
-hiddenimports += multipyvu_imports
-# MultiPyVu refuses to import unless it finds pywin32.version.txt in
-# site-packages (sysconfig "platlib"), which inside the .exe is Lib/site-packages.
-datas.append((str(Path(sysconfig.get_path("platlib")) / "pywin32.version.txt"), "Lib/site-packages"))
 
 a = Analysis(
     # package_self_test.py runs first and does nothing unless the .exe is
-    # started with --package-self-test; then Transport_PPMS.py runs as usual.
-    [str(PACKAGING / "package_self_test.py"), str(ROOT / "Transport_PPMS.py")],
+    # started with --package-self-test; then Transport_RT.py runs as usual.
+    [str(PACKAGING / "package_self_test.py"), str(ROOT / "Transport_RT.py")],
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
@@ -102,12 +93,12 @@ version_info = VSVersionInfo(
                     "040904B0",  # U.S. English, Unicode
                     [
                         StringStruct("CompanyName", PUBLISHER),
-                        StringStruct("FileDescription", "Transport_PPMS"),
+                        StringStruct("FileDescription", "Transport_RT"),
                         StringStruct("FileVersion", VERSION),
-                        StringStruct("InternalName", "Transport_PPMS"),
+                        StringStruct("InternalName", "Transport_RT"),
                         StringStruct("LegalCopyright", COPYRIGHT),
-                        StringStruct("OriginalFilename", "Transport_PPMS.exe"),
-                        StringStruct("ProductName", "Transport_PPMS"),
+                        StringStruct("OriginalFilename", "Transport_RT.exe"),
+                        StringStruct("ProductName", "Transport_RT"),
                         StringStruct("ProductVersion", VERSION),
                     ],
                 )
@@ -117,7 +108,7 @@ version_info = VSVersionInfo(
     ],
 )
 common = dict(
-    name="Transport_PPMS",
+    name="Transport_RT",
     icon=str(ASSETS / f"{ICON}.ico"),
     version=version_info,
     console=False,  # a GUI program: no console window
@@ -128,6 +119,6 @@ common = dict(
 if os.environ.get("TRANSPORT_ONE_FOLDER") == "1":
     # One folder: the .exe and an _internal folder with the libraries and data.
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, **common)
-    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Transport_PPMS")
+    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Transport_RT")
 else:
     exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], runtime_tmpdir=None, **common)

@@ -1,18 +1,16 @@
-"""Layout checks of the standalone PPMS application for the cloud test
+"""Layout checks of the standalone SHHV & Switch application for the cloud test
 machines, with screenshots of its pages.
 
 Run on a GitHub runner, where Tk draws on a virtual display (Xvfb on Linux) or
 the runner's own desktop (Windows), so nothing appears on anyone's screen.  It
 never talks to instruments.
 
-    python Other-files/ci/ppms_checks.py --shots DIR
+    python Other-files/ci/rt_checks.py --shots DIR
 
 For each emulated lab screen it builds the whole application at 96 DPI,
-checks that the window is the PPMS program (its title, its two pages, the
-PPMS panel and its controllers), and reports any widget that sticks out past
+checks that the window is this program (its title and its pages), and reports any widget that sticks out past
 the page and any label, button or Zurich list entry whose text does not fit.
-It saves a screenshot of each page at the lab PC's windows, the PPMS page
-also with Field+Temperature chosen.
+It saves a screenshot of each page at the lab PC's windows.
 
 Exit status is 1 if the application does not build, a page is missing, or the
 log shows an error from building the page.  Clipped widgets and cut text are
@@ -34,7 +32,7 @@ SCREENS = (  # (screen width, height, window width or 0 for the program's own)
     (1920, 1080, 0),
     (1600, 1586, 0),
 )
-PAGES = ("PPMS", "Log")
+PAGES = ('SHHV & Switch', 'Log')
 
 
 def build(module, screen_w, screen_h, window_w):
@@ -184,7 +182,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shots", type=Path, help="folder for page screenshots")
     args = parser.parse_args()
-    import transport.ppms.app as module
+    import transport.rt.app as module
     failed = []
     for screen_w, screen_h, window_w in SCREENS:
         root, app, notebook = build(module, screen_w, screen_h, window_w)
@@ -193,10 +191,9 @@ def main():
             titles = tuple(notebook.tab(index, "text") for index in range(notebook.index("end")))
             if root.title() != module.MAIN_WINDOW_TITLE or titles != PAGES:
                 failed.append(f"window {root.title()!r} with pages {titles}")
-            panel = app.ppms_panel
-            if type(panel) is not module.PPMSPanel or not panel.ppms_instrument_controllers:
-                failed.append("no PPMS panel with its instrument controllers")
-            app.append_log("PPMS checks: the log page shows this line")
+            if type(app.rte_panel) is not module.RTEPanel or not app.rte_panel.rte_controllers:
+                failed.append("no SHHV & Switch panel with its instrument controllers")
+            app.append_log("SHHV & Switch checks: the log page shows this line")
             for name in PAGES:
                 tab = show(root, notebook, name)
                 clipped, cut, pairs = inspect(tab)
@@ -204,20 +201,20 @@ def main():
                 print(f"  {marker} {name:5s} layouts {pairs} | clipped {clipped or 'none'} | text cut {cut or 'none'}")
                 if args.shots and screen_w == 2560:
                     args.shots.mkdir(parents=True, exist_ok=True)
-                    shot = args.shots / f"{name}_{root.winfo_width()}px.png"
+                    shot = args.shots / f"{name.replace(' & ', '-').replace(' ', '_')}_{root.winfo_width()}px.png"
                     print(f"       screenshot: {screenshot(root, tab, shot)}")
-                    if name == "PPMS":
-                        # Every scan mode builds its rows; Field+Temperature is shot.
-                        was = panel.ppms_simple_mode.get()
-                        for mode in (*panel.ppms_scan_mode_combo.cget("values"), was):
+                    if name == "SHHV & Switch":
+                        # Every scan mode builds its rows; each is shot.
+                        panel, was = app.rte_panel, app.rte_panel.ppms_simple_mode.get()
+                        for mode in (*module.RTE_SCAN_MODES, was):
                             panel.ppms_simple_mode.set(mode)
-                            panel.ppms_scan_mode_combo.event_generate("<<ComboboxSelected>>")
+                            panel._rte_mode_changed()
                             root.update()
-                            if mode == "Field+Temperature":
-                                shot = args.shots / f"PPMS_Field-Temperature-mode_{root.winfo_width()}px.png"
+                            if mode != was:
+                                shot = args.shots / f"SHHV-Switch_{mode.replace('+', '-')}-mode_{root.winfo_width()}px.png"
                                 print(f"       screenshot: {screenshot(root, tab, shot)}")
             shown = app.log_text.get("1.0", "end")
-            if "PPMS checks: the log page shows this line" not in shown:
+            if "SHHV & Switch checks: the log page shows this line" not in shown:
                 failed.append("the log page did not take a line")
             for line in shown.splitlines():
                 if "Traceback" in line or "Error" in line:
@@ -228,7 +225,7 @@ def main():
             root.destroy()
     for problem in failed:
         print("FAIL " + problem)
-    print("PPMS CHECKS FAILED" if failed else "PPMS CHECKS OK")
+    print("SHHV & SWITCH CHECKS FAILED" if failed else "SHHV & SWITCH CHECKS OK")
     return 1 if failed else 0
 
 

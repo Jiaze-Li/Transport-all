@@ -990,6 +990,25 @@ class PlotTests(unittest.TestCase):
 class SHVUnchangedTests(unittest.TestCase):
     """The SHHV page (RTEPanel) inherits this code; it must not change."""
 
+    def test_the_shv_page_keeps_its_own_modes_and_methods(self):
+        import inspect
+        source = inspect.getsource(app.RTEPanel)
+        # Its own modes, Angle+Field and Angle+Current since 2026-10-18 (user).
+        # The page's own list, RTE_SCAN_MODES.
+        self.assertIn("values=self.rte_scan_modes", source)
+        self.assertIs(app.RTEPanel.rte_scan_modes, app.RTE_SCAN_MODES)
+        # Angle+Field is SHHV's own (user, 2026-11-17); Switch (user,
+        # 2026-11-22) and Switch2 (user, 2026-11-23) are the last choices; no
+        # frequency mode.
+        self.assertEqual(app.RTE_SCAN_MODES,
+                         ("Field", "Current", "Angle+Field", "Angle+Current", "Field+Angle", "Field+Current", "Switch", "Switch-loop", "Switch2"))
+        for name in ("Frequency", "PPMS_SCAN_MODES", "_ppms_frequency_scan_block", "_ppms_set_up_frequency",
+                     "_ppms_wait_zurich_reference", "reference_timeout_s", "frequency_settle_s"):
+            self.assertNotIn(name, source.replace("RTE_TRANSPORT_FREQUENCY_HZ", "").replace("Frequency Hz", ""))
+        for name in ("build_ppms_ui", "start_ppms_field_scan", "_redraw_ppms_transport_plot",
+                     "_update_ppms_control_ui", "_rte_mode_changed"):
+            self.assertIn(name, app.RTEPanel.__dict__, f"SHHV has its own {name}")
+
     def test_a_set_up_without_a_frequency_scan_keeps_the_8_s_lock(self):
         self.assertEqual(app.PPMS_TRANSPORT_REFERENCE_TIMEOUT_S, 8.0)
         rig = Rig(self, "Current", None, (1.0,), zurich=False)
