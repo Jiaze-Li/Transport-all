@@ -180,7 +180,7 @@ jobs:
         with:
           name: Transport_PPMS-windows-x64
           path: dist
-      - name: Replace the .exe in the release "Windows exe (newest main)"
+      - name: Replace the files of the release "PPMS Windows exe (newest Transport-PPMS)"
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -192,7 +192,7 @@ jobs:
           tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
           cat > notes.md <<EOF
           \`Transport_PPMS.exe\`: the PPMS page of Transport-all as a program of its own, for Windows 10/11
-          (64-bit), no Python needed and no Transport_PPMS needed. It is rebuilt from the newest
+          (64-bit), no Python needed and no Transport_all needed. It is rebuilt from the newest
           \`Transport-PPMS\` branch and replaced here after every push that passes its checks.
 
           - Commit: [\`${GITHUB_SHA:0:7}\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA), program version $version

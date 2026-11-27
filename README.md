@@ -61,6 +61,13 @@ Closing the window switches the 6221 output off and disconnects the
 instruments. If a field scan is running, it first asks the PPMS to zero the
 field.
 
+**Do not run it beside Transport_all (or another Transport program) on the
+same instruments.** Inside one program, a page cannot take an instrument
+another page is driving. Two programs do not know of each other: both could
+connect to the same 6221 or SR830, and closing one would switch the output
+off under the other's scan. Close the other program, or at least disconnect
+the shared instruments there, first.
+
 ## How it is put together
 
 | Part | What it holds |
@@ -124,9 +131,9 @@ python ci/run_suite.py
   at the lab PC's screen sizes and saves screenshots.
 
 GitHub runs all of it on Linux and Windows on every push
-([`.github/workflows/gui-tests.yml`](.github/workflows/gui-tests.yml)), and
+([`.github/workflows/ppms-tests.yml`](.github/workflows/ppms-tests.yml)), and
 builds and checks the .exe
-([`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml)).
+([`.github/workflows/ppms-windows-exe.yml`](.github/workflows/ppms-windows-exe.yml)).
 The tests open windows, so run them on GitHub rather than on a desk computer.
 
 Passing tests are not hardware acceptance: nothing here has been run on the

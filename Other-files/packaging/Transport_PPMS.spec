@@ -5,7 +5,7 @@
 # main) without the camera, serial and OpenCV parts the PPMS page never uses.
 #
 # GitHub Actions builds it on every push to the branch Transport-PPMS
-# (.github/workflows/build-windows.yml).  To build it by hand on a Windows PC,
+# (.github/workflows/ppms-windows-exe.yml).  To build it by hand on a Windows PC,
 # from the repository root:
 #     py -3.11 -m pip install -r requirements.txt pyinstaller==6.22.3
 #     py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_PPMS.spec

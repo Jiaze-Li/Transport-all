@@ -9,10 +9,11 @@ it is not imported by the application).
 """
 # What is extracted, and where to.
 PAGE_CLASS = "PPMSPanel"
+APP_NAME = "the PPMS page"
 OUTPUT = "transport/ppms/app.py"
 GLUE_FILES = ("ppms_package_glue.py",)
 # Everything named after the page is kept, used by kept code or not.
-KEEP_PATTERNS = ("ppms",)
+KEEP_PATTERNS = ("(?i)ppms",)
 
 # Pages and parts of the main program the PPMS application does not have.
 # A name here is left out even where kept code still names it.
@@ -47,7 +48,15 @@ PACKAGE_IMPORTS = {}
 # DLLs kept beside the program and the helium history are looked for.
 EXTRA_IMPORTS = (
     '_PROGRAM_FILE = str(Path(__MODULE_FILE__).resolve().parents[2] / "Transport_PPMS.py")',
+    '# Installed with pip, the package is in site-packages: the folder the program is started in stands in.',
+    'if not getattr(sys, "frozen", False) and {"site-packages", "dist-packages"} & set(Path(_PROGRAM_FILE).parts):',
+    '    _PROGRAM_FILE = str(Path.cwd() / "Transport_PPMS.py")',
 )
+# Literal text of the generated module to replace.  Its own taskbar identity,
+# so it does not group under the main program's button when both are open.
+REPLACE = {
+    "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportPPMS'",
+}
 
 MAIN_WINDOW_TITLE = "Transport_PPMS_NH"
 
@@ -89,11 +98,8 @@ class CombinedControlApp:
         ttk.Label(log_tools, text="Pausing only freezes the display; logging continues and catches up on resume.").pack(side="left", padx=8)
 
     def _redraw_active_tab(self) -> None:
-        if self.closing or self.notebook is None:
-            return
-        panel = self.__dict__.get("ppms_panel")
-        if panel is not None:
-            panel._request_plot_redraw()
+        # The main program redraws other pages' plots here, never the PPMS page's.
+        return
 
     def safe_close_hardware(self) -> None:
         try:
