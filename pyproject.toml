@@ -1,5 +1,5 @@
 # The standalone MOKE application as an installable package: Transport_MOKE.py
-# plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
+# plus the transport package beside it.  `pip install transport_moke-<version>-py3-none-any.whl`
 # adds the `transport-moke` command; `python Transport_MOKE.py` in a copied
 # folder works too.  The version follows APP_VERSION in transport/moke/app.py.
 [build-system]
