@@ -83,10 +83,10 @@ gained later.
 ### The application module is generated
 
 `transport/ppms/app.py` is derived from the main program by
-[`tools/extract_ppms_app.py`](tools/extract_ppms_app.py):
+[`tools/extract_app.py`](tools/extract_app.py):
 
 ```bash
-python tools/extract_ppms_app.py /path/to/main/Transport_all.py
+python tools/extract_app.py tools/ppms_host.py /path/to/main/Transport_all.py
 ```
 
 Starting from the PPMS panel, it keeps every function, class, constant and

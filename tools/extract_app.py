@@ -1,27 +1,39 @@
-"""Derive the standalone PPMS application from the main program.
+"""Derive a standalone application for one page of the main program.
 
-    python tools/extract_ppms_app.py <path to main's Transport_all.py>
+    python tools/extract_app.py <host file> <path to main's Transport_all.py>
 
-writes ``transport/ppms/app.py``: the PPMS page of Transport_all.py with only
-the code it reaches, on a small host window of its own (tools/ppms_host.py).
+    python tools/extract_app.py tools/ppms_host.py ../main/Transport_all.py
+
+writes the module the host file names (``OUTPUT``): the page class it names
+(``PAGE_CLASS``) with only the code it reaches, on a small host window of its
+own.
 
 How it decides what to keep (name reachability, on the syntax tree):
 
-* Roots: the ``PPMSPanel`` class whole, the host's methods and ``main``.
+* Roots: the page class whole, the host's methods and ``main``.
 * A top-level function, class or constant is kept when its name is used in
-  kept code (as a name, an attribute or a string that is an identifier).
-* ``CombinedControlApp``, the base of the page, is pruned method by method
-  with the same rule, and its ``__init__`` statement by statement: an
-  assignment ``self.x = ...`` stays only when ``x`` is used in kept code.
+  kept code as a name (or as a string that is an identifier).
+* ``CombinedControlApp``, the base of the page, is pruned method by method:
+  a method is kept when kept code uses its name as an attribute
+  (``self.name``, ``panel.name``) or as a string.  A local variable of the
+  same name does not keep it.  Its ``__init__`` is pruned statement by
+  statement: ``self.x = ...`` stays only when ``x`` is used as an attribute.
+* Every definition whose name contains one of ``KEEP_PATTERNS`` is kept, used
+  or not (the page's own helpers that only tests call).
 * Everything named in ``DROP`` is left out even when it is named in kept
-  code (pages that are not PPMS); ``STUBS`` gives the few names the kept code
-  still mentions a harmless stand-in.
+  code (other pages); ``STUBS`` gives a name kept code still mentions a
+  harmless stand-in.
 * Names the transport package already has (Jiaze Li's modules) are not
-  copied: the app imports them (``PACKAGE_IMPORTS``).
+  copied: the app imports them (``PACKAGE_IMPORTS``, in the glue file).
 
 Matching by name keeps too much rather than too little: a method of another
 page stays when a kept method has an attribute of the same name.  The report
 printed at the end lists what was kept, so those can be added to ``DROP``.
+
+The host file's settings: PAGE_CLASS, OUTPUT, GLUE_FILES, KEEP_PATTERNS, DROP,
+STUBS, INIT_DROP, KEEP, PACKAGE_IMPORTS, EXTRA_IMPORTS.  Its other top-level
+definitions replace, or add to, the main program's; the methods of its
+``class CombinedControlApp`` replace that class's.
 """
 from __future__ import annotations
 
@@ -31,21 +43,20 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-OUTPUT = HERE.parent / "transport" / "ppms" / "app.py"
-HOST_FILES = (HERE / "ppms_host.py", HERE / "ppms_package_glue.py")
-# Everything named after the page is kept, used by kept code or not.
-KEEP_PATTERN = "ppms"
 APP_CLASS = "CombinedControlApp"
-PAGE_CLASS = "PPMSPanel"
+SETTINGS = ("DROP", "STUBS", "INIT_DROP", "PACKAGE_IMPORTS", "KEEP", "EXTRA_IMPORTS", "PAGE_CLASS", "OUTPUT",
+            "GLUE_FILES", "KEEP_PATTERNS")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def load_host():
-    """The host file: replacement methods of the app class, replacement or new
-    top-level definitions, and the lists that steer the extraction."""
+def load_host(host: Path):
+    """The host file and the glue files it names: replacement methods of the
+    app class, replacement or new top-level definitions, and the settings
+    that steer the extraction."""
     methods, top, settings = {}, {}, {}
-    for path in HOST_FILES:
-        load_host_file(path, methods, top, settings)
+    load_host_file(host, methods, top, settings)
+    for name in settings.get("GLUE_FILES", ()):
+        load_host_file(host.parent / name, methods, top, settings)
     return methods, top, settings
 
 
@@ -62,9 +73,11 @@ def load_host_file(path, methods, top, settings):
             top[node.name] = "\n".join(lines[first_line(node) - 1:node.end_lineno])
         elif isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
             name = node.targets[0].id
-            if name in ("DROP", "STUBS", "INIT_DROP", "PACKAGE_IMPORTS", "KEEP", "EXTRA_IMPORTS"):
+            if name in SETTINGS:
                 value = ast.literal_eval(node.value)
-                if isinstance(value, dict):
+                if isinstance(value, str):
+                    settings[name] = value
+                elif isinstance(value, dict):
                     settings.setdefault(name, {}).update(value)
                 else:
                     settings[name] = tuple(settings.get(name, ())) + tuple(value)
@@ -77,15 +90,32 @@ def first_line(node) -> int:
     return min([node.lineno, *(d.lineno for d in decorators)])
 
 
-def names_in(node) -> set[str]:
-    found = set()
+class Names(set):
+    """Identifiers used in code; ``attrs`` is the subset used as attributes
+    (or as strings, which getattr and __dict__ lookups take)."""
+
+    def __init__(self, names=(), attrs=()):
+        super().__init__(names)
+        self.attrs = set(attrs)
+
+    def add_all(self, other) -> bool:
+        before = len(self), len(self.attrs)
+        self.update(other)
+        self.attrs.update(getattr(other, "attrs", ()))
+        return before != (len(self), len(self.attrs))
+
+
+def names_in(node) -> Names:
+    found = Names()
     for item in ast.walk(node):
         if isinstance(item, ast.Name):
             found.add(item.id)
         elif isinstance(item, ast.Attribute):
             found.add(item.attr)
+            found.attrs.add(item.attr)
         elif isinstance(item, ast.Constant) and isinstance(item.value, str) and IDENTIFIER.match(item.value):
             found.add(item.value)
+            found.attrs.add(item.value)
         elif isinstance(item, ast.Global):
             found.update(item.names)
     return found
@@ -107,34 +137,37 @@ def bound_names(node) -> set[str]:
     return set()
 
 
-def self_targets(statement) -> set[str] | None:
-    """The attributes of self (and local names) an __init__ statement assigns,
-    or None when it is not a plain assignment."""
+def self_targets(statement):
+    """(attributes of self, local names) an __init__ statement assigns, or
+    None when it is not a plain assignment."""
     if isinstance(statement, ast.Assign):
         targets = statement.targets
     elif isinstance(statement, ast.AnnAssign):
         targets = [statement.target]
     else:
         return None
-    found = set()
+    attrs, local = set(), set()
     for target in targets:
         for item in ast.walk(target):
             if isinstance(item, ast.Attribute) and isinstance(item.value, ast.Name) and item.value.id == "self":
-                found.add(item.attr)
+                attrs.add(item.attr)
             elif isinstance(item, ast.Name) and item.id != "self":
-                found.add(item.id)
-    return found
+                local.add(item.id)
+    return attrs, local
 
 
 def main(argv) -> int:
-    if len(argv) != 2:
+    if len(argv) != 3:
         print(__doc__)
         return 2
-    source_path = Path(argv[1])
+    host_path, source_path = Path(argv[1]).resolve(), Path(argv[2])
     source = source_path.read_text(encoding="utf-8")
     lines = source.split("\n")
     tree = ast.parse(source)
-    host_methods, host_top, settings = load_host()
+    host_methods, host_top, settings = load_host(host_path)
+    page_class = settings["PAGE_CLASS"]
+    output = HERE.parent / settings["OUTPUT"]
+    keep_patterns = tuple(settings.get("KEEP_PATTERNS", ()))
     drop = set(settings.get("DROP", ()))
     stubs = dict(settings.get("STUBS", {}))
     init_drop = tuple(settings.get("INIT_DROP", ()))
@@ -167,50 +200,43 @@ def main(argv) -> int:
     kept_top: set[int] = set()            # ids of kept top-level nodes
     kept_methods: set[str] = {"__init__", *host_methods}
     kept_init: set[int] = set()
-    referenced: set[str] = {PAGE_CLASS, APP_CLASS, *keep_always, *host_top}
-    referenced |= {name for name in (*top_defs, *app_methods) if KEEP_PATTERN in name.lower()}
-    for name, sub in host_trees.items():
-        referenced |= names_in(sub)
-    for name, sub in host_top_trees.items():
-        referenced |= names_in(sub)
-    for node in app_other:
-        referenced |= names_in(node)
-    referenced |= names_in(ast.Module(body=init.args.defaults + [init.args], type_ignores=[]))
+    forced = {page_class, APP_CLASS, *keep_always, *host_top}
+    forced |= {name for name in (*top_defs, *app_methods) if any(pattern in name.lower() for pattern in keep_patterns)}
+    referenced = Names(forced, forced)
+    for sub in (*host_trees.values(), *host_top_trees.values(), *app_other):
+        referenced.add_all(names_in(sub))
+    referenced.add_all(names_in(ast.Module(body=init.args.defaults + [init.args], type_ignores=[])))
 
     changed = True
     while changed:
         changed = False
-        usable = referenced - drop
-        for name in list(usable):
+        for name in list(referenced - drop):
             if name in host_top or name in packaged:
                 continue
             for node in top_defs.get(name, ()):
                 if id(node) not in kept_top:
                     kept_top.add(id(node))
-                    if not isinstance(node, (ast.Try, ast.If)):
-                        new = names_in(node)
-                        if not new <= referenced:
-                            referenced |= new
+                    referenced.add_all(names_in(node))
                     changed = True
+        for name in list(referenced.attrs - drop):
             if name in app_methods and name not in kept_methods:
                 kept_methods.add(name)
-                referenced |= names_in(app_methods[name])
+                referenced.add_all(names_in(app_methods[name]))
                 changed = True
         for statement in init.body:
             if id(statement) in kept_init or init_statement_dropped(statement):
                 continue
             targets = self_targets(statement)
-            if targets is None or targets & usable:
+            if targets is None or targets[0] & (referenced.attrs - drop) or targets[1] & (referenced - drop):
                 kept_init.add(id(statement))
-                referenced |= names_in(statement)
-                changed = True
+                changed = referenced.add_all(names_in(statement)) or True
 
     # ---- write -----------------------------------------------------------
     out: list[str] = []
-    out.append('"""The standalone PPMS application: the PPMS page of Transport_all.py on its own.')
+    out.append(f'"""A standalone application: the {page_class} page of Transport_all.py on its own.')
     out.append("")
-    out.append(f"Generated by tools/extract_ppms_app.py from {source_path.name}; the host window is")
-    out.append("tools/ppms_host.py.  Change those and run the tool again rather than editing this file.")
+    out.append(f"Generated by tools/extract_app.py from {source_path.name}; the host window is")
+    out.append(f"tools/{host_path.name}.  Change those and run the tool again rather than editing this file.")
     out.append('"""')
     used = referenced - drop
     report = {"functions": [], "classes": [], "constants": 0, "methods": sorted(kept_methods)}
@@ -287,8 +313,9 @@ def main(argv) -> int:
     # folders down, in the package, so its own location stands in for it.
     result = re.sub(r"\b__file__\b", "_PROGRAM_FILE", result).replace("__MODULE_FILE__", "__file__")
     ast.parse(result)
-    OUTPUT.write_text(result, encoding="utf-8")
-    print(f"{OUTPUT.relative_to(HERE.parent)}: {result.count(chr(10))} lines (from {len(lines)})")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(result, encoding="utf-8")
+    print(f"{output.relative_to(HERE.parent)}: {result.count(chr(10))} lines (from {len(lines)})")
     print(f"classes kept ({len(report['classes'])}): {', '.join(report['classes'])}")
     print(f"functions kept: {len(report['functions'])}; constants kept: {report['constants']}")
     print(f"{APP_CLASS} methods kept: {len(kept_methods)} of {len(app_methods)}; __init__ statements {len(kept_init)} of {len(init.body)}")

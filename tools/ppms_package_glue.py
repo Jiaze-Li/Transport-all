@@ -1,7 +1,7 @@
 """How the standalone PPMS application uses the transport package (Jiaze Li's
 modules, 2026-11): the definitions here replace the main program's of the
 same name, so the shared logic comes from the package instead of a copy.
-tools/extract_ppms_app.py reads this file; the application does not import it.
+tools/extract_app.py reads this file; the application does not import it.
 
 Each wrapper keeps the main program's name and signature and hands the work
 to the package with this application's own limits.  They are the wrappers of

@@ -262,6 +262,17 @@ class FolderRuleTests(Folders):
                 call()
         self.assertTrue((self.tmp / "real/data.csv").exists())
 
+    @unittest.skipIf(sys.platform == "win32", "Windows has a Recycle Bin")
+    def test_there_is_no_recycle_bin_off_windows(self):
+        self.make("s", files=("s/data.csv",))
+        self.assertFalse(app.recycle_bin_available(self.tmp))
+        self.assertIsNone(app.recycle_bin_item_count(self.tmp))
+        with self.assertRaisesRegex(OSError, "no Recycle Bin"):
+            app.move_folder_to_recycle_bin(self.tmp / "s")
+        with self.assertRaisesRegex(ValueError, "only an empty folder can be deleted"):
+            app.folder_delete_question(self.tmp / "s")
+        self.assertTrue((self.tmp / "s/data.csv").exists())
+
     def test_where_the_dialog_opens(self):
         self.make("raw/SRO16")
         with mock.patch.object(app, "_FOLDER_DIALOG_LAST_DIRECTORY", ""):

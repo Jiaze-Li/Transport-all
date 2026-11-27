@@ -1,5 +1,5 @@
 """The host window of the standalone PPMS application, and what steers its
-extraction from the main program (tools/extract_ppms_app.py reads this file;
+extraction from the main program (tools/extract_app.py reads this file;
 it is not imported by the application).
 
 * Methods of ``CombinedControlApp`` below replace the main program's methods
@@ -7,6 +7,13 @@ it is not imported by the application).
   close that shuts down the PPMS page only.
 * Top-level definitions below replace, or add to, the main program's.
 """
+# What is extracted, and where to.
+PAGE_CLASS = "PPMSPanel"
+OUTPUT = "transport/ppms/app.py"
+GLUE_FILES = ("ppms_package_glue.py",)
+# Everything named after the page is kept, used by kept code or not.
+KEEP_PATTERNS = ("ppms",)
+
 # Pages and parts of the main program the PPMS application does not have.
 # A name here is left out even where kept code still names it.
 DROP = (
@@ -30,8 +37,8 @@ INIT_DROP = (
     "self.controller = LEDSerialController(",
     "self.port_var = ", "self.channel_vars", "self.action_widgets",
 )
-# Names kept whatever the reachability says.
-KEEP = ()
+# Names kept whatever the reachability says (helpers only tests call).
+KEEP = ("recycle_bin_available",)
 # Names the transport package already has: imported, not copied.
 PACKAGE_IMPORTS = {}
 # Lines after the imports.  _PROGRAM_FILE stands for the main program's
