@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-27T16:38:32.346Z",
+  "task": {
+    "id": "fix/ppms-zurich-close-handoff",
+    "branch": "fix/ppms-zurich-close-handoff",
+    "title": "fix/ppms-zurich-close-handoff",
+    "task": "Development branch: fix/ppms-zurich-close-handoff",
+    "started": "2026-11-28T00:38:18+08:00",
+    "status": "In progress",
+    "current": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff",
+    "next": "",
+    "history": [],
+    "commits": [
+      {
+        "sha": "0e2edca1ae0dd4a453867f044854235f1c9b8f2b",
+        "branch": "fix/ppms-zurich-close-handoff",
+        "timestamp": "2026-11-28T00:38:18+08:00",
+        "message": "fix(ppms): defer Zurich MFLI disconnect until scan close handoff"
+      }
+    ],
+    "pr": null,
+    "completed": null,
+    "outcome": null
+  }
+}
