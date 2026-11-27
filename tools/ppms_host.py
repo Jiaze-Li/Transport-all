@@ -107,6 +107,70 @@ class CombinedControlApp:
         # The main program redraws other pages' plots here, never the PPMS page's.
         return
 
+    def safe_close_ppms(self) -> None:
+        for name in ("rte_panel", "ppms_panel"):
+            panel = self.__dict__.get(name)
+            if panel is None:
+                continue
+            try:
+                panel.safe_close_ppms()
+            except BaseException as error:
+                try:
+                    self.append_log(f"{name} close warning: {error}")
+                except BaseException:
+                    pass
+        if self.ppms_closed:
+            return
+        self.ppms_closed = True
+        scan_was_running = self.ppms_field_scan_running
+        self.ppms_field_scan_stop_event.set()
+        recorder = self.__dict__.get("ppms_run_recorder")
+        if recorder is not None:
+            recorder.event("stop_requested", button="the program closing")
+        if self.ppms_poll_after_id is not None:
+            try:
+                self.root.after_cancel(self.ppms_poll_after_id)
+            except (AttributeError, tk.TclError):
+                pass
+            self.ppms_poll_after_id = None
+        def cleanup(after_worker: bool) -> None:
+            errors = []
+            if (scan_was_running and not after_worker
+                    and getattr(self, "ppms_active_scan_mode", "") in PPMS_FIELD_COMMANDING_MODES
+                    and not self.__dict__.get("ppms_scan_field_zero_accepted", False)
+                    and self.ppms_environment_controller.connected):
+                try:
+                    rate = float(self.ppms_field_rate_var.get())
+                    _target, rate = validate_ppms_field_command(0.0, rate)
+                    approach = self._ppms_field_approach_code(self.ppms_field_approach_var.get())
+                    self.ppms_environment_controller.set_field(0.0, rate, approach, 1)
+                except BaseException as error:
+                    errors.append(f"PPMS: zeroing the field before close failed: {error}")
+            for controller in self.ppms_instrument_controllers.values():
+                try:
+                    controller.disconnect()
+                except BaseException as error:
+                    errors.append(str(error))
+            try:
+                self.ppms_environment_controller.disconnect()
+            except BaseException as error:
+                errors.append(str(error))
+            zurich_controller = self.__dict__.get("zurich_controller")
+            if zurich_controller is not None:
+                try:
+                    zurich_controller.disconnect_mfli()
+                except BaseException as error:
+                    errors.append(str(error))
+            for error in errors:
+                try:
+                    self.append_log(f"PPMS safe-close warning: {error}")
+                except BaseException:
+                    pass
+        deferred = scan_was_running and self._ppms_close_handoff().defer(lambda: cleanup(True))
+        self.ppms_executor.shutdown(wait=False, cancel_futures=not deferred)
+        if not deferred:
+            cleanup(False)
+
     def safe_close_hardware(self) -> None:
         try:
             self.safe_close_ppms()

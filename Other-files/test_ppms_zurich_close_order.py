@@ -1,26 +1,15 @@
-"""Deterministic offline characterization of PPMS Zurich close ordering (T1.3 / A2-3).
+"""Deterministic offline regression tests for PPMS Zurich close ordering (A2-3).
 
 Traces PPMSPanel.safe_close_ppms, CombinedControlApp.safe_close_ppms,
 ScanCloseHandoff, _ppms_scan_with_final_field, zurich_executor, and
 LABONE::<device> leases using threading.Event barriers and executor shutdown
 synchronization (no timing guesses).
 
-Finding: PPMSPanel.safe_close_ppms (AST-identical to main@56908d88) submits
-zurich_controller.disconnect_mfli() to zurich_executor and shuts down
-zurich_executor BEFORE calling super().safe_close_ppms(), which only defers
-ppms_instrument_controllers / ppms_environment_controller via ScanCloseHandoff.
-Therefore MFLI disconnect + LABONE::<device> lease release can execute while
-the scan worker on ppms_executor is still active.
-
-A2-3 Fix PR Sync Checklist (both tests below must be updated when A2-3 is fixed):
-1. `test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3`:
-   Remove `@unittest.expectedFailure` once `zurich_controller.disconnect_mfli`
-   is coordinated with `ScanCloseHandoff`.
-2. `test_active_scan_close_defers_visa_env_but_disconnects_mfli_early`:
-   Currently characterizes the pre-fix race (`worker_errors == ["mfli_disconnected_mid_scan"]`
-   and `disconnect:mfli` before `worker:finished`). Update its assertions to
-   verify `worker_errors == []`, `LABONE::DEV4414` remains held during the scan,
-   and `worker:finished` precedes `disconnect:mfli`.
+Contract verified: PPMSPanel.safe_close_ppms cancels polling and shuts down
+zurich_executor without disconnecting MFLI early; CombinedControlApp.safe_close_ppms
+coordinates zurich_controller.disconnect_mfli() inside ScanCloseHandoff cleanup so
+MFLI state and LABONE::<device> lease remain held until the active or queued scan
+worker reaches ScanCloseHandoff.end().
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -151,22 +140,16 @@ class ZurichCloseOrderTests(unittest.TestCase):
         panel.ppms_executor.shutdown(wait=True)
         panel.zurich_executor.shutdown(wait=True)
 
-    def test_active_scan_close_defers_visa_env_but_disconnects_mfli_early(self):
-        """Characterizes confirmed A2-3 behavior deterministically:
-        ScanCloseHandoff defers ppms_instrument_controllers / env until end(),
-        whereas PPMSPanel.safe_close_ppms disconnects MFLI and releases
-        LABONE::DEV4414 immediately on zurich_executor, causing an in-flight
-        worker Zurich read to fail.
-
-        When A2-3 is fixed, update this test to assert `worker_errors == []`
-        and `events.index("worker:finished") < events.index("disconnect:mfli")`.
+    def test_active_scan_close_defers_mfli_disconnect_and_lease_until_handoff(self):
+        """Active scan close must keep MFLI connected and LABONE::<device> lease
+        held until ScanCloseHandoff.end() runs after the scan worker finishes.
         """
         mfli_disconnected = threading.Event()
         scan_entered = threading.Event()
         allow_worker_read = threading.Event()
         worker_done = threading.Event()
 
-        panel, _daq, events, record, lease_key = _make_panel_with_zurich(
+        panel, daq, events, record, lease_key = _make_panel_with_zurich(
             on_mfli_disconnect_done=mfli_disconnected.set
         )
         panel.ppms_field_scan_running = True
@@ -186,6 +169,8 @@ class ZurichCloseOrderTests(unittest.TestCase):
         def run_scan():
             try:
                 panel._ppms_scan_with_final_field(None, 100.0, 0.5, 0)
+            except BaseException as exc:
+                worker_errors.append(f"worker_exception:{exc!r}")
             finally:
                 worker_done.set()
 
@@ -195,16 +180,16 @@ class ZurichCloseOrderTests(unittest.TestCase):
         # Trigger close while the scan worker is still inside ScanCloseHandoff.
         panel.closing = True
         panel.safe_close_ppms()
+        panel.zurich_executor.shutdown(wait=True)
 
-        # Deterministically wait for MFLI disconnect + state cleanup + lease release.
-        self.assertTrue(
-            mfli_disconnected.wait(timeout=5.0),
-            "zurich_executor ran disconnect_mfli before worker finished",
-        )
-        self.assertIsNone(panel.zurich_controller.mfli_daq)
-        self.assertEqual(panel.zurich_controller.mfli_lease_resource, "")
-        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
-        # Meanwhile VISA/env disconnects are still deferred by ScanCloseHandoff.
+        # MFLI connection, LABONE lease, and VISA/env must all remain intact
+        # while the scan worker still holds ScanCloseHandoff ownership.
+        self.assertFalse(mfli_disconnected.is_set())
+        self.assertFalse(daq.disconnected)
+        self.assertIsNotNone(panel.zurich_controller.mfli_daq)
+        self.assertEqual(panel.zurich_controller.mfli_lease_resource, lease_key)
+        self.assertIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertNotIn("disconnect:mfli", events)
         self.assertNotIn("disconnect:6221", events)
         self.assertNotIn("disconnect:ppms_env", events)
 
@@ -212,34 +197,27 @@ class ZurichCloseOrderTests(unittest.TestCase):
         self.assertTrue(worker_done.wait(timeout=5.0))
         panel.ppms_executor.shutdown(wait=True)
 
-        self.assertEqual(worker_errors, ["mfli_disconnected_mid_scan"])
-        self.assertLess(events.index("disconnect:mfli"), events.index("worker:finished"))
+        self.assertEqual(worker_errors, [])
+        self.assertTrue(mfli_disconnected.is_set())
+        self.assertTrue(daq.disconnected)
+        self.assertIsNone(panel.zurich_controller.mfli_daq)
+        self.assertEqual(panel.zurich_controller.mfli_lease_resource, "")
+        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertLess(events.index("worker:finished"), events.index("disconnect:mfli"))
         self.assertLess(events.index("worker:finished"), events.index("disconnect:6221"))
         self.assertLess(events.index("worker:finished"), events.index("disconnect:ppms_env"))
 
-    @unittest.expectedFailure
-    def test_mfli_disconnect_waits_for_scan_close_handoff_known_bug_a2_3(self):
-        """Removal condition: remove @unittest.expectedFailure once the separate
-        A2-3 fix PR coordinates zurich_controller.disconnect_mfli with ScanCloseHandoff
-        (and update `test_active_scan_close_defers_visa_env_but_disconnects_mfli_early`).
-
-        All setup/synchronization runs with an explicit `addCleanup` error check
-        so unrelated exceptions fail as ERROR rather than being masked by
-        `@unittest.expectedFailure`.
+    def test_mfli_disconnect_waits_for_scan_close_handoff(self):
+        """MFLI disconnect must not run on zurich_executor during safe_close_ppms()
+        while a scan holds ScanCloseHandoff, and must complete after handoff ends.
         """
         mfli_disconnected = threading.Event()
         scan_entered = threading.Event()
         allow_worker_exit = threading.Event()
         worker_done = threading.Event()
-        setup_error = []
+        worker_errors = []
 
-        def fail_on_setup_error():
-            if setup_error:
-                raise AssertionError(f"Setup/sync error outside expectedFailure: {setup_error[0]!r}")
-
-        self.addCleanup(fail_on_setup_error)
-
-        panel, _daq, events, record, _lease = _make_panel_with_zurich(
+        panel, _daq, events, record, lease_key = _make_panel_with_zurich(
             on_mfli_disconnect_done=mfli_disconnected.set
         )
         try:
@@ -252,48 +230,62 @@ class ZurichCloseOrderTests(unittest.TestCase):
                 record("worker:finished")
 
             panel._ppms_nested_scan_worker = fake_nested_worker
-            panel.ppms_executor.submit(
-                lambda: (panel._ppms_scan_with_final_field(None, 100.0, 0.5, 0), worker_done.set())
-            )
-            if not scan_entered.wait(timeout=5.0):
-                raise TimeoutError("scan worker did not enter ScanCloseHandoff")
+
+            def run_scan():
+                try:
+                    panel._ppms_scan_with_final_field(None, 100.0, 0.5, 0)
+                except BaseException as exc:
+                    worker_errors.append(exc)
+                finally:
+                    worker_done.set()
+
+            panel.ppms_executor.submit(run_scan)
+            self.assertTrue(scan_entered.wait(timeout=5.0))
 
             panel.closing = True
             panel.safe_close_ppms()
             # Deterministic barrier: waits for any disconnect_mfli task submitted
             # to zurich_executor during safe_close_ppms(), and returns immediately
-            # once deferred (fixed). No timing guess.
+            # once deferred. No timing guess.
             panel.zurich_executor.shutdown(wait=True)
             disconnected_early = mfli_disconnected.is_set()
-        except Exception as exc:
-            setup_error.append(exc)
-            raise
         finally:
             allow_worker_exit.set()
-            worker_done.wait(timeout=5.0)
+            self.assertTrue(worker_done.wait(timeout=5.0))
             panel.ppms_executor.shutdown(wait=True)
 
+        self.assertEqual(worker_errors, [])
         self.assertFalse(
             disconnected_early,
             "A2-3: MFLI disconnected before ScanCloseHandoff.end()",
         )
+        self.assertTrue(mfli_disconnected.is_set())
+        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertLess(events.index("worker:finished"), events.index("disconnect:mfli"))
 
     def test_scan_cancellation_and_exception_still_run_handoff_cleanup(self):
         for mode in ("cancel", "exception"):
             with self.subTest(mode=mode):
                 app._INSTRUMENT_LEASES.clear()
-                panel, _daq, events, _record, _lease = _make_panel_with_zurich()
+                mfli_disconnected = threading.Event()
+                panel, daq, events, record, lease_key = _make_panel_with_zurich(
+                    on_mfli_disconnect_done=mfli_disconnected.set
+                )
                 panel.ppms_field_scan_running = True
                 scan_entered = threading.Event()
                 allow_exit = threading.Event()
                 worker_done = threading.Event()
+                unexpected_errors = []
 
                 def worker(*_args):
                     scan_entered.set()
                     if not allow_exit.wait(timeout=5.0):
                         raise TimeoutError("allow_exit not signaled")
-                    if mode == "exception":
-                        raise RuntimeError("simulated scan failure")
+                    try:
+                        if mode == "exception":
+                            raise RuntimeError("simulated scan failure")
+                    finally:
+                        record("worker:finished")
 
                 panel._ppms_nested_scan_worker = worker
 
@@ -302,7 +294,10 @@ class ZurichCloseOrderTests(unittest.TestCase):
                         try:
                             panel._ppms_scan_with_final_field(None, 100.0, 0.5, 0)
                         except RuntimeError:
-                            pass
+                            if mode != "exception":
+                                raise
+                    except BaseException as exc:
+                        unexpected_errors.append(exc)
                     finally:
                         worker_done.set()
 
@@ -313,13 +308,123 @@ class ZurichCloseOrderTests(unittest.TestCase):
                 if mode == "cancel":
                     panel.ppms_field_scan_stop_event.set()
                 panel.safe_close_ppms()
+                self.assertFalse(mfli_disconnected.is_set())
+                self.assertIn(lease_key, app._INSTRUMENT_LEASES)
+
                 allow_exit.set()
                 self.assertTrue(worker_done.wait(timeout=5.0))
                 panel.zurich_executor.shutdown(wait=True)
                 panel.ppms_executor.shutdown(wait=True)
 
+                self.assertEqual(unexpected_errors, [])
+                self.assertTrue(mfli_disconnected.is_set())
+                self.assertTrue(daq.disconnected)
+                self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
                 self.assertIn("disconnect:6221", events)
                 self.assertIn("disconnect:ppms_env", events)
+                self.assertIn("disconnect:mfli", events)
+                self.assertLess(events.index("worker:finished"), events.index("disconnect:mfli"))
+
+    def test_queued_scan_close_with_saturated_five_workers_defers_mfli_until_handoff(self):
+        mfli_disconnected = threading.Event()
+        blockers_entered = 0
+        blockers_lock = threading.Lock()
+        all_blockers_entered = threading.Event()
+        release_blockers = threading.Event()
+        queued_scan_done = threading.Event()
+        worker_errors = []
+
+        panel, daq, events, record, lease_key = _make_panel_with_zurich(
+            on_mfli_disconnect_done=mfli_disconnected.set
+        )
+
+        def blocker():
+            nonlocal blockers_entered
+            with blockers_lock:
+                blockers_entered += 1
+                if blockers_entered == 5:
+                    all_blockers_entered.set()
+            if not release_blockers.wait(timeout=5.0):
+                raise TimeoutError("release_blockers not signaled")
+
+        for _ in range(5):
+            panel.ppms_executor.submit(blocker)
+        self.assertTrue(all_blockers_entered.wait(timeout=5.0))
+
+        def fake_nested_worker(*_args):
+            record("worker:finished")
+
+        panel._ppms_nested_scan_worker = fake_nested_worker
+        panel.ppms_field_scan_running = True
+        panel._ppms_close_handoff().begin()
+
+        def run_queued_scan():
+            try:
+                panel._ppms_scan_with_final_field(None, 100.0, 0.5, 0)
+            except BaseException as exc:
+                worker_errors.append(exc)
+            finally:
+                queued_scan_done.set()
+
+        panel.ppms_executor.submit(run_queued_scan)
+
+        panel.closing = True
+        panel.safe_close_ppms()
+
+        self.assertFalse(mfli_disconnected.is_set())
+        self.assertIsNotNone(panel.zurich_controller.mfli_daq)
+        self.assertIn(lease_key, app._INSTRUMENT_LEASES)
+
+        release_blockers.set()
+        self.assertTrue(queued_scan_done.wait(timeout=5.0))
+        panel.zurich_executor.shutdown(wait=True)
+        panel.ppms_executor.shutdown(wait=True)
+
+        self.assertEqual(worker_errors, [])
+        self.assertTrue(mfli_disconnected.is_set())
+        self.assertTrue(daq.disconnected)
+        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertLess(events.index("worker:finished"), events.index("disconnect:mfli"))
+
+    def test_repeated_safe_close_runs_mfli_disconnect_once(self):
+        panel, daq, events, _record, lease_key = _make_panel_with_zurich()
+        panel.safe_close_ppms()
+        panel.safe_close_ppms()
+        panel.zurich_executor.shutdown(wait=True)
+        panel.ppms_executor.shutdown(wait=True)
+
+        self.assertTrue(daq.disconnected)
+        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertEqual(events.count("disconnect:mfli"), 1)
+
+    def test_cleanup_failure_does_not_skip_other_instruments_or_raise(self):
+        for failing in ("ppms_env", "mfli"):
+            with self.subTest(failing=failing):
+                app._INSTRUMENT_LEASES.clear()
+                panel, _daq, events, _record, lease_key = _make_panel_with_zurich()
+                logged = []
+                panel.append_log = logged.append
+                if failing == "ppms_env":
+                    def fail_env():
+                        raise RuntimeError("env disconnect failed")
+                    panel.ppms_environment_controller.disconnect = fail_env
+                else:
+                    def fail_mfli():
+                        raise RuntimeError("mfli disconnect failed")
+                    panel.zurich_controller.disconnect_mfli = fail_mfli
+
+                panel.safe_close_ppms()
+                panel.zurich_executor.shutdown(wait=True)
+                panel.ppms_executor.shutdown(wait=True)
+
+                self.assertIn("disconnect:6221", events)
+                if failing == "ppms_env":
+                    self.assertIn("disconnect:mfli", events)
+                    self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+                    self.assertTrue(any("env disconnect failed" in msg for msg in logged))
+                else:
+                    self.assertIn("disconnect:ppms_env", events)
+                    self.assertTrue(any("mfli disconnect failed" in msg for msg in logged))
 
 
 if __name__ == "__main__":

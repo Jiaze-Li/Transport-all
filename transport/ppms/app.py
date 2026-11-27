@@ -10170,6 +10170,12 @@ class CombinedControlApp:
                 self.ppms_environment_controller.disconnect()
             except BaseException as error:
                 errors.append(str(error))
+            zurich_controller = self.__dict__.get("zurich_controller")
+            if zurich_controller is not None:
+                try:
+                    zurich_controller.disconnect_mfli()
+                except BaseException as error:
+                    errors.append(str(error))
             for error in errors:
                 try:
                     self.append_log(f"PPMS safe-close warning: {error}")
@@ -10896,10 +10902,12 @@ class PPMSPanel(CombinedControlApp):
             return
         self.zurich_closed = True
         if self.zurich_after_id is not None:
-            self.root.after_cancel(self.zurich_after_id)
+            try:
+                self.root.after_cancel(self.zurich_after_id)
+            except (AttributeError, tk.TclError):
+                pass
             self.zurich_after_id = None
-        self.zurich_executor.submit(self.zurich_controller.disconnect_mfli)
-        self.zurich_executor.shutdown(wait=False)
+        self.zurich_executor.shutdown(wait=False, cancel_futures=True)
         super().safe_close_ppms()
 PPMS2Panel = PPMSPanel
 def maximize_main_window(root: tk.Tk) -> None:
