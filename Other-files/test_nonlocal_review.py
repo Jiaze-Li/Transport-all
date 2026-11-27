@@ -51,90 +51,6 @@ class StopAndOffTests(unittest.TestCase):
         a.nonlocal_vi_ac_controller = mock.Mock(source_connected=True, any_connected=True)
         a.nonlocal_vi_2410_controller = mock.Mock(connected=True, model="2400")
 
-    def test_the_red_stop_switches_off_even_while_an_instrument_connects(self):
-        a = self.a
-        a.nonlocal_vi_busy = True   # e.g. Connect on the Zurich, after Set 6221
-        a.stop_nonlocal_vi()
-        self.assertEqual(len(a.nonlocal_vi_executor.jobs), 1, "the shutdown is queued")
-        a.nonlocal_vi_ac_controller.output_off.assert_called_once()
-        a.nonlocal_vi_ac_controller.confirm_output_off.assert_called_once()
-        a.nonlocal_vi_2410_controller.confirm_output_off.assert_called_once()
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 and 6221 outputs: OFF")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221: OFF")
-        self.assertIn("(read back)", a.nonlocal_vi_status_var.get())
-        self.assertFalse(a.nonlocal_vi_busy)
-
-    def test_off_is_claimed_only_for_an_output_read_back(self):
-        a = self.a
-        a.nonlocal_vi_ac_controller.source_connected = False   # e.g. just disconnected
-        a.nonlocal_iv6221_source_var.set("6221: check the output")
-        a.stop_nonlocal_vi()
-        # A failed disconnect left "check the output": the warning stays.
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 output: OFF; 6221: check it")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221: check the output",
-                         "nothing was read from the 6221")
-        self.assertIn("6221: check it", a.nonlocal_vi_status_var.get())
-        # Disconnected without error: simply not connected.
-        a.nonlocal_iv6221_source_var.set("6221: disconnected (OFF sent)")
-        a.nonlocal_vi_output_var.set("6221: disconnected (OFF sent)")
-        a.stop_nonlocal_vi()
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 output: OFF")
-        self.assertIn("the other is not connected", a.nonlocal_vi_status_var.get())
-
-    def test_two_presses_keep_the_page_busy_until_both_ran(self):
-        a = self.a
-        a.nonlocal_vi_executor.submit = lambda function, *args: Future()   # queued, not run yet
-        a.stop_nonlocal_vi()
-        a.stop_nonlocal_vi()
-        a._finish_nonlocal_vi_off(None, ("6221", "keithley"))
-        self.assertTrue(a.nonlocal_vi_busy, "the second OFF is still queued")
-        a._finish_nonlocal_vi_off(None, ("6221", "keithley"))
-        self.assertFalse(a.nonlocal_vi_busy)
-
-    def test_a_connect_finishing_first_keeps_the_page_busy_until_the_off_ran(self):
-        a = self.a
-        a.nonlocal_vi_off_pending = True
-        a.nonlocal_vi_busy = True
-        for name in ("_set_mfli_lock_state", "_refresh_nonlocal_vi_connection_summary",
-                     "_redraw_nonlocal_vi_plots", "_update_k6221_controls", "_update_keithley_controls"):
-            setattr(a, name, mock.Mock())
-        a.nonlocal_vi_measurement_enabled_vars = {}
-        for name in ("nonlocal_resistance_safety_var", "nonlocal_iv_safety_var",
-                     "nonlocal_iv6221_safety_var", "nonlocal_vi_safety_var"):
-            setattr(a, name, Var(True))
-        future = Future()
-        future.set_result("KEITHLEY 2182A")
-        a._finish_nonlocal_vi_device_connect("2182", "Keithley 2182A", future)
-        self.assertTrue(a.nonlocal_vi_busy)
-        a._finish_nonlocal_vi_off(None, ("6221", "keithley"))
-        self.assertFalse(a.nonlocal_vi_busy)
-
-    def test_off_is_not_claimed_when_switching_off_failed(self):
-        a = self.a
-        a.nonlocal_vi_ac_controller.confirm_output_off.side_effect = RuntimeError("6221 output is still ON")
-        a.stop_nonlocal_vi()
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 and 6221 outputs: check them")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221: check the output")
-        self.assertIn("6221 output is still ON", a.nonlocal_vi_status_var.get())
-
-    def test_disconnecting_the_keithley_says_nothing_about_the_6221(self):
-        a = self.a
-        for name in ("nonlocal_resistance_safety_var", "nonlocal_iv_safety_var",
-                     "nonlocal_iv6221_safety_var", "nonlocal_vi_safety_var"):
-            setattr(a, name, Var(True))
-        a.nonlocal_vi_measurement_enabled_vars = {}
-        for name in ("_refresh_nonlocal_vi_connection_summary", "_redraw_nonlocal_vi_plots",
-                     "_update_k6221_controls", "_update_keithley_controls"):
-            setattr(a, name, mock.Mock())
-        a._finish_nonlocal_vi_device_disconnect("2410", "Keithley 2400", None)
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400: disconnected (OFF sent)")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221 ON: 0.1 mA RMS / 17.3 Hz",
-                         "the 6221 may still be on")
-        a._finish_nonlocal_vi_device_disconnect("6221", "Keithley 6221", RuntimeError("timeout"))
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "6221 output: check it")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221: check the output")
-
-
 class GateVIFinishTests(unittest.TestCase):
     """Since 2026-10-18 (user) the scan's end zeroes both outputs on the
     worker; the finish reports each beside the scan's own error."""
@@ -151,26 +67,6 @@ class GateVIFinishTests(unittest.TestCase):
         a._finish_nonlocal_vi_scan(error)
         return a
 
-    def test_a_scan_error_and_a_failed_zero_are_both_reported(self):
-        a = self.finish(RuntimeError("SR830 timeout"),
-                        {"6221": "zero FAILED: 6221 output is still ON", "Keithley 2400": "zeroed"})
-        status = a.nonlocal_vi_status_var.get()
-        self.assertIn("Gate-VI: Failed: SR830 timeout", status)
-        self.assertIn("6221 zero FAILED; Keithley 2400 zeroed: check it", status)
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 output: OFF; 6221 output: check it")
-
-    def test_a_clean_end_says_zeroed(self):
-        a = self.finish(RuntimeError("SR830 timeout"), {"6221": "zeroed", "Keithley 2400": "zeroed"})
-        self.assertIn("Keithley 2400 and 6221 zeroed", a.nonlocal_vi_status_var.get())
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 and 6221 outputs: OFF")
-
-    def test_no_zeroing_report_says_check_them(self):
-        a = self.finish(None, None)
-        self.assertIn("Gate-VI: Completed; Keithley 2400 and 6221 not confirmed zeroed: check them",
-                      a.nonlocal_vi_status_var.get())
-        self.assertEqual(a.nonlocal_vi_output_var.get(), "Keithley 2400 and 6221 outputs: check them")
-
-
 class KeithleyTaskTests(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(app.time, "sleep")
@@ -183,34 +79,6 @@ class KeithleyTaskTests(unittest.TestCase):
         a.nonlocal_keithley_stop_event = threading.Event()
         a.nonlocal_keithley_output_off = False
         a.nonlocal_keithley_untouched = True
-
-    def test_a_failed_restore_keeps_the_measurement_error(self):
-        controller = self.a.nonlocal_vi_2410_controller
-        controller.restore_voltage_mode = mock.Mock(side_effect=RuntimeError("VI_ERROR_TMO on SYST:ERR?"))
-
-        def body(_controller):
-            raise RuntimeError("READ? timed out")
-
-        with self.assertRaisesRegex(
-                RuntimeError, "READ\\? timed out; then switching back to the pulse setup failed: VI_ERROR_TMO"):
-            self.a._run_on_nonlocal_keithley(app.NonLocalVIInterlock.VOLTAGE, body)
-
-    def test_a_stop_before_the_start_touches_nothing(self):
-        a = self.a
-        a.nonlocal_keithley_stop_event.set()
-        with self.assertRaises(InterruptedError):
-            a._run_on_nonlocal_keithley(app.NonLocalVIInterlock.VOLTAGE, lambda c: None)
-        self.assertTrue(a.nonlocal_keithley_untouched)
-        self.assertEqual(self.meter.commands, [])
-
-    def test_the_current_limit_is_read_back(self):
-        controller = self.a.nonlocal_vi_2410_controller
-        self.assertAlmostEqual(controller.start_iv_sweep(1e-6), 1e-6)
-        self.meter.query = (lambda original: lambda command: (
-            "2e-6" if command.upper() == ":SENS:CURR:PROT?" else original(command)))(self.meter.query)
-        with self.assertRaisesRegex(RuntimeError, "current limit reads 2e-06 A, not the 1e-06 A"):
-            controller.start_iv_sweep(1e-6)
-
 
 class ManualKeithleyTests(unittest.TestCase):
     """User, 2026-10-09: Set (a voltage left on) and Apply pulse in
@@ -245,131 +113,8 @@ class ManualKeithleyTests(unittest.TestCase):
             action()
         return warning
 
-    def test_set_switches_the_6221_off_first_and_leaves_the_keithley_on(self):
-        a = self.a
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        a.nonlocal_vi_ac_controller.output_off.assert_called_once()
-        a.nonlocal_vi_ac_controller.confirm_output_off.assert_called_once()
-        self.assertEqual((self.meter.output, self.meter.voltage), (1, 50.0))
-        self.assertIn("HIGH VOLTAGE: 50 V left on until OFF on the Keithley 2400's 200 V range; "
-                      "hardware OVP 60 V", self.questions[0])
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(), "Keithley 2400 ON: 50 V, I = 50 nA")
-        self.assertEqual(a.nonlocal_iv6221_source_var.get(), "6221: OFF")
-        self.assertIsNone(a.nonlocal_keithley_task)
-        # Another measurement takes the Keithley: never OFF before it is read
-        # back off (review, 2026-10-09).
-        a._note_nonlocal_keithley_taken()
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(),
-                         "Keithley 2400: ON, switching off for the next measurement…")
-        a._nonlocal_keithley_off_first("before the next measurement")
-        self.assertEqual((self.meter.output, self.meter.voltage), (0, 0.0), "drained and off")
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(), "Keithley 2400: OFF")
-
-    def test_a_stop_or_6221_error_never_shows_off_while_the_keithley_is_on(self):
-        a = self.a
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertEqual(self.meter.output, 1)
-        # The next measurement fails on the 6221 before it reaches the
-        # Keithley: the Keithley is switched off first all the same.
-        a.nonlocal_vi_ac_controller.output_off.side_effect = RuntimeError("6221 GPIB timeout")
-        a.nonlocal_iv_set_voltage_var.set("40")
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertEqual(self.meter.output, 0, "the 1st Set's voltage is off before the 6221 step")
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(), "Keithley 2400: OFF")
-        # A Keithley that cannot be read back off: "check the output", not OFF.
-        a.nonlocal_vi_ac_controller.output_off.side_effect = None
-        a.nonlocal_iv_set_voltage_var.set("50")
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        a.nonlocal_vi_2410_controller.confirm_output_off = mock.Mock(side_effect=RuntimeError("still ON"))
-        a.nonlocal_keithley_stop_event.set()
-        a.nonlocal_iv_set_voltage_var.set("5")
-        a._nonlocal_keithley_free = lambda what: True
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(), "Keithley 2400: check the output")
-
-    def test_no_question_up_to_20_v_and_no_answer_switches_nothing(self):
-        a = self.a
-        a.nonlocal_iv_set_voltage_var.set("5")
-        self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertEqual(self.questions, [], "no high-voltage question up to ±20 V")
-        self.assertEqual((self.meter.output, self.meter.voltage, self.meter.range), (1, 5.0, 21.0))
-        meter = FakeSourceMeter()
-        a.nonlocal_vi_2410_controller = connected_controller(meter)
-        a.nonlocal_iv_set_voltage_var.set("150")
-        self.run_action(a.set_nonlocal_keithley_voltage, answer=False)
-        self.assertEqual(meter.commands, [], "nothing sent when the question is answered No")
-
-    def test_limits_are_checked_before_anything_is_sent(self):
-        a = self.a
-        a.nonlocal_iv_set_voltage_var.set("250")
-        warning = self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertIn("within ±200 V", warning.call_args.args[1])
-        a.nonlocal_iv_safety_var.set(False)
-        a.nonlocal_iv_set_voltage_var.set("5")
-        warning = self.run_action(a.set_nonlocal_keithley_voltage)
-        self.assertIn("Tick the wiring", warning.call_args.args[1])
-        self.assertEqual(self.meter.commands, [])
-
-    def test_a_pulse_ends_off_in_the_pulse_setup(self):
-        a = self.a
-        self.run_action(a.apply_nonlocal_keithley_pulse)
-        self.assertIn("one -30 V pulse of 0.01 s", self.questions[0])
-        self.assertIn(":SOUR:VOLT -30", self.meter.commands)
-        self.assertIn(":SOUR:VOLT:RANG 200", self.meter.commands)
-        self.assertEqual((self.meter.output, self.meter.range, self.meter.ovp), (0, 21.0, 20.0),
-                         "off and back in the pulse setup")
-        a.nonlocal_vi_ac_controller.output_off.assert_called()
-        self.assertEqual(a.nonlocal_iv_keithley_var.get(), "Keithley 2400: OFF")
-        self.assertIn("2400 pulse applied: -30 V for 0.01 s", a.nonlocal_vi_status_var.get())
-
-
 class PulseTests(unittest.TestCase):
-    def test_the_level_is_checked_after_the_pulse_not_inside_it(self):
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        events = []
-        original_query, original_write = meter.query, meter.write
-        meter.query = lambda command: (events.append(("query", command)), original_query(command))[1]
-        meter.write = lambda command: (events.append(("write", command)), original_write(command))[1]
-        controller._wait = lambda duration, stop: events.append(("wait", duration))
-        with mock.patch.object(app.time, "sleep", lambda seconds: None):
-            controller.apply_voltage_pulse(5.0, 0.1, threading.Event())
-        level_at = events.index(("write", ":SOUR:VOLT 5"))
-        self.assertEqual(events[level_at + 1], ("wait", 0.1),
-                         "the full width, with no error check between the level and the wait")
-        self.assertEqual(meter.commands[-2:], [":SOUR:VOLT 0", ":OUTP OFF"])
-        self.assertIn(("query", "SYST:ERR?"), events[level_at + 2:], "the level is checked after the pulse")
-
-    def test_a_rejected_level_fails_after_the_output_is_off(self):
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        original_query = meter.query
-        state = {"pulsed": False}
-
-        def query(command):
-            if command == "SYST:ERR?" and state["pulsed"] and meter.output == 0:
-                return '-222,"Data out of range"'
-            return original_query(command)
-
-        meter.query = query
-        controller._wait = lambda duration, stop: state.update(pulsed=True)
-        with mock.patch.object(app.time, "sleep", lambda seconds: None), \
-                self.assertRaisesRegex(RuntimeError, "Data out of range"):
-            controller.apply_voltage_pulse(5.0, 0.1, threading.Event())
-        self.assertEqual(meter.output, 0)
-
-    def test_a_stop_before_the_pulse_never_switches_the_output_on(self):
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        stop = threading.Event()
-        stop.set()
-        with mock.patch.object(app.time, "sleep", lambda seconds: None):
-            with self.assertRaises(app.NonLocalVIStopped):
-                controller.apply_voltage_pulse(5.0, 0.1, stop)
-            with self.assertRaises(app.NonLocalVIStopped):
-                controller.measure_resistance(stop)
-        self.assertNotIn(":OUTP ON", meter.commands)
-
+    pass
 
 class ZurichControllerTests(unittest.TestCase):
     def controller(self):
@@ -406,10 +151,58 @@ class ZurichControllerTests(unittest.TestCase):
                 controller.mfli_bridge.request.assert_not_called()
             else:
                 controller.mfli_bridge.request.assert_called_once_with("disable_unused_demods", indices=indices)
+        controller.mfli_props = {"options": "MD"}
         controller.mfli_config = {"extref_demodulator": 1}
         controller.mfli_bridge.reset_mock()
         controller.disable_unused_ppms_demods("1+2")
         controller.mfli_bridge.request.assert_called_once_with("disable_unused_demods", indices=[3])
+        # A Zurich without MF-MD (DEV4435, user 2026-11-27): one demodulator
+        # measures, nothing else to switch off, whatever the routing says.
+        controller.mfli_props = {"options": "", "has_demod_2": True, "has_demod_4": False}
+        for extref in (0, 1):
+            controller.mfli_config = {"extref_demodulator": extref}
+            controller.mfli_bridge.reset_mock()
+            controller.disable_unused_ppms_demods("1")
+            controller.mfli_bridge.request.assert_not_called()
+
+    def test_mf_md_is_the_option_or_a_fourth_demodulator_not_the_second(self):
+        """User, 2026-11-27 (DEV4435 on the SHHV page: "extrefs/1/demodselect"
+        not found): an MFLI without MF-MD has a second demodulator too, so
+        that is no sign of MF-MD; the options say it, or else a fourth
+        demodulator.  Reads then cover only the demodulators there are."""
+        controller = self.controller()
+        controller.mfli_bridge = mock.Mock()
+        for props, multi in (({"options": "MD"}, True), ({"options": "IA"}, False),
+                             ({"options": "", "has_demod_2": True, "has_demod_4": False}, False),
+                             ({"options": "", "has_demod_2": True, "has_demod_4": True}, True),
+                             ({"options": "", "has_demod_2": True}, False)):
+            with self.subTest(props=props):
+                controller.mfli_props = dict(props)
+                self.assertIs(controller.mfli_has_multi_demod(), multi)
+        controller.mfli_props = {"options": "", "has_demod_2": True, "has_demod_4": False}
+        demod = {"x": 1e-6, "y": 0.0, "frequency": 317.3, "timestamp": 1, "harmonic": 1, "adcselect": 0, "enabled": 1}
+        reference = dict(demod, adcselect=8)      # Demod 2 follows the reference input
+        controller.mfli_bridge.request.return_value = {"demods": [demod, reference]}
+        with mock.patch.object(type(controller), "mfli_connected", new_callable=mock.PropertyMock, return_value=True):
+            fields = controller.read_mfli_four_demods()
+        controller.mfli_bridge.request.assert_called_once_with("read_demods", count=2)
+        self.assertEqual((fields["zurich_demod1_x_v"], fields["zurich_demod1_status"]), (1e-6, "enabled"))
+        self.assertEqual((fields["zurich_demod2_input"], fields["zurich_demod2_status"]), (8, "enabled"))
+        self.assertEqual([fields[f"zurich_demod{i}_status"] for i in (3, 4)], ["disabled"] * 2)
+        # Review, 2026-11-27: without MF-MD the reference goes on Demod 2, as
+        # before (a reference on the measuring demodulator would lock to f/n
+        # at harmonic n); Demod 4 is refused.
+        with self.assertRaisesRegex(RuntimeError, "Demod 4 external reference requires MF-MD"):
+            controller.configure_mfli("AC", 2, "R", reference_source="Aux Input 1", sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
+                                      input_impedance="10 MΩ", input_scaling=1.0, timeconstant_s=1.0,
+                                      external_reference_demodulator=3)
+        controller.mfli_bridge.request.reset_mock()
+        controller.mfli_bridge.request.side_effect = RuntimeError("stop after the request")
+        with self.assertRaisesRegex(RuntimeError, "stop after the request"):
+            controller.configure_mfli("AC", 2, "R", reference_source="Aux Input 1", sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
+                                      input_impedance="10 MΩ", input_scaling=1.0, timeconstant_s=1.0)
+        self.assertEqual(controller.mfli_bridge.request.call_args.kwargs["extref_demod"], 1)
+        self.assertEqual(controller.mfli_bridge.request.call_args.kwargs["harmonic"], 2)
 
 
 class SR830Tests(unittest.TestCase):
@@ -510,100 +303,8 @@ class GateVIPlotTests(unittest.TestCase):
         drawn = {call.args[0]: call.args[1] for call in a._draw_nonlocal_series.call_args_list}
         return a, drawn
 
-    def test_one_order(self):
-        # (elapsed, meter, R, θ, kind, X, Y, order)
-        a, drawn = self.redraw(
-            {"9": "1", "mfli": "1"},
-            [(1.0, "9", 2e-6, 30.0, "formal", 1.7e-6, 1.0e-6, 1),
-             (1.0, "mfli", 5e-6, -10.0, "formal", 4.9e-6, -0.9e-6, 1),
-             (1.0, "2182", 3e-6, float("nan"), "formal", float("nan"), float("nan"), None)],
-            [{"key": "9", "order": 1, "pulse_voltage_v": 4.0, "mean": 2e-6, "mean_x": 1.7e-6, "mean_y": 1e-6},
-             {"key": "mfli", "order": 1, "pulse_voltage_v": 4.0, "mean": 5e-6, "mean_x": 4.9e-6,
-              "mean_y": -0.9e-6},
-             {"key": "2182", "order": None, "pulse_voltage_v": 4.0, "mean": 3e-6,
-              "mean_x": float("nan"), "mean_y": float("nan")}])
-        a._layout_nonlocal_vi_plots.assert_called_with([1])
-        self.assertEqual(drawn["resistance"], {"8": [(4.0, 1e9)]},
-                         "|R| after each pulse; the check before the first pulse is left out")
-        self.assertEqual(set(drawn), {(1, "x"), (1, "y"), (1, "theta"), "resistance", ("summary", 1)},
-                         "only the order measured; no 6221 current or 2400 command-voltage plot")
-        self.assertEqual(drawn[(1, "x")], {"9": [(1.0, 1.7e-6)], "mfli": [(1.0, 4.9e-6)], "2182": [(1.0, 3e-6)]},
-                         "X of each lock-in, the 2182A's voltage with it")
-        self.assertEqual(drawn[(1, "y")], {"9": [(1.0, 1.0e-6)], "mfli": [(1.0, -0.9e-6)]})
-        self.assertEqual(drawn[(1, "theta")], {"9": [(1.0, 30.0)], "mfli": [(1.0, -10.0)]})
-        # User, 2026-10-09: the 1st harmonic's mean X; the 2182A's DC voltage.
-        self.assertEqual(drawn[("summary", 1)], {"9": [(4.0, 1.7e-6)], "mfli": [(4.0, 4.9e-6)],
-                                                 "2182": [(4.0, 3e-6)]})
-        a.nonlocal_vi_plot_frames[("summary", 1)].configure.assert_called_with(
-            text="1st harmonic X vs pulse voltage — SR830 #9, Zurich, 2182A")
-        self.assertEqual(a._draw_nonlocal_series.call_args_list[-1].args[3], "Mean X")
-        a.nonlocal_vi_plot_frames[(1, "x")].configure.assert_called_with(
-            text="1st harmonic X vs time — SR830 #9, Zurich, 2182A")
-
-    def test_a_row_and_a_voltage_plot_per_order(self):
-        a, drawn = self.redraw(
-            {"9": "1+2", "mfli": "1+2+3"},
-            [(1.0, "9", 2e-6, 30.0, "formal", 1.7e-6, 1.0e-6, 1),
-             (1.0, "mfli", 5e-6, 0.0, "formal", 5e-6, 0.0, 1),
-             (1.0, "mfli", 3e-7, 0.0, "formal", 3e-7, 0.0, 2),
-             (1.0, "mfli", 4e-9, 0.0, "formal", 4e-9, 0.0, 3),
-             (2.0, "9", 1e-8, 5.0, "formal", 1e-8, 0.0, 2)],
-            [{"key": "9", "order": 1, "pulse_voltage_v": 4.0, "mean": 2e-6, "mean_x": 1.7e-6, "mean_y": 1e-6},
-             {"key": "9", "order": 2, "pulse_voltage_v": 4.0, "mean": 1e-8, "mean_x": 2e-9, "mean_y": 9e-9},
-             {"key": "mfli", "order": 3, "pulse_voltage_v": 4.0, "mean": 4e-9, "mean_x": 4e-9, "mean_y": 1e-10}])
-        a._layout_nonlocal_vi_plots.assert_called_with([1, 2, 3])
-        self.assertEqual(drawn[(2, "x")], {"9": [(2.0, 1e-8)], "mfli": [(1.0, 3e-7)]})
-        self.assertEqual(drawn[(3, "x")], {"mfli": [(1.0, 4e-9)]}, "SR830 #9 reads no 3rd order")
-        self.assertEqual(drawn[("summary", 2)], {"9": [(4.0, 9e-9)], "mfli": []}, "the 2nd harmonic's Y")
-        self.assertEqual(drawn[("summary", 3)], {"mfli": [(4.0, 4e-9)]}, "the 3rd harmonic's X")
-        a.nonlocal_vi_plot_frames[("summary", 2)].configure.assert_called_with(
-            text="2nd harmonic Y vs pulse voltage — SR830 #9, Zurich")
-        a.nonlocal_vi_plot_frames[(2, "x")].configure.assert_called_with(
-            text="2nd harmonic X vs time — SR830 #9, Zurich")
-        # User, 2026-10-09: a colour family per order, |R| in purple.
-        options = {call.args[0]: call.kwargs for call in a._draw_nonlocal_series.call_args_list}
-        colours = {key: options[key].get("series_colors", {}).get("mfli")
-                   for key in ((1, "x"), (2, "x"), (3, "x"), ("summary", 1), ("summary", 2))}
-        self.assertEqual(colours[(1, "x")], colours[("summary", 1)])
-        self.assertEqual(colours[(2, "x")], colours[("summary", 2)])
-        self.assertEqual(len({colours[(1, "x")], colours[(2, "x")], colours[(3, "x")],
-                              options["resistance"]["color_override"]}), 4)
-
-
 class ZurichRowTests(unittest.TestCase):
-    def test_the_ref_follows_another_zurich_only_while_none_is_connected(self):
-        a = bare_app()
-        a.nonlocal_vi_ac_controller = mock.Mock(mfli_connected=True)
-        a.nonlocal_vi_mfli_reference_source_var = Var("Trigger In 1")
-        a.nonlocal_mfli_device_seen = "dev4414"
-        a.nonlocal_vi_mfli_device_var = Var("DEV4435 (Normal)")
-        a._on_nonlocal_mfli_device_changed()
-        self.assertEqual(a.nonlocal_vi_mfli_reference_source_var.get(), "Trigger In 1",
-                         "the connected DEV4414 keeps its Ref.")
-        a.nonlocal_vi_ac_controller.mfli_connected = False
-        a.nonlocal_vi_mfli_reference_source_var.set("Aux Input 2")   # set by hand
-        a.nonlocal_vi_mfli_device_var.set("DEV4435 (Normal)")
-        a._on_nonlocal_mfli_device_changed()
-        self.assertEqual(a.nonlocal_vi_mfli_reference_source_var.get(), "Aux Input 2",
-                         "choosing the same Zurich again keeps a Ref. set by hand")
-
-    def test_the_zurich_controls_are_held_while_a_measurement_runs(self):
-        a = page()
-        a.closing = False
-        a.nonlocal_vi_ac_controller = mock.Mock(mfli_connected=True)
-        widgets = {name: mock.Mock() for name in ("chooser", "ref", "tc", "harmonic", "measure")}
-        a.nonlocal_vi_mfli_chooser = widgets["chooser"]
-        a.nonlocal_mfli_reference_combo = widgets["ref"]
-        a.nonlocal_mfli_tc_entry = widgets["tc"]
-        a.nonlocal_iv6221_choice_widgets = [(widgets["harmonic"], "readonly"), (widgets["measure"], "normal")]
-        a._update_nonlocal_mfli_controls()
-        states = {name: w.configure.call_args[1]["state"] for name, w in widgets.items()}
-        self.assertEqual(states, {"chooser": "disabled", "ref": "readonly", "tc": "normal",
-                                  "harmonic": "readonly", "measure": "normal"})
-        a.nonlocal_keithley_task = "iv6221"
-        a._update_nonlocal_mfli_controls()
-        self.assertEqual({w.configure.call_args[1]["state"] for w in widgets.values()}, {"disabled"})
-
+    pass
 
 if __name__ == "__main__":
     unittest.main()

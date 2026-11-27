@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from test_ppms_motor_debug import app
 
-PROGRAM = Path(__file__).resolve().parents[1] / "Transport_all.py"
+PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app.py"
 HEX = re.compile(r"#[0-9a-f]{6}")
 
 
@@ -101,13 +101,6 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual((app.LAMP_SIZE_PX, app.LAMP_DOT_PX), (16, 10))
         self.assertEqual(app.THEME_COLORS["plot_series"], app.THEME_COLORS["accent"])
         self.assertEqual(app.THEME_COLORS["plot_background"], "#ffffff")
-
-    def test_one_set_of_red_button_colours(self):
-        self.assertIs(app.RTE_RED_BUTTON_COLORS, app.RED_BUTTON_COLORS)
-        normal = app.RED_BUTTON_COLORS["normal"]
-        self.assertEqual((normal["bg"], normal["fg"], normal["activebackground"], normal["activeforeground"]),
-                         ("#c62828", "white", "#8e0000", "white"))
-        self.assertNotEqual(app.RED_BUTTON_COLORS["disabled"]["bg"], "#c62828", "a locked button looks locked")
 
     def test_no_red_or_plot_colour_outside_the_palette(self):
         source = PROGRAM.read_text(encoding="utf-8")
@@ -272,32 +265,19 @@ class LampTests(unittest.TestCase):
         self.assertEqual(canvas.options["fill"], "#20b15a")
         self.assertEqual(calls, [])
 
-    def test_the_connection_indicators_use_the_lamp(self):
-        harness = object.__new__(app.CombinedControlApp)
-        canvas = Canvas()
-        harness.instrument_connection_indicators = {"keithley6221": (canvas, 1)}
-        harness._set_connection_indicator("keithley6221", True)
-        self.assertEqual(canvas.options["outline"], "#10783a")
-        harness._set_connection_indicator("keithley6221", True, fault=True)
-        self.assertEqual(canvas.options, {"fill": "#e53935", "outline": "#9d1d1a"})
-        harness.nonlocal_vi_connection_indicators = {"8": (canvas, 2)}
-        harness._set_nonlocal_vi_indicator("8", False)
-        self.assertEqual(canvas.options["fill"], "#9aa0a6")
-
-
 class OverviewTests(unittest.TestCase):
     def test_text(self):
-        pages = {"SHV": ["on", "off", "off"], "PPMS": ["off"], "FMR": []}
+        pages = {"SHHV": ["on", "off", "off"], "PPMS": ["off"], "FMR": []}
         self.assertEqual(app.connection_overview_text(pages), ("1/4", "1 of 4 instruments connected", "on"))
-        self.assertEqual(app.connection_overview_text({"SHV": ["off"]})[2], "off")
-        self.assertEqual(app.connection_overview_text({"SHV": ["on", "fault"]}),
+        self.assertEqual(app.connection_overview_text({"SHHV": ["off"]})[2], "off")
+        self.assertEqual(app.connection_overview_text({"SHHV": ["on", "fault"]}),
                          ("2/2", "2 of 2 instruments connected", "fault"))
         self.assertEqual(app.connection_overview_text({}), ("0/0", "0 of 0 instruments connected", "off"))
 
     def test_tooltip_lines_skip_pages_without_instruments(self):
-        pages = {"SHV": ["on", "off"], "FMR": [], "PPMS": ["fault"]}
+        pages = {"SHHV": ["on", "off"], "FMR": [], "PPMS": ["fault"]}
         self.assertEqual(app.connection_overview_lines(pages),
-                         ["SHV: 1 of 2 connected", "PPMS: 1 of 1 connected (fault)"])
+                         ["SHHV: 1 of 2 connected", "PPMS: 1 of 1 connected (fault)"])
 
     def test_no_status_bar(self):
         # The overview costs no height: placed in the tab row, never gridded
@@ -396,71 +376,7 @@ class TreeTests(unittest.TestCase):
 
 
 class RedButtonTests(unittest.TestCase):
-    def test_red_button_fills_a_frame_of_the_ttk_buttons_size_where_it_was(self):
-        made = []
-
-        class Frame:
-            def __init__(self, parent, **options):
-                self.parent, self.options, self.calls = parent, options, []
-                made.append(self)
-
-            def grid(self, **grid):
-                self.grid_options = grid
-
-            def grid_propagate(self, flag):
-                self.propagate = flag
-
-            def columnconfigure(self, *args, **kw):
-                pass
-
-            rowconfigure = columnconfigure
-
-        class Button(Frame):
-            pass
-
-        class TtkButton:
-            master = "params"
-            destroyed = False
-
-            def winfo_reqwidth(self):
-                return 131
-
-            def winfo_reqheight(self):
-                return 34
-
-            def destroy(self):
-                TtkButton.destroyed = True
-
-        with patch.object(app.ttk, "Frame", Frame), patch.object(app.tk, "Button", Button):
-            button = app.red_button_in_place_of(TtkButton(), "6221 / 2400 OFF", print,
-                                                row=3, column=4, columnspan=3, sticky="e")
-        holder = made[0]
-        self.assertTrue(TtkButton.destroyed)
-        self.assertEqual((holder.parent, holder.options), ("params", {"width": 131, "height": 34}))
-        self.assertEqual(holder.grid_options, {"row": 3, "column": 4, "columnspan": 3, "sticky": "e"})
-        self.assertFalse(holder.propagate)
-        self.assertIs(button.parent, holder)
-        self.assertEqual({k: button.options[k] for k in ("text", "bg", "fg", "padx", "pady")},
-                         {"text": "6221 / 2400 OFF", "bg": "#c62828", "fg": "white", "padx": 0, "pady": 0})
-
-    def test_paint(self):
-        class Button:
-            def __init__(self):
-                self.options = {"state": "normal"}
-
-            def cget(self, name):
-                return self.options[name]
-
-            def configure(self, **options):
-                self.options.update(options)
-
-        button = Button()
-        app.paint_red_button(button)
-        self.assertEqual(button.options["bg"], "#c62828")
-        button.configure(state="disabled")
-        app.paint_red_button(button)
-        self.assertEqual(button.options["bg"], app.THEME_COLORS["disabled_fill"])
-
+    pass
 
 if __name__ == "__main__":
     unittest.main()

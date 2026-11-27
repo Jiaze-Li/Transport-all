@@ -150,25 +150,6 @@ class ResistancePlotTests(unittest.TestCase):
             app_._redraw_nonlocal_resistance_plot()
         return app_.nonlocal_resistance_canvas.items
 
-    def test_a_steady_value_is_drawn_without_numpy(self):
-        # As on the lab PC: 369.711 MΩ measured continuously at 1 nA.
-        items = self.draw([(4.0 + 0.5 * i, 369.711e6) for i in range(32)])
-        texts = [text for kind, _, text in items if kind == "text"]
-        self.assertTrue(any(kind == "line" and count > 4 and fill == "#7a3db8"
-                            for kind, count, fill in items), "the |R| trace is drawn")
-        self.assertIn("Current |R| = 369.711 MΩ", texts)
-        self.assertIn("|R| (MΩ)", texts)
-        axis = [float(text) for text in texts if text and text.replace(".", "", 1).isdigit()]
-        self.assertGreaterEqual(len([value for value in axis if 340 <= value <= 400]), 2,
-                                f"|R| axis numbers around 369.7: {texts}")
-
-    def test_a_changing_value_and_a_single_point(self):
-        items = self.draw([(0.5 * i, 1e3 * (1 + 0.01 * i)) for i in range(10)])
-        self.assertTrue(any(kind == "line" and count > 4 for kind, count, _ in items))
-        items = self.draw([(1.0, 52.0)])
-        self.assertTrue(any(kind == "oval" for kind, _, _ in items), "one point is drawn as a dot")
-
-
 class FinishTests(unittest.TestCase):
     """The finish reports the end's zeroing, done on the worker (user,
     2026-10-18: every scan ends with both outputs zeroed)."""
@@ -198,78 +179,9 @@ class FinishTests(unittest.TestCase):
                 finish(future)
         return app_
 
-    def test_start_is_offered_again_after_stop_even_if_the_redraw_fails(self):
-        app_ = self.finished("resistance", InterruptedError("stopped"),
-                             redraw_error=AttributeError("'NoneType' object has no attribute 'asarray'"))
-        self.assertIsNone(app_.nonlocal_keithley_task)
-        app_._update_nonlocal_vi_controls.assert_called_once()
-        self.assertEqual(app_.nonlocal_vi_status_var.get(),
-                         "|R| vs time: Stopped; Keithley 2410 and 6221 zeroed; 1 point saved")
-        self.assertEqual(app_.nonlocal_vi_output_var.get(), "Keithley 2410 and 6221 outputs: OFF")
-
-    def test_a_stopped_or_failed_sweep_says_so(self):
-        app_ = self.finished("iv", InterruptedError("stopped"))
-        self.assertEqual(app_.nonlocal_vi_status_var.get(),
-                         "2400-IV: Stopped; Keithley 2410 and 6221 zeroed; 1/49 points saved")
-        self.assertEqual(app_.nonlocal_iv_eta_var.get(), "Remaining: --")
-        app_ = self.finished("iv", RuntimeError("bus timeout; more"),
-                             results={"6221": "not connected", "Keithley 2410": "zero FAILED: bus"})
-        self.assertEqual(app_.nonlocal_vi_status_var.get(),
-                         "2400-IV: Failed: bus timeout; 6221 not connected; Keithley 2410 zero FAILED: "
-                         "check it; 1/49 points saved")
-        self.assertEqual(app_.nonlocal_vi_output_var.get(), "Keithley 2410 output: check it; 6221 not connected",
-                         "an output that may still be on is not called off")
-
-
 # ----------------------------------------------------------------- I-V sweep
 class SweepValuesTests(unittest.TestCase):
-    def test_the_figure_sweep(self):
-        voltages = app.build_iv_sweep_voltages(-6, 6, 0.25)
-        self.assertEqual(len(voltages), 49)
-        self.assertEqual((voltages[0], voltages[1], voltages[-1]), (-6.0, -5.75, 6.0))
-        self.assertEqual(voltages, sorted(voltages), "one way, Start to End")
-
-    def test_the_end_is_kept_and_limits_apply(self):
-        self.assertEqual(app.build_iv_sweep_voltages(1, -1, 0.3), [1.0, 0.7, 0.4, 0.1, -0.2, -0.5, -0.8, -1.0])
-        self.assertEqual(app.build_iv_sweep_voltages(2, 2, 0.1), [2.0])
-        with self.assertRaisesRegex(ValueError, "within ±20 V"):
-            app.build_iv_sweep_voltages(-25, 6, 1)
-        self.assertEqual(len(app.build_iv_sweep_voltages(-1000, 1000, 2.5, 1000)), 801)
-
-    def test_the_sweep_settings_follow_the_model(self):
-        a = bare_app()
-        a.nonlocal_iv_start_var, a.nonlocal_iv_end_var = Var("-50"), Var("50")
-        a.nonlocal_iv_step_var, a.nonlocal_iv_settle_var = Var("2.5"), Var("0.5")
-        a.nonlocal_iv_limit_var = Var("0.001")
-        a.nonlocal_vi_2410_controller = mock.Mock(model="2400", resource_name="GPIB0::24::INSTR", identity="")
-        settings = a._parse_nonlocal_iv_settings()
-        self.assertEqual((settings["max_abs_v"], settings["source"]["range_v"], settings["source"]["ovp_v"]),
-                         (50.0, 200.0, 60.0))
-        self.assertEqual(len(settings["voltages"]), 41)
-        a.nonlocal_iv_start_var.set("-250")
-        with self.assertRaisesRegex(ValueError, "within ±200 V"):
-            a._parse_nonlocal_iv_settings()
-        a.nonlocal_vi_2410_controller.model = "2410"
-        a.nonlocal_iv_start_var.set("-1000")
-        self.assertEqual(a._parse_nonlocal_iv_settings()["source"]["ovp_v"], 1100.0)
-        a.nonlocal_iv_limit_var.set("0.05")
-        with self.assertRaisesRegex(ValueError, "current limit is at most 0.021 A"):
-            a._parse_nonlocal_iv_settings()
-        with self.assertRaisesRegex(ValueError, "increase the step"):
-            app.build_iv_sweep_voltages(-10, 10, 0.001)
-
-    def test_the_defaults(self):
-        # User's figure, 2026-10-11: -10 → 10 V in 1 V steps, 0.5 s settle (21 points).
-        self.assertEqual((app.NONLOCAL_IV_SWEEP_START_V, app.NONLOCAL_IV_SWEEP_END_V,
-                          app.NONLOCAL_IV_SWEEP_STEP_V, app.NONLOCAL_IV_SWEEP_SETTLE_S), (-10.0, 10.0, 1.0, 0.5))
-        self.assertEqual(len(app.build_iv_sweep_voltages(-10, 10, 1, 200)), 21)
-
-    def test_current_units(self):
-        self.assertEqual(app.format_current(-1.833e-8), "-18.33 nA")
-        self.assertEqual(app.format_current(4e-13), "0.4 pA")
-        self.assertEqual(app.format_current(2.5e-4), "250 µA")
-        self.assertEqual(app.format_current(1e-3), "1 mA")
-
+    pass
 
 class SweepPlotTests(unittest.TestCase):
     def draw(self, rows, sample="1µm Pt-Pt", size=(900, 600)):
@@ -281,29 +193,6 @@ class SweepPlotTests(unittest.TestCase):
             app_._redraw_nonlocal_iv_plot()
         return app_.nonlocal_iv_canvas
 
-    def test_drawn_like_the_figure(self):
-        # Noise of about ±20 nA on an open Pt-Pt gap, as in the figure.
-        rows = [(i + 1, v, v, (-1) ** i * 2e-8, i * 0.6, False)
-                for i, v in enumerate(app.build_iv_sweep_voltages(-6, 6, 0.25))]
-        canvas = self.draw(rows)
-        texts = canvas.texts()
-        for label in ("Voltage (V)", "Current (nA)", "1µm Pt-Pt", "-6", "-4", "0", "4", "6"):
-            self.assertIn(label, texts)
-        squares = [fill for kind, _, fill in canvas.items if kind == "rectangle" and fill == "#111111"]
-        self.assertEqual(len(squares), 49, "one black square per point")
-        self.assertTrue(any(kind == "line" and count == 98 for kind, count, _ in canvas.items),
-                        "a line joins the 49 points")
-        self.assertNotIn("red: at the current limit", texts)
-
-    def test_points_at_the_limit_are_red_and_empty_plot_says_what_comes(self):
-        canvas = self.draw([(1, -1.0, -1.0, -1e-3, 0.5, True), (2, 0.0, 0.0, 0.0, 1.0, False)])
-        self.assertIn("Current (mA)", canvas.texts())
-        self.assertIn("red: at the current limit", canvas.texts())
-        self.assertIn("#c62828", [fill for kind, _, fill in canvas.items if kind == "rectangle"])
-        canvas = self.draw([], sample="")
-        self.assertIn("The I–V curve is drawn point by point once a sweep starts", canvas.texts())
-
-
 class SweepControllerTests(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(app.time, "sleep")
@@ -312,227 +201,12 @@ class SweepControllerTests(unittest.TestCase):
         self.meter = FakeSourceMeter()
         self.controller = connected_controller(self.meter)
 
-    def test_start_sets_the_limit_and_checks_the_ovp(self):
-        self.controller.start_iv_sweep(1e-6)
-        commands = self.meter.commands
-        self.assertEqual(commands[0], "*RST", "from a known state")
-        for command in (":SOUR:VOLT:PROT 20", ":SOUR:VOLT:RANG 20", ":SENS:CURR:PROT 1e-06",
-                        ":SENS:CURR:NPLC 1", ":OUTP ON"):
-            self.assertIn(command, commands)
-        self.assertLess(commands.index(":SOUR:VOLT 0"), commands.index(":OUTP ON"), "on at 0 V")
-        self.assertEqual(self.meter.output, 1)
-        self.controller.set_iv_voltage(-6)
-        self.assertEqual(self.controller.read_iv_point(), (-6.0, -6e-9))
-        with self.assertRaisesRegex(ValueError, "within ±20 V"):
-            self.controller.set_iv_voltage(20.5)
-
-    def test_a_wrong_ovp_or_limit_stops_before_the_output_is_on(self):
-        with self.assertRaisesRegex(ValueError, "at most 0.1 A"):
-            self.controller.start_iv_sweep(0.5)
-        meter = FakeSourceMeter()
-        meter.write = (lambda original: lambda command: original(
-            ":SOUR:VOLT:PROT 40" if command.startswith(":SOUR:VOLT:PROT") else command))(meter.write)
-        controller = connected_controller(meter)
-        with self.assertRaisesRegex(RuntimeError, "reads OVP 40 V"):
-            controller.start_iv_sweep(1e-3)
-        self.assertEqual(meter.output, 0)
-
     def start(self, model, limit_a, max_abs_v):
         meter = FakeSourceMeter()
         controller = connected_controller(meter)
         controller.model = model
         controller.start_iv_sweep(limit_a, max_abs_v)
         return meter, controller
-
-    def test_above_20_v_the_high_range_and_the_ovp_level_above_the_sweep(self):
-        # User, 2026-10-09: ±200 V on a 2400, ±1000 V on a 2410.
-        for model, max_abs_v, source_range, ovp in (
-            # Above ±20 V the OVP level is at least 5 % above the voltages
-            # (the levels are ±5 %): 160 V on a 2400 takes "none" (210 V).
-            ("2400", 20, 21.0, 20.0), ("2400", 40, 210.0, 60.0), ("2400", 50, 210.0, 60.0),
-            ("2400", 150, 210.0, 160.0), ("2400", 160, 210.0, 210.0), ("2400", 200, 210.0, 210.0),
-            ("2410", 150, 1100.0, 200.0), ("2410", 1000, 1100.0, 1100.0),
-        ):
-            with self.subTest(model=model, max_abs_v=max_abs_v):
-                meter, controller = self.start(model, 1e-3, max_abs_v)
-                self.assertEqual((meter.range, meter.ovp), (source_range, ovp))
-                self.assertLess(meter.commands.index(f":SOUR:VOLT:PROT {ovp:g}" if ovp != 20 else ":SOUR:VOLT:PROT 20"),
-                                meter.commands.index(":OUTP ON"), "set before the output goes on")
-                controller.set_iv_voltage(-max_abs_v)
-                with self.assertRaisesRegex(ValueError, f"within ±{max_abs_v:g} V"):
-                    controller.set_iv_voltage(max_abs_v + 0.5)
-                controller.restore_voltage_mode()
-                self.assertEqual((meter.output, meter.range, meter.ovp), (0, 21.0, 20.0), "back to the pulse setup")
-                self.assertEqual(controller.iv_sweep_max_abs_v, 20.0)
-
-    def test_the_model_limits_and_the_high_range_current_limit(self):
-        for model, too_high in (("2400", 200.5), ("2410", 1000.5)):
-            with self.assertRaisesRegex(ValueError, "must be within"):
-                self.start(model, 1e-3, too_high)
-        with self.assertRaisesRegex(ValueError, "at most 0.021 A on the Keithley 2410's 1000 V range"):
-            self.start("2410", 0.05, 100)
-        self.start("2410", 0.05, 20)   # 20 V range: up to 0.1 A
-        self.start("2400", 0.1, 200)
-
-    def test_an_ovp_below_the_sweep_stops_before_the_output_is_on(self):
-        meter = FakeSourceMeter()
-        meter.write = (lambda original: lambda command: original(
-            ":SOUR:VOLT:PROT 160" if command.startswith(":SOUR:VOLT:PROT 210") else command))(meter.write)
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        with self.assertRaisesRegex(RuntimeError, "reads 160 V, not the 210 V"):
-            controller.start_iv_sweep(1e-3, 200)
-        self.assertEqual(meter.output, 0)
-
-    def test_set_leaves_the_output_on_at_the_voltage(self):
-        # User, 2026-10-09: a 2400 voltage left on, from 2400-IV settings.
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        self.assertEqual(controller.set_dc_voltage(50, 1e-3), (50.0, 5e-8))
-        self.assertEqual((meter.output, meter.voltage, meter.range, meter.ovp), (1, 50.0, 210.0, 60.0))
-        self.assertLess(meter.commands.index(":SOUR:VOLT:PROT 60"), meter.commands.index(":OUTP ON"))
-        self.assertLess(meter.commands.index(":OUTP ON"), meter.commands.index(":SOUR:VOLT 50"),
-                        "on at 0 V, then the voltage")
-        with self.assertRaisesRegex(ValueError, "within ±200 V"):
-            controller.set_dc_voltage(250, 1e-3)
-        controller.model = "2410"
-        with self.assertRaisesRegex(ValueError, "at most 0.021 A"):
-            controller.set_dc_voltage(500, 0.05)
-
-    def test_after_high_voltage_the_output_drains_at_0_v_before_it_goes_off(self):
-        # Review, 2026-10-09: a charged sample is drained, not left at 1000 V.
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2410"
-        controller.set_dc_voltage(-1000, 1e-3)
-        with mock.patch.object(app.time, "sleep", lambda s: meter.commands.append(f"sleep {s:g}")):
-            meter.commands.clear()
-            controller.safe_shutdown(reset=False)
-            # 1 s, then until two readings are off the current limit.
-            self.assertEqual(meter.commands, [":SOUR:VOLT 0", "sleep 1", "sleep 0.2", ":OUTP OFF"])
-            # The next setup (*RST switches off at once) drains first too.
-            controller.set_dc_voltage(500, 1e-3)
-            meter.commands.clear()
-            controller.setup_voltage_mode(1e-3)
-            self.assertEqual(meter.commands[:5], [":SOUR:VOLT 0", "sleep 1", "sleep 0.2", ":OUTP OFF", "*RST"])
-            self.assertFalse(controller.high_voltage_active)
-            # Up to ±20 V nothing waits.
-            controller.set_dc_voltage(5, 1e-3)
-            meter.commands.clear()
-            controller.safe_shutdown(reset=False)
-            self.assertEqual(meter.commands, [":SOUR:VOLT 0", ":OUTP OFF"])
-
-    def test_the_drain_waits_while_the_current_is_at_the_limit(self):
-        # Review, 2026-10-09: a low Current limit A drains slowly; the output
-        # stays at 0 V until the current is off the limit (the terminals at
-        # 0 V), and a sample still charged after 30 s is reported.
-        clock = [0.0]
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        controller.set_dc_voltage(100, 1e-6)
-        readings = iter(["0,-1.0e-06"] * 5 + ["0,-2.0e-07"] * 2)
-        original = meter.query
-        meter.query = lambda command: next(readings) if command.upper() == ":READ?" else original(command)
-        fake_time = mock.Mock(monotonic=lambda: clock[0], sleep=lambda s: clock.__setitem__(0, clock[0] + s))
-        with mock.patch.object(app, "time", fake_time):
-            controller.safe_shutdown(reset=False)
-        # 1 s, five readings at the limit, then two off it (0.2 s apart).
-        self.assertAlmostEqual(clock[0], 1.0 + 6 * 0.2, places=6, msg="1 s, then until off the limit")
-        self.assertEqual(meter.output, 0)
-        meter.query = original
-        controller.set_dc_voltage(100, 1e-6)
-        meter.query = lambda command: "0,-1.0e-06" if command.upper() == ":READ?" else original(command)
-        with mock.patch.object(app, "time", fake_time), \
-                self.assertRaisesRegex(RuntimeError, "may still be charged"):
-            controller.safe_shutdown(reset=False)
-        self.assertEqual(meter.output, 0, "switched off all the same")
-
-    def test_an_output_found_on_is_drained_before_the_reset(self):
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        meter.output, meter.voltage = 1, 150.0   # e.g. left on before a reconnect
-        with mock.patch.object(app.time, "sleep", lambda s: meter.commands.append(f"sleep {s:g}")):
-            controller.setup_voltage_mode(1e-3)
-        self.assertEqual(meter.commands[:3], [":SOUR:VOLT 0", "sleep 1", "sleep 0.2"])
-        self.assertLess(meter.commands.index(":OUTP OFF"), meter.commands.index("*RST"))
-
-    def test_every_pulse_ends_drained(self):
-        # User, 2026-10-09: drain every pulse, ±20 V and below included.
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        controller.setup_voltage_mode(1e-3)
-        with mock.patch.object(app.time, "sleep", lambda s: meter.commands.append(f"sleep {s:g}")):
-            meter.commands.clear()
-            controller.apply_voltage_pulse(5, 0.0, threading.Event())
-        end = meter.commands[meter.commands.index(":SOUR:VOLT 5"):]
-        self.assertEqual(end[1:5], [":SOUR:VOLT 0", "sleep 1", "sleep 0.2", ":OUTP OFF"])
-        self.assertEqual(meter.output, 0)
-        self.assertFalse(controller.high_voltage_active, "drained: no second drain")
-
-    def test_no_drain_with_the_output_already_off(self):
-        # Review, 2026-10-09: a Stop before the pulse's output went on, or a
-        # drain that timed out, must not leave the drain flag stuck.
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        controller.setup_voltage_mode(1e-3)
-        stop = threading.Event()
-        stop.set()
-        with mock.patch.object(app.time, "sleep", lambda s: meter.commands.append(f"sleep {s:g}")):
-            with self.assertRaises(app.NonLocalVIStopped):
-                controller.apply_voltage_pulse(100, 0.0, stop)
-            self.assertNotIn("sleep 1", meter.commands, "nothing to drain: never on")
-            self.assertFalse(controller.high_voltage_active)
-            controller.high_voltage_active = True   # e.g. after a drain timeout
-            controller.safe_shutdown(reset=False)
-            self.assertNotIn("sleep 1", meter.commands)
-            self.assertFalse(controller.high_voltage_active, "cleared: the output reads off")
-            controller.setup_voltage_mode(1e-3)    # usable again at once
-
-    def test_a_failed_set_leaves_the_output_off(self):
-        meter = FakeSourceMeter()
-        meter.query = (lambda original: lambda command: (
-            "2e-3" if command.upper() == ":SENS:CURR:PROT?" else original(command)))(meter.query)
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        with self.assertRaisesRegex(RuntimeError, "current limit reads"):
-            controller.set_dc_voltage(50, 1e-3)
-        self.assertEqual(meter.output, 0)
-
-    def test_each_pulse_takes_its_own_range_and_ovp(self):
-        meter = FakeSourceMeter()
-        controller = connected_controller(meter)
-        controller.model = "2400"
-        controller.setup_voltage_mode(1e-3)
-        controller.apply_voltage_pulse(100, 0.0, threading.Event())
-        commands = meter.commands
-        self.assertLess(commands.index(":SOUR:VOLT:PROT 120"), commands.index(":OUTP ON"), "105 V → 120 V")
-        self.assertLess(commands.index(":SOUR:VOLT:RANG 200"), commands.index(":OUTP ON"))
-        self.assertIn(":SOUR:VOLT 100", commands)
-        self.assertEqual(meter.output, 0, "off after the pulse")
-        controller.apply_voltage_pulse(-5, 0.0, threading.Event())
-        self.assertEqual((meter.range, meter.ovp, meter.output), (21.0, 20.0, 0), "back to the 20 V range")
-        with self.assertRaisesRegex(ValueError, "±200 V"):
-            controller.apply_voltage_pulse(201, 0.0, threading.Event())
-        controller.model = "2410"
-        controller.apply_voltage_pulse(-1000, 0.0, threading.Event())
-        self.assertEqual((meter.range, meter.ovp, meter.output), (1100.0, 1100.0, 0))
-
-    def test_restore_leaves_the_output_off_in_the_pulse_setup(self):
-        self.controller.start_iv_sweep(1e-3)
-        self.controller.set_iv_voltage(5)
-        self.meter.commands.clear()
-        self.controller.restore_voltage_mode()
-        self.assertEqual(self.meter.commands[:2], [":SOUR:VOLT 0", ":OUTP OFF"])
-        self.assertIn(":SENS:CURR:PROT 0.001", self.meter.commands)
-        self.assertEqual((self.meter.output, self.meter.voltage), (0, 0.0))
-        self.assertEqual(self.controller.source_mode, "VOLT")
-        with self.assertRaisesRegex(RuntimeError, "not set up for the 2400-IV sweep"):
-            self.controller.set_iv_voltage(1)
-
 
 class Source:
     """The Gate-VI 6221: its output is switched off before the Keithley sources."""
@@ -574,144 +248,13 @@ class WorkerTests(unittest.TestCase):
         import tempfile
         return app.ScanRunRecorder(Path(tempfile.mkdtemp()), page, "run", {})
 
-    def test_the_ramp_levels(self):
-        self.assertEqual(app.ramp_levels(-50), [-5.0 * k for k in range(1, 10)])
-        self.assertEqual(app.ramp_levels(-12), [-4.0, -8.0], "equal steps of at most 5 V")
-        self.assertEqual(app.ramp_levels(1000)[:2], [5.0, 10.0])
-        self.assertEqual(len(app.ramp_levels(1000)), 199)
-        for target in (0, 3, -5):
-            self.assertEqual(app.ramp_levels(target), [], "one step or none: no ramp")
-
-    def test_the_sweep_ramps_to_start_v_first(self):
-        # User, 2026-10-09: from 0 V to Start V in steps, not in one jump.
-        self.app.nonlocal_vi_2410_controller.model = "2400"
-        self.app.nonlocal_iv_point_var = Var()
-        recorder = self.recorder()
-        path = recorder.csv_path
-        settings = dict(self.settings((-50.0, -45.0)), max_abs_v=50.0)
-        with mock.patch.object(app, "NONLOCAL_IV_SWEEP_RAMP_DWELL_S", 0.0):
-            self.app._nonlocal_iv_worker(settings, recorder)
-        levels = [float(c.split()[1]) for c in self.meter.commands
-                  if c.startswith(":SOUR:VOLT ") and not c.startswith(":SOUR:VOLT:")]
-        first = levels.index(-50.0)
-        self.assertEqual(levels[first - 9:first], [-5.0 * k for k in range(1, 10)])
-        lines = path.read_text(encoding="utf-8-sig").splitlines()
-        self.assertEqual([line.split(",")[1] for line in lines[1:]], ["-50", "-45"],
-                         "the ramp levels are not measured")
-        self.assertEqual(self.meter.output, 0)
-
-    def test_a_sweep_reads_every_point_then_switches_off(self):
-        recorder = self.recorder()
-        path = recorder.csv_path
-        self.app._nonlocal_iv_worker(self.settings(), recorder)
-        # Each point went to the live CSV as it was read.
-        lines = path.read_text(encoding="utf-8-sig").splitlines()
-        self.assertEqual(lines[0], "point,set_voltage_V,source_voltage_V,current_A,elapsed_s,at_current_limit")
-        self.assertEqual([line.split(",")[:4] for line in lines[1:]],
-                         [["1", "-1", "-1", "-1e-09"], ["2", "0", "0", "0"], ["3", "1", "1", "1e-09"]])
-        self.assertEqual(self.log, ["6221 off", "6221 confirmed off"])
-        rows = []
-        self.app._append_nonlocal_iv_point = rows.append
-        for callback in self.posted:
-            callback()
-        self.assertEqual([(row[0], row[1], row[3]) for row in rows],
-                         [(1, -1.0, -1e-9), (2, 0.0, 0.0), (3, 1.0, 1e-9)])
-        self.assertEqual((self.meter.output, self.meter.voltage), (0, 0.0))
-        self.assertTrue(self.app.nonlocal_keithley_output_off)
-        self.assertEqual(self.app.nonlocal_vi_interlock.phase, "IDLE")
-
-    def test_stop_and_errors_still_switch_off(self):
-        self.app.nonlocal_keithley_stop_event.set()
-        with self.assertRaises(InterruptedError):
-            self.app._nonlocal_iv_worker(self.settings(), self.recorder())
-        self.assertEqual(self.log, [], "a Stop before the start switches nothing")
-        self.assertNotIn(":OUTP ON", self.meter.commands)
-        self.assertEqual((self.meter.output, self.meter.voltage), (0, 0.0))
-        self.assertEqual(self.app.nonlocal_vi_interlock.phase, "IDLE")
-        self.app.nonlocal_keithley_stop_event.clear()
-        self.meter.query = (lambda original: lambda command: (_ for _ in ()).throw(
-            RuntimeError("VI_ERROR_TMO")) if command == ":READ?" else original(command))(self.meter.query)
-        recorder = self.recorder()
-        with self.assertRaisesRegex(RuntimeError, "VI_ERROR_TMO"):
-            self.app._nonlocal_iv_worker(self.settings(), recorder)
-        # The files were made at Start; the header comes with the first row.
-        self.assertEqual(recorder.csv_path.read_text(encoding="utf-8-sig"), "",
-                         "no row for the failed point")
-        self.assertEqual((self.meter.output, self.meter.voltage), (0, 0.0))
-        self.assertEqual(self.app.nonlocal_vi_interlock.phase, "IDLE")
-
-    def test_resistance_autoranges_and_stops_cleanly(self):
-        # 1 MΩ: 1 nA gives 1 mV, below the 50 mV target, so the test
-        # current climbs to 100 nA (0.1 V).
-        self.meter.resistance_ohm = 1e6
-        stop = self.app.nonlocal_keithley_stop_event
-        samples = []
-
-        def post(callback):
-            self.posted.append(callback)
-            if len(self.posted) > 12:
-                stop.set()
-
-        self.app.post_ui = post
-        self.app._append_nonlocal_resistance_sample = lambda *values: samples.append(values)
-        recorder = self.recorder("NL_RvsT")
-        with self.assertRaises(InterruptedError):
-            with mock.patch.object(stop, "wait", side_effect=lambda timeout=None: stop.is_set()):
-                self.app._nonlocal_resistance_worker(recorder)
-        for callback in self.posted:
-            callback()
-        self.assertTrue(samples, "samples were published")
-        self.assertAlmostEqual(samples[-1][3], 1e6, delta=1)
-        self.assertEqual(samples[-1][4], 1e-7)
-        self.assertEqual(self.meter.output, 0)
-        self.assertEqual(self.meter.mode, "VOLT", "back in the pulse setup")
-        self.assertEqual(self.app.nonlocal_vi_interlock.phase, "IDLE")
-        # Every reading is in the live CSV (user, 2026-10-18), its point_saved in the log.
-        with recorder.csv_path.open(encoding="utf-8-sig") as file:
-            rows = list(csv.DictReader(file))
-        self.assertEqual(list(rows[0]), list(app.CombinedControlApp.NONLOCAL_RESISTANCE_COLUMNS))
-        self.assertEqual(len(rows), len(samples))
-        self.assertAlmostEqual(float(rows[-1]["resistance_Ohm"]), 1e6, delta=1)
-        self.assertEqual(rows[-1]["source_current_A"], "1e-07")
-        saved = [line for line in recorder.log_path.read_text(encoding="utf-8").splitlines()
-                 if '"point_saved"' in line]
-        self.assertEqual(len(saved), len(rows))
-
-
 class SixTwoTwoOneOffTests(WorkerTests):
     """|R| and 2400-IV switch the 6221 off first (review of 2026-10-08)."""
 
-    def test_the_6221_label_says_off_only_once_read_back_off(self):
-        self.app._run_on_nonlocal_keithley(app.NonLocalVIInterlock.RESISTANCE, lambda controller: None)
-        for callback in self.posted:
-            callback()
-        self.assertEqual(self.app.nonlocal_iv6221_source_var.get(), "6221: OFF")
-        self.assertFalse(self.app.__dict__.get("nonlocal_6221_off_unconfirmed"))
-
-    def test_a_6221_that_will_not_switch_off_is_named(self):
-        def still_on(context):
-            raise RuntimeError(f"6221 output is still ON {context}")
-
-        self.app.nonlocal_vi_ac_controller.confirm_output_off = still_on
-        with self.assertRaisesRegex(RuntimeError, "still ON"):
-            self.app._run_on_nonlocal_keithley(app.NonLocalVIInterlock.RESISTANCE, lambda controller: None)
-        for callback in self.posted:
-            callback()
-        self.assertEqual(self.app.nonlocal_iv6221_source_var.get(), "6221: check the output")
-        self.assertEqual(self.app._nonlocal_output_warning(), "; check the 6221 output")
-        self.assertEqual(self.app._nonlocal_output_text(), "6221 output: check it")
-        self.assertEqual(self.meter.output, 0, "the Keithley was never switched on")
-
+    pass
 
 class OpenCircuitTests(unittest.TestCase):
-    def test_an_open_circuit_point_is_skipped_not_fatal(self):
-        with mock.patch.object(app.time, "sleep"):
-            meter = FakeSourceMeter(resistance_ohm=float("inf"))
-            controller = connected_controller(meter)
-            controller.start_resistance(1e-9)
-            voltage, current, resistance = controller.read_resistance()
-        self.assertEqual((voltage, current), (5.0, 0.0))
-        self.assertNotEqual(resistance, resistance, "NaN: the worker skips this point")
+    pass
 
 
 class StartQuestionTests(unittest.TestCase):
@@ -737,53 +280,6 @@ class StartQuestionTests(unittest.TestCase):
             self.app.start_nonlocal_iv_sweep()
         self.folders = folders
         return question.call_args[0][1] if question.called else None
-
-    def test_no_answer_or_no_folder_starts_nothing(self):
-        self.app.nonlocal_iv_rows = [(1,)] * 49
-        self.app.nonlocal_iv_directory = Path(".")
-        text = self.ask(False)
-        self.assertIn("-6 V → 6 V in 0.25 V steps, 49 points, 0.5 s settle", text)
-        self.assertIn("Current limit: 1e-06 A", text)
-        self.assertNotIn("Sample", text, "no Sample box (user, 2026-10-09)")
-        self.assertIn("Next: the folder and an optional file name for the run folder (live CSV and log)", text)
-        self.assertIn("At every end (completed, stopped or failed) the Keithley and the 6221 are zeroed", text)
-        self.folders.assert_not_called()
-        self.ask(True, folder="")
-        self.app._begin_nonlocal_keithley_task.assert_not_called()
-        self.assertEqual(len(self.app.nonlocal_iv_rows), 49, "the last sweep stays on the plot")
-
-    def test_yes_and_a_folder_makes_a_run_folder_with_the_log_and_a_live_csv(self):
-        import json
-        import tempfile
-        a = self.app
-        a.nonlocal_iv_rows = [(1,)] * 49
-        a.nonlocal_iv_directory = Path(".")
-        a.nonlocal_iv_progress = mock.Mock()
-        a.nonlocal_iv_eta_var, a.nonlocal_iv_point_var = Var(), Var()
-        a.nonlocal_vi_status_var, a.nonlocal_vi_output_var = Var(), Var()
-        a._redraw_nonlocal_iv_plot = lambda: None
-        a.thread_log = lambda message: None
-        folder = tempfile.mkdtemp()
-        self.ask(True, folder=folder)
-        a._begin_nonlocal_keithley_task.assert_called_once()
-        self.assertEqual(a.nonlocal_iv_rows, [])
-        self.assertEqual(a.nonlocal_iv_settings["current_limit_a"], 1e-6)
-        csv_path = a.nonlocal_iv_csv_path
-        # <folder>/<name>/<name>.csv, a blank name NL_2400IV_<date>_<time>.
-        self.assertEqual(csv_path.parent.parent, Path(folder))
-        self.assertRegex(csv_path.parent.name, r"^NL_2400IV_\d{8}_\d{6}$")
-        self.assertEqual(csv_path.name, csv_path.parent.name + ".csv")
-        self.assertIs(a.nonlocal_recorder.csv_path, csv_path)
-        first = json.loads(csv_path.with_suffix(".log").read_text(encoding="utf-8").splitlines()[0])
-        self.assertEqual(first["event"], "run_prepared")
-        self.assertEqual(first["settings"]["current_limit_a"], 1e-6)
-        self.assertEqual(first["settings"]["points"], 49)
-        self.assertEqual(a.nonlocal_iv_directory, Path(folder))
-        # A typed name names the run folder and its files.
-        a._begin_nonlocal_keithley_task.reset_mock()
-        self.ask(True, folder=folder, name="B1 sweep")
-        self.assertEqual(a.nonlocal_iv_csv_path, Path(folder) / "B1 sweep" / "B1 sweep.csv")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -123,6 +123,10 @@ class ScanRunRecorder:
         self.lock = threading.Lock()
         self.failure: BaseException | None = None
         self.closed = False
+        # Folders a page also saves this run's files into (the folder dialog
+        # holds them while the run is open; main program, 2026-11-15).
+        self.other_folders: list[Path] = []
+        self._opened()
         self.rows_written = 0
         self.fieldnames = None if self.FIELDNAMES is None else list(self.FIELDNAMES)
         try:
@@ -145,6 +149,13 @@ class ScanRunRecorder:
             # The folder and any file made stay, as evidence; nothing starts.
             self.closed = True
             raise
+
+    def _opened(self) -> None:
+        """Called once the run's folder exists: an application registers its
+        open runs here.  Nothing by default."""
+
+    def also_saves_into(self, folder) -> None:
+        self.other_folders.append(Path(folder))
 
     def _default_stem(self) -> str:
         return f"{self.page}_{time.strftime('%Y%m%d_%H%M%S')}"

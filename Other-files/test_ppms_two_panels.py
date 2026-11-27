@@ -144,12 +144,17 @@ class TwoPanelTests(unittest.TestCase):
                 sr830_8_x_v=1, sr830_8_y_v=2, sr830_8_r_v=3, sr830_8_theta_deg=4,
                 sr830_9_x_v=1, sr830_9_y_v=2, sr830_9_r_v=3, sr830_9_theta_deg=4)]
             panel._draw_nonlocal_series = Mock()
+            # The legacy plots: the page itself skips them while its harmonic plots exist (hidden; speed, 2026-11-25).
             panel._redraw_ppms_transport_plot()
+            for frame in panel.ppms_transport_plot_frames.values():
+                frame.configure.assert_not_called()
+            legacy = app.CombinedControlApp._redraw_ppms_transport_plot
+            legacy(panel)
             for (key, channel), frame in panel.ppms_transport_plot_frames.items():
                 expected = '2nd harmonic' if key == '830_a' else '3rd harmonic'
                 self.assertIn(expected, frame.configure.call_args.kwargs['text'])
             panel.ppms_field_scan_rows = []
-            panel._redraw_ppms_transport_plot()
+            legacy(panel)
             for frame in panel.ppms_transport_plot_frames.values():
                 self.assertIn('1st harmonic', frame.configure.call_args.kwargs['text'])
 
@@ -488,6 +493,38 @@ class TwoPanelTests(unittest.TestCase):
         panel.disconnect_ppms2_zurich()
         self.assertFalse(controller.mfli_connected)
 
+    def test_a_zurich_without_mf_md_reads_one_harmonic(self):
+        """User, 2026-11-27: DEV4435 on the SHHV & Switch page failed at
+        Connect ("/dev4435/extrefs/1/demodselect" not found): it has no MF-MD.
+        It now takes the single-demodulator reference (no Demod 4) and one
+        harmonic; 1+2 at Connect becomes 1 with a note, and a scan with 1+2
+        is refused before anything is sent."""
+        _, panel, controller = self.make_panel()
+        controller.mfli_has_multi_demod.return_value = False
+        controller.mfli_device = 'dev4435'
+        panel.zurich_harmonic.set('1+2')
+        panel.connect_ppms2_zurich()
+        controller.configure_mfli.assert_called_once_with('AC', 1, 'R',
+            reference_source=panel.zurich_reference.get(), sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
+            input_impedance='10 MΩ', input_scaling=1.0, timeconstant_s=1.0, external_reference_demodulator=None)
+        controller.configure_second_harmonic.assert_not_called()
+        controller.disable_unused_ppms_demods.assert_called_once_with('1')
+        self.assertEqual(panel.zurich_harmonic.get(), '1')
+        self.assertIn('no MF-MD: one harmonic', panel.zurich_status.get())
+        for harmonic in ('1+2', '1+2+3'):
+            self.assertIn('DEV4435 has no MF-MD option: it reads one harmonic at a time', panel._zurich_needs_md_text(harmonic))
+        for harmonic in ('1', '2', '3'):
+            self.assertIsNone(panel._zurich_needs_md_text(harmonic))
+        # With MF-MD (DEV4414) nothing changes: Demod 4 reference, 1+2 kept.
+        _, panel, controller = self.make_panel()
+        controller.mfli_has_multi_demod.return_value = True
+        panel.zurich_harmonic.set('1+2')
+        panel.connect_ppms2_zurich()
+        self.assertEqual(controller.configure_mfli.call_args.kwargs['external_reference_demodulator'], 3)
+        controller.configure_second_harmonic.assert_called_once()
+        self.assertEqual(panel.zurich_harmonic.get(), '1+2')
+        self.assertIsNone(panel._zurich_needs_md_text('1+2'))
+
     def test_a_background_read_never_locks_the_zurich_controls(self):
         """The 1 s read runs on its own flag: a control refresh during a read
         used to grey Connect, Disconnect, the harmonic list and Measure, and
@@ -555,6 +592,7 @@ class TwoPanelTests(unittest.TestCase):
 
     def test_four_demods_saved_independently_and_no_setting_writes(self):
         controller = app.NonLocalACController(lambda message: None)
+        controller.mfli_props = {'options': 'MD'}      # four demodulators: MF-MD
         controller.mfli_device = 'dev4414'
         controller.mfli_daq = Mock()
         def sample(node):
@@ -586,7 +624,7 @@ class TwoPanelTests(unittest.TestCase):
         daq, emit = Mock(), Mock()
         daq.getInt.side_effect = lambda node: 0 if '/demods/3/enable' in node else 1
         daq.getSample.return_value = dict(x=1e-6, y=2e-6, frequency=317.3, timestamp=42)
-        exec(textwrap.dedent(block), dict(daq=daq, device='dev4414', emit=emit,
+        exec(textwrap.dedent(block), dict(daq=daq, device='dev4414', emit=emit, request={},
             scalar=lambda sample, key, required=True: sample.get(key)))
         channels = emit.call_args.args[0]['demods']
         self.assertEqual(len(channels), 4)
@@ -595,6 +633,7 @@ class TwoPanelTests(unittest.TestCase):
         controller = app.NonLocalACController(lambda _: None)
         controller.mfli_bridge = Mock()
         controller.mfli_bridge.request.return_value = {'demods': channels}
+        controller.mfli_props = {'options': 'MD'}      # four demodulators: MF-MD
         row = controller.read_mfli_four_demods()
         self.assertEqual(row['zurich_demod4_status'], 'disabled')
         self.assertEqual(row['zurich_demod4_frequency_hz'], '')
@@ -606,6 +645,7 @@ class TwoPanelTests(unittest.TestCase):
         for key in ('830_a', '830_b', '830_c'):
             panel.ppms_lockin_selection[key].set(False)
         panel.ppms_plot_axis = 'angle'
+        panel.ppms_plot_angle_range = (0., 360.)
         panel.ppms_field_scan_rows = [dict(measured_angle_deg=30, temperature_index=1,
             zurich_x_v=1e-6, zurich_y_v=-2e-6, zurich_theta_deg=-63, zurich_r_v=2.2e-6)]
         panel._draw_nonlocal_series = Mock()
@@ -614,6 +654,14 @@ class TwoPanelTests(unittest.TestCase):
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         self.assertEqual(len(drawn), 3)
         self.assertEqual(list(drawn[0].args[1].values()), [[(30., 1e-6)]])
+        # The angle axis spans the scan's angles (user, 2026-11-15).
+        self.assertEqual([c.kwargs['angle_x_range'] for c in drawn], [(0., 360.)] * 3)
+        panel.ppms_plot_axis = 'field'
+        panel._draw_nonlocal_series.reset_mock()
+        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
+            panel._redraw_ppms_transport_plot()
+        self.assertEqual({c.kwargs['angle_x_range'] for c in panel._draw_nonlocal_series.call_args_list}, {None})
+        panel.ppms_plot_axis = 'angle'
         panel.ppms_harmonic_plot_frames = {key: Mock() for key in panel.ppms_harmonic_plot_frames}
         panel._display_zurich_sample(dict(X=1, Y=2, R=3, phase_deg=4,
             reference_frequency_hz=317.3, reference_valid=True, status_text='OK'))
@@ -653,8 +701,14 @@ class TwoPanelTests(unittest.TestCase):
         controller._run_mfli_autorange.reset_mock()
         controller.mfli_range_cooldown = 0
         controller.mfli_low_range_count = 0
+        # 10 % of the range is not low any more (under 1 %; user, 2026-11-16).
         controller.read_mfli.return_value = {'input_overload': False,
             'input_extrema_valid': True, 'input_utilization': .1}
+        for _ in range(6):
+            controller.read_stfmr_mfli(317.3, auto_range=True)
+        controller._run_mfli_autorange.assert_not_called()
+        controller.read_mfli.return_value = {'input_overload': False,
+            'input_extrema_valid': True, 'input_utilization': .005}
         for _ in range(2):
             controller.read_stfmr_mfli(317.3, auto_range=True)
             controller._run_mfli_autorange.assert_not_called()

@@ -8,11 +8,21 @@ import types
 import unittest
 from unittest.mock import patch
 
-source = Path(__file__).resolve().parents[1] / "Transport_all.py"
+# The standalone PPMS application's module, in the transport package.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+source = ROOT / "transport" / "ppms" / "app.py"
 spec = importlib.util.spec_from_file_location("transport_motor_test", source)
 app = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = app
 spec.loader.exec_module(app)
+
+# The scan-start window (user, 2026-11-23: only the expected time, bold red)
+# is a modal Toplevel; the tests answer it through messagebox.askyesno, as
+# before, and so still see the whole question that goes to the log.
+app.ask_scan_start_window = app.ask_scan_start
+app.ask_scan_start = lambda parent, title, question, expected, warning="", **options: app.messagebox.askyesno(title, question, parent=parent, **options)
 
 
 class Type:

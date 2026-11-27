@@ -19,7 +19,7 @@ class HeliumWarningTests(unittest.TestCase):
         import csv
         from pathlib import Path
         with tempfile.TemporaryDirectory() as folder:
-            with patch.object(app, '__file__', str(Path(folder) / 'Transport.py')):
+            with patch.object(app, '_PROGRAM_FILE', str(Path(folder) / 'Transport.py')):
                 # Two sessions (here: two panel instances) append to the same
                 # continuous file; elapsed_s restarts per session.
                 for cls in (app.CombinedControlApp, app.PPMS2Panel):

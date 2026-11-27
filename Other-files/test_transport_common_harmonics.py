@@ -11,7 +11,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import Transport_all as app
+import transport.ppms.app as app
 from transport.common import (
     DEFAULT_HARMONIC_CHOICES,
     DEFAULT_HARMONIC_LABELS,
@@ -82,8 +82,6 @@ class DummyPanel:
     _ppms_harmonic_orders = app.CombinedControlApp._ppms_harmonic_orders
     _ppms_harmonic_value = app.CombinedControlApp._ppms_harmonic_value
     _ppms_harmonic_passes = app.CombinedControlApp._ppms_harmonic_passes
-    _rte_harmonic_orders = app.RTEPanel._rte_harmonic_orders
-    _rte_harmonic_passes = app.RTEPanel._rte_harmonic_passes
 
 
 class TestTransportCommonHarmonics(unittest.TestCase):
@@ -154,19 +152,6 @@ class TestTransportCommonHarmonics(unittest.TestCase):
         ):
             self.assertFalse(hasattr(common, name), f"Misleading alias {name} found in transport.common")
             self.assertFalse(hasattr(harmonics, name), f"Misleading alias {name} found in transport.common.harmonics")
-
-    def test_original_instance_method_signatures_preserved(self):
-        sig_ppms_orders = inspect.signature(app.CombinedControlApp._ppms_harmonic_orders)
-        self.assertEqual(list(sig_ppms_orders.parameters.keys()), ["self", "key"])
-
-        sig_ppms_passes = inspect.signature(app.CombinedControlApp._ppms_harmonic_passes)
-        self.assertEqual(list(sig_ppms_passes.parameters.keys()), ["self", "settings"])
-
-        sig_rte_orders = inspect.signature(app.RTEPanel._rte_harmonic_orders)
-        self.assertEqual(list(sig_rte_orders.parameters.keys()), ["self", "key"])
-
-        sig_rte_passes = inspect.signature(app.RTEPanel._rte_harmonic_passes)
-        self.assertEqual(list(sig_rte_passes.parameters.keys()), ["self", "settings"])
 
     def test_parse_harmonic_mode_valid(self):
         cases = [
@@ -377,104 +362,6 @@ class TestTransportCommonHarmonics(unittest.TestCase):
         self.assertEqual(len(validated_configs), 2)
         self.assertEqual(validated_configs[0]["harmonic_pass"], 1)
         self.assertEqual(validated_configs[1]["harmonic_pass"], 2)
-
-    def test_validation_failure_prevents_scan_planning_from_completing(self):
-        """Correction 3: Validation failures prevent scan planning from completing."""
-        panel = DummyPanel({"830_a": "1+2+3"})
-        # 40 kHz * 3rd harmonic = 120 kHz > 102 kHz ceiling
-        settings = {
-            "current_rms_ma": 1.0,
-            "frequency_hz": 40000.0,
-            "compliance_v": 10.0,
-            "harmonic_a": 1,
-            "harmonic_b": 1,
-            "harmonic_c": 1,
-            "active_lockins": ("830_a",),
-            "allow_no_lockins": False,
-        }
-
-        # _ppms_harmonic_passes must abort and raise ValueError
-        with self.assertRaises(ValueError) as ctx:
-            panel._ppms_harmonic_passes(settings)
-        self.assertIn("102 kHz", str(ctx.exception))
-
-        # _rte_harmonic_passes must abort and raise ValueError
-        with self.assertRaises(ValueError) as ctx:
-            panel._rte_harmonic_passes(settings)
-        self.assertIn("102 kHz", str(ctx.exception))
-
-        # Pass 1 validation failure (e.g. invalid current) also aborts immediately
-        bad_settings = dict(settings, current_rms_ma=-5.0, frequency_hz=100.0)
-        with self.assertRaises(ValueError) as ctx2:
-            panel._ppms_harmonic_passes(bad_settings)
-        self.assertIn("must be greater than 0 mA RMS", str(ctx2.exception))
-
-    def test_equivalence_with_original_implementation(self):
-        test_modes = [
-            {"830_a": "1", "830_b": "2", "830_c": "3"},
-            {"830_a": "1+2", "830_b": "1+2+3", "830_c": "1"},
-            {"830_a": "1+2+3", "830_b": "2", "830_c": "3"},
-        ]
-        base_settings = {
-            "current_rms_ma": 0.5,
-            "frequency_hz": 133.7,
-            "compliance_v": 5.0,
-            "harmonic_a": 1,
-            "harmonic_b": 1,
-            "harmonic_c": 1,
-            "allow_no_lockins": False,
-        }
-
-        for choices in test_modes:
-            panel = DummyPanel(choices)
-            # Test order extraction equivalence
-            for key in app.PPMS_SR830_KEYS:
-                ref_orders = ReferenceOriginalImplementation.original_ppms_harmonic_orders(panel, key)
-                extracted_orders = panel._ppms_harmonic_orders(key)
-                rte_orders = panel._rte_harmonic_orders(key)
-                self.assertEqual(ref_orders, extracted_orders)
-                self.assertEqual(ref_orders, rte_orders)
-
-            # Test pass scheduling equivalence
-            for active in (("830_a",), ("830_a", "830_b"), ("830_a", "830_b", "830_c")):
-                settings = dict(base_settings, active_lockins=active)
-                ref_passes = ReferenceOriginalImplementation.original_ppms_harmonic_passes(panel, settings)
-                extracted_passes = panel._ppms_harmonic_passes(settings)
-                rte_passes = panel._rte_harmonic_passes(settings)
-
-                self.assertEqual(ref_passes, extracted_passes)
-                self.assertEqual(ref_passes, rte_passes)
-
-    def test_rte_delegation_behavior(self):
-        panel = DummyPanel({"830_a": "1+2"})
-        self.assertEqual(panel._rte_harmonic_orders("830_a"), (1, 2))
-        settings = {
-            "current_rms_ma": 0.5,
-            "frequency_hz": 100.0,
-            "compliance_v": 5.0,
-            "harmonic_a": 1,
-            "harmonic_b": 1,
-            "harmonic_c": 1,
-            "active_lockins": ("830_a",),
-            "allow_no_lockins": False,
-        }
-        passes = panel._rte_harmonic_passes(settings)
-        self.assertEqual(len(passes), 2)
-        self.assertEqual(passes[0]["harmonic_a"], 1)
-        self.assertEqual(passes[1]["harmonic_a"], 2)
-
-    def test_monkeypatch_preservation(self):
-        panel = DummyPanel({"830_a": "custom_mode"})
-        custom_modes = dict(app.PPMS_HARMONIC_MODE_ORDERS, custom_mode=(2, 3))
-        with mock.patch.object(app, "PPMS_HARMONIC_MODE_ORDERS", custom_modes):
-            orders = panel._ppms_harmonic_orders("830_a")
-            self.assertEqual(orders, (2, 3))
-
-        # Test monkeypatching panel._rte_harmonic_passes as existing tests do
-        mock_passes = [{"mock_key": "mock_val"}]
-        with mock.patch.object(panel, "_rte_harmonic_passes", return_value=mock_passes):
-            self.assertEqual(panel._rte_harmonic_passes({}), mock_passes)
-
 
 if __name__ == "__main__":
     unittest.main()

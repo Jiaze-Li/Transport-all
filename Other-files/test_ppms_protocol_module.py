@@ -164,7 +164,7 @@ class TestPPMSProtocolModule(unittest.TestCase):
 
     def test_backward_compatibility_with_transport_all(self):
         """Verify that Transport_all exposes identical objects and backward-compatible signatures."""
-        import Transport_all as app
+        import transport.ppms.app as app
 
         self.assertIs(app.validate_ppms_temperature_command, validate_ppms_temperature_command)
         self.assertIs(app.validate_ppms_field_command, validate_ppms_field_command)

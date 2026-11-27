@@ -66,13 +66,15 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(parents["metrics"], "metrics_view")
         self.assertNotIn("in_=", inspect.getsource(app.CombinedControlApp._compact_ppms_controls))
 
-    def launch(self, mode, values, confirm=True, cancel_folder=False, filename="", existing=None, selected=None, speed=14):
+    def launch(self, mode, values, confirm=True, cancel_folder=False, filename="", existing=None, selected=None, speed=14,
+               expect_error=None):
         obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
         obj.ppms_field_scan_running = obj.ppms_environment_busy = False
         obj._require_ppms_control_ready = Mock()
         obj.ppms_simple_mode = Mock(get=lambda: mode)
         obj.ppms_simple_range = [Mock(get=lambda v=v: v) for v in values]
         obj.ppms_temperature_scan_range = [Mock(get=lambda v=v: v) for v in (300, 290, 5)]
+        obj.ppms_temperature_delay_var = Mock(get=lambda: getattr(self, "temperature_delay", "0"))
         defaults = dict(ppms_acquisition_time_var=1, ppms_field_target_var=100, ppms_temperature_target_var=300,
             ppms_motor_target_var=26, ppms_field_scan_stable_var=0,
             ppms_field_rate_var=100, ppms_field_approach_var="No overshoot",
@@ -89,7 +91,7 @@ class ModeTests(unittest.TestCase):
         if selected is not None:
             obj.ppms_lockin_selection = {key: Mock(get=lambda key=key: key in selected)
                                         for key in ('830_a', '830_b', 'zurich')}
-            obj.zurich_controller = types.SimpleNamespace(mfli_connected='zurich' in selected)
+            obj.zurich_controller = types.SimpleNamespace(mfli_connected='zurich' in selected, mfli_has_multi_demod=lambda: True)
             for key in ('830_a', '830_b'):
                 obj.ppms_instrument_controllers[key].connected = key in selected
         obj.ppms_last_readback = dict(temperature_k=300, field_oe=100)
@@ -99,14 +101,21 @@ class ModeTests(unittest.TestCase):
             setattr(obj, name, Mock())
         obj.root = None
         obj.thread_log = Mock()
+        self.durations = []
+        obj._format_scan_duration = lambda seconds: (self.durations.append(seconds), f"{seconds:g} s")[1]
         order = []
         def answer(*args, **kwargs):
             order.append("confirm")
+            self.last_question = args[1] if len(args) > 1 else kwargs.get("message", "")
             return confirm
         with tempfile.TemporaryDirectory() as folder, patch.object(app.simpledialog, "askstring", return_value=filename), patch.object(app.messagebox, "askyesno", side_effect=answer), patch.object(app.filedialog, "askdirectory", side_effect=lambda **kw: (order.append("folder") or ("" if cancel_folder else folder))), patch.object(app.messagebox, "showerror") as error:
             if existing:
                 (Path(folder) / existing).write_text("original", encoding="utf-8")
             obj.start_ppms_field_scan()
+            if expect_error is not None:
+                self.assertIn(expect_error, error.call_args.args[1])
+                obj.ppms_executor.submit.assert_not_called()
+                return None
             self.assertFalse(error.called, error.call_args)
             self.assertEqual(order, ["confirm", "folder"] if confirm else ["confirm"])
             if not confirm or cancel_folder or filename is None:
@@ -171,15 +180,35 @@ class ModeTests(unittest.TestCase):
     def test_temperature_field_launch(self):
         obj, sequence, settings = self.launch("Field+Temperature", (-100, 100, 100))
         self.assertEqual(obj.ppms_plot_axis, "field")
+        self.assertIsNone(obj.ppms_plot_angle_range, "only an angle axis gets the scan's range")
         self.assertEqual(obj.ppms_field_scan_total, 15)
         self.assertEqual([point[3] for point in sequence], [-100, 0, 100, 0, -100])
         self.assertEqual(settings["nested"]["temperature"], (300, 295, 290))
         self.assertEqual(settings["nested"]["angle"], (26,))
         self.assertEqual(settings["currents"], (.001,))
+        self.assertEqual(settings["temperature_delay_s"], 0.0)
+
+    def test_temperature_field_launch_with_a_wait_after_each_temperature(self):
+        """User, 2026-11-23: Wait s after each temperature is reached; the
+        Yes/No names it and the estimate counts it, three temperatures x 600 s."""
+        self.temperature_delay = "0"
+        self.launch("Field+Temperature", (-100, 100, 100))
+        without = max(self.durations)
+        self.assertNotIn("Wait after each temperature", self.last_question)
+        self.temperature_delay = "600"
+        _obj, _sequence, settings = self.launch("Field+Temperature", (-100, 100, 100))
+        self.assertEqual(settings["temperature_delay_s"], 600.0)
+        self.assertIn("Wait after each temperature is stable: 600 s, then the scan at it", self.last_question)
+        self.assertAlmostEqual(max(self.durations) - without, 3 * 600)
+        for typed, message in (("-1", "must be within 0–86400 s"), ("x", "must be a number")):
+            self.temperature_delay = typed
+            self.launch("Field+Temperature", (-100, 100, 100), expect_error=message)
+        self.temperature_delay = "0"
 
     def test_temperature_outer_angle_launch(self):
         obj, sequence, settings = self.launch("Angle+Temperature", (-5, 355, 5))
         self.assertEqual(obj.ppms_plot_axis, "angle")
+        self.assertEqual(obj.ppms_plot_angle_range, (-5, 355), "the plots' x axis (user, 2026-11-15)")
         self.assertEqual(obj.ppms_field_scan_total, 73 * 3)
         self.assertEqual([p[3] for p in sequence], [100])
         self.assertEqual(settings["nested"]["temperature"], (300, 295, 290))

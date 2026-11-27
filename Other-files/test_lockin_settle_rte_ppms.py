@@ -166,40 +166,6 @@ class RuleTests(NoWindows):
             panel.zurich_scan_tau = zurich_tau
         return panel
 
-    def test_sr830_only(self):
-        panel = self.panel({"830_a": 10, "830_b": 8})
-        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a", "830_b"), False), (1.0, 1.0, "SR830-1"))
-        panel = self.panel({"830_a": 12})
-        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a",), False), (10.0, 10.0, "SR830-1"))
-
-    def test_zurich_only(self):
-        panel = self.panel(zurich_tau=2.0)
-        self.assertEqual(panel._ppms_lockin_settle(0.5, (), True), (2.0, 2.0, "the Zurich"))
-        panel = self.panel(zurich_tau=0.01)
-        self.assertEqual(panel._ppms_lockin_settle(0.5, (), True)[0], 0.5, "Settle s is longer than 10 ms")
-
-    def test_both(self):
-        panel = self.panel({"830_a": 10, "830_c": 11}, zurich_tau=2.0)
-        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a", "830_c"), True), (3.0, 3.0, "SR830-3"))
-        panel = self.panel({"830_a": 10}, zurich_tau=5.0)
-        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a",), True), (5.0, 5.0, "the Zurich"))
-        self.assertEqual(panel._ppms_lockin_settle(0.5, ("830_a",), False)[0], 1.0,
-                         "a Zurich that is not measured does not count")
-
-    def test_settle_s_longer(self):
-        panel = self.panel({"830_a": 10}, zurich_tau=1.0)
-        self.assertEqual(panel._ppms_lockin_settle(12.0, ("830_a",), True), (12.0, 1.0, "SR830-1"))
-
-    def test_an_sr830_not_read_back_counts_with_what_connect_sets(self):
-        """RT-E: OFLT 10 = 1 s; PPMS: the 'SR830 TC' choice."""
-        rte = self.panel()
-        self.assertEqual(rte._ppms_lockin_settle(0.5, ("830_b",), False), (1.0, 1.0, "SR830-2"))
-        ppms = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        ppms.ppms_sr830_time_constant_var = Var("3 s")
-        self.assertEqual(ppms._ppms_lockin_settle(0.5, ("830_a",), False), (3.0, 3.0, "SR830-1"))
-        ppms.ppms_sr830_time_constant_codes = {"830_a": 9}   # read back: 300 ms
-        self.assertAlmostEqual(ppms._ppms_lockin_settle(0.2, ("830_a",), False)[0], 0.3)
-
     def test_the_words(self):
         self.assertEqual(app.ppms_lockin_settle_text(0.5, 1.0, 1.0, "SR830-1"),
                          "1 s (1 x 1 s, the time constant of SR830-1, the slowest lock-in measured; "
@@ -236,99 +202,6 @@ class RTEWorkerTests(NoWindows):
         panel._rte_scan_worker(mode, plan, dict(self.settings), 5., stable, 1.,
                                *((1.5,) if mode == "Angle" else ()))
         return panel.ppms_field_scan_rows
-
-    def test_field_current_and_angle_wait_1_time_constant_before_every_reading(self):
-        plans = {"Field": ((1, 1, -1.), (1, 2, 0.), (1, 3, 1.)),
-                 "Current": ((1, 1, .1), (1, 2, .2), (1, 3, .3)),
-                 "Angle": ((1, 1, 0.), (1, 2, 5.), (1, 3, 10.))}
-        for mode, plan in plans.items():
-            with self.subTest(mode=mode):
-                panel = self.worker()
-                rows = self.run_mode(panel, mode, plan)
-                # 1 x the 1 s TC, longer than Settle s 0.5 s.
-                self.assertEqual(settles_before_reads(self.log), [1.0, 1.0, 1.0], "first point included")
-                self.assertEqual([row["effective_settle_s"] for row in rows], [1.0] * 3)
-                self.assertEqual([row["slowest_lockin_tc_s"] for row in rows], [1.0] * 3)
-                self.assertEqual([row["stable_s"] for row in rows], [0.5] * 3, "Settle s itself is kept")
-                if mode == "Angle":
-                    # The stage moves, then the wait, then the reading.
-                    moves = [i for i, e in enumerate(self.log) if e[0] == "move"]
-                    reads = [i for i, e in enumerate(self.log) if e[0] == "read"]
-                    self.assertTrue(all(m < w < r for m, w, r in zip(
-                        moves, [i for i, e in enumerate(self.log) if e == ("wait", 1.0)], reads)))
-
-    def test_zurich_only_both_and_settle_s_longer(self):
-        for codes, zurich_tau, active, stable, expected in (
-                (None, 2.0, (), 0.5, 2.0),                 # the Zurich alone (RT-E's default meter)
-                ({"830_a": 10}, 3.0, ("830_a",), 0.5, 3.0),   # both: the Zurich is slower
-                ({"830_a": 10}, 0.1, ("830_a",), 0.5, 1.0),   # both: the SR830 is slower
-                ({"830_a": 10}, 1.0, ("830_a",), 9.0, 9.0)):  # Settle s is longer
-            with self.subTest(zurich_tau=zurich_tau, active=active, stable=stable):
-                panel = self.worker(codes, zurich_tau, active)
-                self.run_mode(panel, "Current", ((1, 1, .1), (1, 2, .2)), stable=stable)
-                self.assertEqual(settles_before_reads(self.log), [expected, expected])
-
-    def test_each_harmonic_pass_settles_again_with_its_own_lock_ins(self):
-        panel = self.worker({"830_a": 10, "830_c": 11}, active=("830_a", "830_c"))
-        panel.ppms_instrument_controllers["830_c"] = mock.Mock(resource_name="GPIB0::10::INSTR")
-        setattr(panel, app.PPMS_SR830_HARMONIC_ATTRS["830_a"], Var("1+2"))
-        setattr(panel, app.PPMS_SR830_HARMONIC_ATTRS["830_c"], Var("1"))
-        panel._rte_set_harmonic = mock.Mock(side_effect=lambda *args: self.log.append(("harmonic",) + args))
-        passes = panel._rte_harmonic_passes(self.settings)
-        self.assertEqual([p["active_lockins"] for p in passes], [("830_a", "830_c"), ("830_a",)])
-        panel._rte_harmonic_scan_worker("Current", ((1, 1, .1), (1, 2, .2)), passes, 5., 0.5, 1.)
-        # Pass 1: SR830-3 at 3 s; pass 2 (SR830-1 alone, after HARM 2): 1 s.
-        self.assertEqual(settles_before_reads(self.log), [3.0, 3.0, 1.0, 1.0])
-        harmonic = self.log.index(("harmonic", "830_a", 2))
-        self.assertEqual(self.log[harmonic + 1:].count(("wait", 1.0)), 2,
-                         "the first point after the harmonic change waits too")
-        rows = panel.ppms_field_scan_rows
-        self.assertEqual([r["effective_settle_s"] for r in rows], [3.0, 3.0, 1.0, 1.0])
-        # The LS475 columns since 2026-10-18 (user), then the magnet
-        # supply's two last since 2026-10-21 (user).
-        self.assertEqual(list(rows[0])[-6:], ["effective_settle_s", "slowest_lockin_tc_s",
-                                             "field_before_g", "field_drift_g", "magnet_supply",
-                                             "magnet_measured_current_a"])
-        self.assertEqual(list(rows[2]), list(rows[0]), "the same columns in every pass")
-        # The pass with fewer lock-ins is logged once, not at every point.
-        logged = [c.args[0] for c in panel.thread_log.call_args_list if "each reading now waits" in c.args[0]]
-        self.assertEqual(len(logged), 2)
-        self.assertTrue(logged[-1].startswith("SHV scan: each reading now waits 1 s"), logged)
-
-    def test_a_front_panel_time_constant_read_at_the_scan_start_is_waited_for_and_shown(self):
-        """RT-E's scan start reads OFLT? (user, 2026-10-14): an SR830 set to
-        10 s since Connect makes every reading wait 10 s, not the 1 s Start
-        announced, and the status line says so during that first wait."""
-        panel = self.worker()
-        panel.ppms_scan_settle_logged = 1.0          # announced at Start with 1 s
-        panel._configure_ppms_transport_scan = mock.Mock(
-            side_effect=lambda config: panel.ppms_sr830_time_constant_codes.update({"830_a": 12}))
-        panel.post_ui = lambda callback: callback()
-        panel._rte_show_point = mock.Mock()
-        panel.ppms_field_scan_status_var = LogVar(self.log)
-        rows = self.run_mode(panel, "Current", ((1, 1, .1), (1, 2, .2)))
-        self.assertEqual(settles_before_reads(self.log), [10.0, 10.0])
-        self.assertEqual([(r["effective_settle_s"], r["slowest_lockin_tc_s"]) for r in rows], [(10.0, 10.0)] * 2)
-        statuses = [i for i, e in enumerate(self.log) if e[0] == "status"]
-        self.assertEqual([self.log[i][1] for i in statuses], ["Each reading now waits 10 s: 1 x 10 s TC of SR830-1"])
-        self.assertEqual(self.log[statuses[0] + 1], ("wait", 10.0), "shown while it waits")
-        logged = [c.args[0] for c in panel.thread_log.call_args_list if "each reading now waits" in c.args[0]]
-        self.assertEqual(logged, ["SHV scan: each reading now waits 10 s (1 x 10 s, the time constant of "
-                                  "SR830-1, the slowest lock-in measured; Settle s is 0.5 s)"])
-
-    def test_rte_rows_end_with_the_new_columns(self):
-        panel = self.worker(zurich_tau=2.0)
-        rows = self.run_mode(panel, "Field", ((1, 1, -1.),))
-        keys = list(rows[0])
-        # The LS475 columns since 2026-10-18 (user), then the magnet
-        # supply's two last since 2026-10-21 (user).
-        self.assertEqual(keys[-7:], ["sr830_8_harmonic", "effective_settle_s", "slowest_lockin_tc_s",
-                                     "field_before_g", "field_drift_g", "magnet_supply",
-                                     "magnet_measured_current_a"])
-        self.assertEqual((rows[0]["effective_settle_s"], rows[0]["slowest_lockin_tc_s"]), (2.0, 2.0))
-        # The older columns keep their order.
-        self.assertLess(keys.index("stable_s"), keys.index("first_point_windows"))
-
 
 # ---- RT-E Start: the status line, the Angle Yes/No and the estimate -----------------
 class RTEStartTests(NoWindows):
@@ -384,61 +257,6 @@ class RTEStartTests(NoWindows):
             panel.start_ppms_field_scan()
         self.error.assert_not_called()
         return panel, ask
-
-    def test_field_and_current_status_lines_show_the_wait_and_the_shortest_duration(self):
-        for mode in ("Field", "Current"):
-            for kwargs, expected in (
-                    # 5 x (1 + 1) + 1 s; 5 x (2 + 1) + 1 s with the Zurich at 2 s.
-                    ({}, f"SHV {mode}: 5 points, settle 1 s; at least 11 s"),
-                    (dict(zurich_tau=2.0), f"SHV {mode}: 5 points, settle 2 s; at least 16 s"),
-                    (dict(zurich_tau=2.0, codes={}), f"SHV {mode}: 5 points, settle 2 s; at least 16 s"),
-                    (dict(stable="20"), f"SHV {mode}: 5 points, settle 20 s; at least 1 min 46 s")):
-                with self.subTest(mode=mode, **kwargs):
-                    panel, ask = self.start(mode, **kwargs)
-                    ask.assert_not_called()
-                    self.assertEqual(panel.ppms_field_scan_status_var.get(), expected)
-                    message = panel.thread_log.call_args_list[0].args[0]
-                    self.assertIn("5 points x 1 harmonic pass(es)", message)
-                    self.assertIn("each reading waits ", message)
-                    self.assertEqual(panel.ppms_scan_settle_logged, float(expected.split("settle ")[1].split(" s")[0]))
-                    panel.ppms_executor.submit.assert_called_once()
-                    # Only an Angle Start reads the stage (review, 2026-10-17).
-                    panel.rte_controllers["newmark"].check_ready.assert_not_called()
-
-    def test_the_zurich_tc_box_read_at_start_sets_the_wait(self):
-        """_rte_capture_zurich copies the "TC (s)" box into zurich_scan_tau
-        before the wait and the estimate are worked out (a stale 1 s here)."""
-        for codes, expected in (({}, "SHV Field: 5 points, settle 2 s; at least 16 s"),
-                                (None, "SHV Field: 5 points, settle 2 s; at least 16 s")):
-            with self.subTest(sr830=codes is None):
-                panel, _ask = self.start("Field", codes=codes, zurich_box="2")
-                self.assertEqual(panel.zurich_scan_tau, 2.0)
-                self.assertEqual(panel.ppms_field_scan_status_var.get(), expected)
-                self.assertIn("each reading waits 2 s (1 x 2 s, the time constant of the Zurich",
-                              panel.thread_log.call_args_list[0].args[0])
-
-    def test_the_status_line_rounds_the_wait(self):
-        panel, _ask = self.start("Current", stable="12345.7")
-        status = panel.ppms_field_scan_status_var.get()
-        self.assertTrue(status.startswith("SHV Current: 5 points, settle 12346 s; at least "), status)
-        self.assertIn("each reading waits 12345.7 s (Settle s;", panel.thread_log.call_args_list[0].args[0],
-                      "the log keeps the exact value")
-
-    def test_the_angle_yes_no_shows_the_wait(self):
-        panel, ask = self.start("Angle", zurich_tau=3.0, yes=False)
-        question = ask.call_args.args[1]
-        self.assertIn("Each angle waits 3 s (1 x 3 s, the time constant of the Zurich, the slowest lock-in "
-                      "measured; Settle s is 0.5 s) before it is read; the scan takes at least 21 s.",
-                      question)
-        panel.ppms_executor.submit.assert_not_called()
-        panel, ask = self.start("Angle")
-        # The stage check at Start, then the scan (user, 2026-10-17).
-        panel.rte_controllers["newmark"].check_ready.assert_called_once_with()
-        self.assertEqual(len(panel.ppms_executor.scans()), 1)
-        # The Angle status line keeps its format (it has no room for the wait).
-        self.assertEqual(panel.ppms_field_scan_status_var.get(), "SHV Angle 0° to 10°, KEPCO +1.5 A held; 5 points")
-        self.assertIn("each reading waits 1 s", panel.thread_log.call_args_list[0].args[0])
-
 
 # ---- PPMS: every mode, through the real nested and point workers --------------------
 class PPMSWorkerTests(NoWindows):
@@ -673,7 +491,7 @@ class PPMSStartTests(NoWindows):
                 connected=True, resource_name="GPIB0::9::INSTR")
         if zurich_tau is not None:
             obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(True)}
-            obj.zurich_controller = types.SimpleNamespace(mfli_connected=True)
+            obj.zurich_controller = types.SimpleNamespace(mfli_connected=True, mfli_has_multi_demod=lambda: True)
             obj.zurich_scan_enabled, obj.zurich_scan_tau = True, zurich_tau
         obj.ppms_last_readback = dict(temperature_k=300, field_oe=100)
         obj.ppms_field_scan_stop_event = threading.Event()

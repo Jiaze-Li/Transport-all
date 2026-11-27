@@ -1,24 +1,23 @@
-# The modular build of Transport-all as an installable package (user,
-# 2026-11-01): Transport_all.py plus the transport package beside it.
-# `pip install transport_all-<version>-py3-none-any.whl` adds the
-# `transport-all` command; `python Transport_all.py` in a copied folder works
-# as before.  The version follows APP_VERSION in Transport_all.py.
+# The standalone PPMS application as an installable package: Transport_PPMS.py
+# plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
+# adds the `transport-ppms` command; `python Transport_PPMS.py` in a copied
+# folder works too.  The version follows APP_VERSION in transport/ppms/app.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "transport-all"
-version = "1.0.2+modular"
-description = "Magneto-electro-optical transport measurement control program (Tk GUI) for lab instruments"
+name = "transport-ppms"
+version = "1.0.2"
+description = "PPMS transport measurement control program (Tk GUI): the PPMS page of Transport-all as a program of its own"
 readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 # As on the development Mac and in CI.  Instrument libraries that need a
-# vendor install (pco, zhinst for the MFLI, pythonnet for the PPMS) are added
-# on the lab PC as before.
-dependencies = ["numpy", "pillow", "opencv-python", "pyvisa", "pyserial"]
+# vendor install (zhinst for the MFLI, pythonnet and MultiPyVu for the PPMS)
+# are added on the lab PC (requirements.txt).
+dependencies = ["numpy", "pillow", "pyvisa"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
@@ -27,13 +26,13 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/nbb2026/Transport-all"
+Homepage = "https://github.com/nbb2026/Transport-all/tree/Transport-PPMS"
 
 [project.scripts]
-transport-all = "Transport_all:run"
+transport-ppms = "transport.ppms.app:run"
 
 [tool.setuptools]
-py-modules = ["Transport_all"]
+py-modules = ["Transport_PPMS"]
 packages = [
     "transport",
     "transport.common",

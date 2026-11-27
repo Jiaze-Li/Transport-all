@@ -31,6 +31,8 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# The recipe of Transport_PPMS.exe is source, not PyInstaller output.
+!Other-files/packaging/Transport_PPMS.spec
 
 # Installer logs
 pip-log.txt
@@ -227,3 +229,6 @@ __marimo__/
 
 # Measurement run folders copied in for diagnosis; data, not source.
 STFMR_field_scan_*/
+
+# The PPMS helium history the program writes beside itself
+PPMS_He_history.csv

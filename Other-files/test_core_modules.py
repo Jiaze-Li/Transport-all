@@ -16,12 +16,11 @@ class CoreImportsTests(unittest.TestCase):
     def test_legacy_scan_helpers_are_shared(self):
         self.assertIs(app.build_round_trip_values, scan_sequences.build_round_trip_values)
         self.assertIs(app.ppms_scan_axis, scan_sequences.ppms_scan_axis)
-        self.assertIs(app.lakeshore_ramp_seconds, scan_sequences.lakeshore_ramp_seconds)
 
     def test_scan_planning_unchanged(self):
         self.assertEqual(app.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
         self.assertEqual(app.ppms_scan_axis(1, 1, 0.1), (1,))
-        self.assertEqual(app.lakeshore_ramp_seconds([0, 2, -1], 1), 5)
+        self.assertEqual(scan_sequences.lakeshore_ramp_seconds([0, 2, -1], 1), 5)
 
     def test_legacy_json_log_uses_application_clock(self):
         # The historical app datetime module is patchable, and the recorder
@@ -79,7 +78,7 @@ class RecordingCompatibilityTests(unittest.TestCase):
             recorder = app.ScanRunRecorder(Path(tmp), "PPMS", "sample", {"mode": "Field"})
             try:
                 row = json.loads(recorder.log_path.read_text(encoding="utf-8").splitlines()[0])
-                self.assertEqual(row["program"], "Transport_all.py")
+                self.assertEqual(row["program"], "Transport_PPMS.py")
                 self.assertEqual(row["app_version"], app.APP_VERSION)
                 recorder.append_row({"field": 1, "voltage": 2})
                 self.assertEqual(recorder.rows_written, 1)

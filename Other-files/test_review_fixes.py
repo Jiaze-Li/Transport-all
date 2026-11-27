@@ -42,48 +42,7 @@ class SharedHelperTests(unittest.TestCase):
 
 
 class MokeTests(unittest.TestCase):
-    def test_magnet_disconnect_writes_0_a_first(self):
-        a = bare_app()
-        calls = []
-        bop = mock.Mock(connected=True)
-        bop.set_current.side_effect = lambda value: calls.append(("0 A", value))
-        channel = mock.Mock(bop=bop)
-        channel.close.side_effect = lambda: calls.append("close")
-        a.magnet_channels = {"OUT": channel, "IN": mock.Mock(bop=None)}
-        a.magnet_auto_poll_var = Var(True)
-        a._submit_magnet_task = lambda label, worker, success: calls.append(("result", worker()))
-        a.disconnect_magnets()
-        self.assertEqual(calls[:2], [("0 A", 0.0), "close"])
-        self.assertEqual(calls[-1], ("result", []), "no warnings")
-
-    def test_a_frame_goes_into_the_scan_samples_once(self):
-        window = app.TkCameraWindow.__new__(app.TkCameraWindow)
-        window.roi = {"cx": 5.0, "cy": 5.0, "w": 4.0, "h": 4.0, "angle": 0.0}
-        window.selecting_roi, window.roi_start, window.roi_end = False, None, None
-        window.mapping = object()
-        window.app = mock.Mock()
-        image = np.ones((10, 10), dtype=float)
-        frame = types.SimpleNamespace(raw=image, difference=image, display_difference=None)
-        with mock.patch.object(app, "np", np):
-            for _redraw in range(3):   # e.g. pan, zoom, a CLim edit
-                window._ingest_roi_values(frame)
-            self.assertEqual(window.app.ingest_2410_roi_sample.call_count, 1)
-            window._ingest_roi_values(types.SimpleNamespace(raw=image, difference=image, display_difference=None))
-        self.assertEqual(window.app.ingest_2410_roi_sample.call_count, 2, "a new frame counts")
-
-    def test_moke_24_keithley_goes_off_before_its_range_changes(self):
-        controller = app.Keithley2410Controller.__new__(app.Keithley2410Controller)
-        controller.lock = threading.RLock()
-        controller.instrument = object()
-        controller.output_enabled = True       # a manual Write left it on
-        controller.model = "2410"
-        controller.compliance_a = 1e-3
-        calls = []
-        controller._write_checked = calls.append
-        controller._configure_voltage_source_locked = lambda v: calls.append(f"configure {v:g}")
-        controller.enable_output(100.0)
-        self.assertEqual(calls, [":SOUR:VOLT 0", ":OUTP OFF", "configure 100", ":OUTP ON"])
-
+    pass
 
 class StfmrTests(unittest.TestCase):
     def test_the_overload_latched_by_a_range_change_is_dropped(self):
@@ -103,42 +62,7 @@ class StfmrTests(unittest.TestCase):
         self.assertEqual(controller.sensitivity_index, 18, "no further step")
         self.assertEqual(sample["status"], 0, "the latched bit was read and dropped")
 
-    def test_zero_off_stops_a_running_fmr_scan_first(self):
-        a = bare_app()
-        kepco = mock.Mock(connected=True)
-        a.stfmr_controllers = {"kepco": kepco}
-        a.stfmr_fmr_running, a.stfmr_frequency_running = True, False
-        order = []
-        a.stop_stfmr_fmr_scan = lambda button=None: order.append(("stop", button))
-        kepco.force_output_off.side_effect = lambda: order.append("off") or {}
-        a._apply_stfmr_kepco_readback = lambda result: None
-        a.stfmr_status_var = Var()
-        a.zero_stfmr_kepco_output()
-        self.assertEqual(order, [("stop", "KEPCO Zero / OFF"), "off"])
-
-
 class PpmsTests(unittest.TestCase):
-    def test_rte_zero_off_acts_on_an_output_switched_on_elsewhere(self):
-        panel = app.RTEPanel.__new__(app.RTEPanel)
-        panel.ppms_field_scan_stop_event = threading.Event()
-        panel.rte_closed = False
-        kepco = mock.Mock()
-        panel.rte_controllers = {"kepco": kepco}
-
-        class Now:
-            def submit(self, function):
-                future = mock.Mock()
-                future.result.return_value = function()
-                future.add_done_callback.side_effect = lambda callback: callback(future)
-                return future
-
-        panel.ppms_executor = Now()
-        panel.post_ui = lambda callback: callback()
-        panel.rte_drive_live = Var()
-        panel._rte_zero()
-        kepco.force_output_off.assert_called_once()
-        kepco.zero_output.assert_not_called()
-        self.assertEqual(panel.rte_drive_live.get(), "KEPCO: zeroed and output OFF")
 
     def test_a_typed_temperature_rate_is_kept(self):
         a = bare_app()

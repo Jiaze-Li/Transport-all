@@ -1,207 +1,145 @@
-# Transport-all
+# Transport-PPMS
 
-Instrument control and acquisition for magneto-electro-optical transport
-experiments: magneto-optic Kerr imaging, harmonic Hall transport in a PPMS,
-room-temperature electrical measurement, and ferromagnetic and spin-torque
-ferromagnetic resonance.
+The PPMS page of [Transport-all](https://github.com/nbb2026/Transport-all) as
+a program of its own: harmonic Hall and resistance measurements in a Quantum
+Design PPMS with a Keithley 6221 source, up to three SR830 lock-ins and a
+Zurich MFLI.
 
-Everything runs from one Tkinter application,
-[`Transport_all.py`](Transport_all.py). A single process owns the
-whole shared rack, so one page cannot take an instrument another page is
-already driving, and every source is brought to a safe state on shutdown.
+It runs without `Transport_all.py`. Everything it needs is in this branch:
+the entry script [`Transport_PPMS.py`](Transport_PPMS.py) and the
+[`transport`](transport) package beside it.
 
-**This is the `modular` branch:** the program plus the `transport/` package
-beside it, published as a Python package. The one-file program, the
-standalone test scripts (Newmark stage, Avtech pulser, MS-fourState,
-microwave test) and the old build packages stay on `main`.
+This is the `Transport-PPMS` branch (it was `modular`). The whole program,
+with its MOKE, CIDWM, Non-local, SHHV & Switch, FMR and ST-FMR pages, stays on
+`main`.
 
 ## Running it
 
-From a copied folder (`Transport_all.py` and the `transport/` folder side by
-side):
+**Windows .exe (no Python needed).** Download from the pre-release
+[PPMS Windows exe (newest Transport-PPMS)](https://github.com/nbb2026/Transport-all/releases/tag/ppms-windows-exe):
+
+- `Transport_PPMS.exe`: one file. Put it in a folder you keep and
+  double-click it.
+- `Transport_PPMS-folder.zip`: the same program as one folder, which starts
+  faster. Unzip it and double-click `Transport_PPMS\Transport_PPMS.exe`; keep
+  the `_internal` folder beside it.
+
+Both are rebuilt from this branch after every push that passes its checks; the
+release notes give the commit and the SHA-256 of each file.
+
+**From the source (64-bit Python 3.11):**
 
 ```bash
-python3 Transport_all.py
+python -m pip install -r requirements.txt
 ```
-
-Or install the package from the
-[release](https://github.com/nbb2026/Transport-all/releases) and start it
-with the `transport-all` command:
 
 ```bash
-python -m pip install transport_all-1.0.2+modular-py3-none-any.whl
-transport-all
+python Transport_PPMS.py
 ```
 
-Python 3.11 is what the program is developed and tested against. Every
-hardware backend is imported lazily, so the application opens with none of
-them installed and a page whose driver is missing reports that rather than
-stopping the rest from working.
+**As a package:** `pip install` the wheel built from `pyproject.toml`, then
+start it with the `transport-ppms` command.
 
-| Backend | Needed for |
-| --- | --- |
-| `pyvisa` | Every GPIB instrument |
-| `numpy`, `opencv-python`, `Pillow` | Camera frames, region statistics, drift correction |
-| `pco` | PCO camera acquisition |
-| `zhinst` | Zurich Instruments MFLI lock-in |
-| `pyserial` | LED controller, Cell-VSDM sample stage, KEPCO serial paths |
+Still needed on the measuring PC, outside the program: NI-VISA and the GPIB
+driver, LabOne for the Zurich MFLI, and MultiVu / QDInstrument for the PPMS.
+`QDInstrument.dll` kept beside the main program goes beside this one. An MFLI
+on LabOne 18.12 needs the Python 3.7 bridge from
+[`Other-files/INSTALL_MFLI_LABONE_18_12.bat`](Other-files/INSTALL_MFLI_LABONE_18_12.bat).
 
-## Pages
+## What is in the window
 
-The notebook has ten pages, grouped by rack.
+Two pages:
 
-**MOKE.** `MOKE light` drives the four-channel LED illumination and holds the
-camera connection and live view. `MOKE motor` moves the Cell-VSDM sample
-stage. `MOKE magnet` runs the KEPCO bipolar supply against a gaussmeter and
-shows the difference image and its region of interest. `MOKE-24` and
-`MOKE-6221` are the Keithley source-measure and current-source pages; the
-MOKE-24 page drives a 2410 or a 2400, chosen on the page, for its voltage
-scan against the region of interest, and the 6221
-page does both one-pulse-per-current round trips and fixed-current multi-pulse
-acquisition, averaging the region of interest over the post-pulse interval.
+- **PPMS**: the page as in Transport-all, with the same scans (field, angle,
+  temperature, current, frequency and their combinations), the PPMS macro,
+  the motor controls, the helium history and warning, the SR830 time-constant
+  control, and the Zurich with one or several harmonics. Files, columns, run
+  logs and start questions are the main program's.
+- **Log**: the communication log, with pause, copy and save.
 
-**Non-local** has one connection box in two columns (Keithley 2410 or 2400,
-6221 and 2182A; two SR830s and the MFLI). As on RT-E, the Zurich row also
-holds its reference input (**Ref.**) and time constant (**TC (s)**, default
-1 s since 2026-10-14), used by 6221-IV and Gate-VI. The Ref. follows the chosen Zurich:
-DEV4414 on Trigger In 1 (the default, as RT-E), DEV4435 on Aux Input 1. Once
-connected, the row shows "Locked" or "Warning", read once a second. Four sub-tabs use the rack. Each scan
-has a settings box and a scan box, side by side when they fit, as on RT-E,
-and each run writes its own folder, as on PPMS and STFMR:
-- **|R| vs time** measures the sample resistance continuously with the
-  Keithley as an autoranged current source (1 nA to 1 mA, 5 V protection),
-  plotted over the last 20 s. It was on the MOKE-24 page until 2026-10-08.
-- **2400-IV** steps the Keithley voltage once from Start to End (default
-  −6 to 6 V in 0.25 V steps, ±20 V at most, 20 V OVP) and plots the current
-  read at each step.
-  - **Boxes:** "2400-IV settings" holds the safety tick, sample and current
-    limit; "2400-IV scan" holds Start/End/Step/Settle and the buttons.
-  - **Files:** the folder is chosen at Start. The run folder
-    `2400-IV_<sample>_<time>/` holds the live CSV and the parameter log, and
-    "Save plot PNG" adds the plot there.
-- **6221-IV** is the RT-E Current scan on this page's 6221 and lock-ins,
-  with RT-E's settings and start-up values:
-  - **"6221-IV settings":** the 6221 (mA RMS, Frequency, Compliance, Set
-    6221, Trigger line, "6221 / 2400 OFF"). Each lock-in has a harmonic
-    (1, 2, 3, 1+2 or 1+2+3) and a Measure tick. The defaults are the
-    Zurich alone at 1+2+3, 0.1 mA RMS, 17.3 Hz and 50 V.
-  - **"6221-IV scan":** Start/End/Step (default 0.01 to 1 mA RMS in 0.01 mA
-    steps), Loops, Settle 0.5 s, Acquire 1 s and Round trip.
-  - **Harmonics:** an SR830 set to 1+2 or 1+2+3 runs the sweep once per
-    order. The Zurich reads all its orders at once on separate demodulators.
-  - **The 6221:** as on RT-E, the sine starts once on one fixed range, and
-    after that only its amplitude changes, so the lock-ins stay locked.
-  - **Plots:** one X / Y / θ row per measured order, with the meters
-    overlaid.
-  - **Files:** the run folder is `6221-IV_<time>/`, with the live CSV and
-    the parameter log.
-- **Gate-VI scan** measures non-local voltage against a gate, with the
-  Keithley as the gate source and lock-in or nanovoltmeter detection.
-  - **"Gate-VI settings":** the 6221 read current and each meter's read
-    settings.
-  - **"Gate-VI scan":** the pulse sweep, Start/Stop and the readouts.
-  - **Files:** each scan writes a `NonLocal_VI_<time>/` folder.
+Closing the window switches the 6221 output off and disconnects the
+instruments. If a field scan is running, it first asks the PPMS to zero the
+field.
 
-Only one of the four runs at a time. If the 6221 is connected
-on this page, it is switched off before |R| or I–V starts. The Keithley is
-zeroed and switched off when they end.
+## How it is put together
 
-**PPMS** controls temperature, field and rotation, and runs harmonic Hall
-transport with up to three SR830 lock-ins and the MFLI. Meters measuring the
-same harmonic share one plot. Selecting `1+2` or `1+2+3` on a meter runs the
-scan once per harmonic order.
+| Part | What it holds |
+|---|---|
+| [`Transport_PPMS.py`](Transport_PPMS.py) | The entry script: starts `transport.ppms.app.main`. |
+| [`transport/ppms/app.py`](transport/ppms/app.py) | The application: the PPMS page, its instrument controllers and the window. Generated (see below). |
+| [`transport/ppms/protocol.py`](transport/ppms/protocol.py) | PPMS limits and the checks of field and temperature commands. |
+| [`transport/ppms/controllers/multivu.py`](transport/ppms/controllers/multivu.py) | The MultiPyVu read-back controller. |
+| [`transport/core`](transport/core) | Scan sequences, the run recorder (run folder, live CSV, JSON-lines log), and the end-of-scan zeroing and close hand-off. |
+| [`transport/common`](transport/common) | Harmonic planning, lock-in settling, and the check of the 6221 / SR830 scan settings. |
 
-**RT-E** is the same transport measurement at room temperature, with the field
-from a KEPCO supply read back by a Lake Shore gaussmeter.
+The modules in `transport/core`, `transport/common`, `transport/ppms/protocol.py`
+and `transport/ppms/controllers` are Jiaze Li's, separated from the program in
+November 2026. The application imports them; it holds no second copy of that
+logic. The main program's own versions of those functions had not changed
+since the split, so they were reused as they are. The one addition is in the
+run recorder: the extra save folders and the open-run hook the main program
+gained later.
 
-**FMR** sweeps field against a Keysight PNA network analyser. **STFMR** sweeps field with a
-microwave source and lock-in detection, with MFLI, SR830 or both together.
+### The application module is generated
 
-## Instruments
+`transport/ppms/app.py` is derived from the main program by
+[`tools/extract_ppms_app.py`](tools/extract_ppms_app.py):
 
-Keithley 2410, 2400, 6221 and 2182A; Stanford Research SR830 lock-ins;
-Zurich Instruments MFLI; KEPCO BOP bipolar supplies; Lake Shore gaussmeters;
-Rohde & Schwarz SMB100A; a Keysight PNA network analyser; Quantum Design PPMS
-through either QDInstrument or MultiPyVu; PCO cameras; Thorlabs K10CR1
-rotation; and serial LED and sample-stage controllers.
+```bash
+python tools/extract_ppms_app.py /path/to/main/Transport_all.py
+```
 
-Default VISA addresses are set in the code and editable in the interface.
+Starting from the PPMS panel, it keeps every function, class, constant and
+method the page reaches, and nothing of the other pages. The first extraction
+kept about 10,800 of the main program's 40,500 lines. Two small files steer it:
 
-## Layout
+- [`tools/ppms_host.py`](tools/ppms_host.py): the window of this program (the
+  PPMS and Log pages, its own close), and the list of parts left out.
+- [`tools/ppms_package_glue.py`](tools/ppms_package_glue.py): which names come
+  from the `transport` package, and the thin wrappers that keep the main
+  program's names and signatures.
 
-| Path | Contents |
-| --- | --- |
-| `Transport_all.py` | The application |
-| `transport/core/scan_sequences.py` | Shared, hardware-independent scan axes, round trips and ramp-time estimates |
-| `transport/core/scan_recording.py` | Run folder naming, file safety, CSV and JSON-lines recording |
-| `transport/core/scan_lifecycle.py` | Cross-page close handoffs and scan-end zero-result reporting |
-| `pyproject.toml` | The package: `Transport_all.py`, the `transport` package and the `transport-all` command |
-| `Other-files/test*.py`, `Other-files/test/` | Offline regression tests |
-| `Other-files/newmark_simulator.py` | The simulated Newmark stage controller the SHV tests run on |
-| `Other-files/README.md` | Dated change log, newest first |
-| `Other-files/docs/` | Generated user manual |
+To bring a later change of the main program's PPMS page here, run the tool
+again on the new `Transport_all.py`, then the tests. Do not edit `app.py` by
+hand: change the two steering files.
 
-
-### Shared core modules
-
-The first extraction keeps `Transport_all.py` as the single executable and the
-legacy import surface used by the offline tests. The new `transport/core/`
-package contains algorithms and storage/lifecycle infrastructure that do not
-connect to instruments or create Tk windows. `ScanRunRecorder` in the old
-entry point remains a small compatibility subclass so existing monkeypatches
-of `scan_file_stem`, `make_scan_run_folder`, and `scan_log_line` keep working.
-Instrument drivers, scan workers and GUI pages are deliberately unchanged.
 ## Tests
 
-The tests run with no hardware attached. Instrument access is stubbed, so they
-cover acquisition logic, safety interlocks, scan scheduling and plotting rather
-than real measurement.
+Offline only; no instrument, port or VISA session is opened.
 
 ```bash
-cd Other-files && python3 -m unittest discover -s . -p "test_*.py"
+cd Other-files
 ```
 
 ```bash
-cd Other-files/test && PYTHONPATH=../.. python3 -m unittest \
-  test_instrument_safety_logic test_mfli_autorange test_mfli_overload \
-  test_stfmr_realtime_recording
+python ci/run_suite.py
 ```
 
-That is 381 and 104 tests respectively, all passing as of 2026-10-04.
-On macOS they hang while the display is asleep, because Tk waits for the
-window server; wake it first, or run them under `caffeinate -u`.
+- The main program's PPMS tests, run against this application. Tests of other
+  pages in the same files were taken out with
+  [`tools/prune_tests.py`](tools/prune_tests.py), which prints the reason for
+  each one it removes.
+- Jiaze Li's tests of the package modules.
+- `Other-files/ci/ppms_checks.py` builds the real window on GitHub's machines
+  at the lab PC's screen sizes and saves screenshots.
 
-The same tests, plus layout checks with a screenshot of each page, run on
-GitHub's Linux and Windows machines on every push to `main` and `modular`
-and on pull requests into `modular`
-([`.github/workflows/gui-tests.yml`](.github/workflows/gui-tests.yml),
-[`Other-files/ci/gui_checks.py`](Other-files/ci/gui_checks.py)). Results and
-screenshots are on the repository's Actions tab. Running them there keeps
-test windows off the desk computer's screen.
+GitHub runs all of it on Linux and Windows on every push
+([`.github/workflows/gui-tests.yml`](.github/workflows/gui-tests.yml)), and
+builds and checks the .exe
+([`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml)).
+The tests open windows, so run them on GitHub rather than on a desk computer.
 
-Passing tests are not hardware acceptance. They build panels from stubs and
-never run the real constructor, so a change should also be checked by starting
-the application and opening every page.
+Passing tests are not hardware acceptance: nothing here has been run on the
+PPMS.
 
-## Notes
+## More
 
-If Connect PPMS fails with a message about loading `QDInstrument.dll`, look in
-it for `EndpointNotFoundException` or TCP error 10060/10061: that is a network
-fault, not the DLL. Check the PPMS computer's address with `ipconfig` and the
-port from the measuring PC with `Test-NetConnection <PPMS IP> -Port 11000`.
-`Other-files/README.md` (2026-10-06) has the PPMS1 case and its fix.
+- [`Other-files/README_PPMS_SIMPLE_MODES.md`](Other-files/README_PPMS_SIMPLE_MODES.md),
+  [`Other-files/README_PPMS_NESTED.md`](Other-files/README_PPMS_NESTED.md):
+  the scan modes.
+- [`Other-files/PPMS_Macro_README.md`](Other-files/PPMS_Macro_README.md): the
+  macro.
+- [`Other-files/README_PPMS_MOTOR_DEBUG.md`](Other-files/README_PPMS_MOTOR_DEBUG.md):
+  the motor.
 
-Older LabOne releases expose the MFLI only through a Python 3.7 API. When the
-installed `zhinst` cannot be imported directly, the program looks for a Python
-3.7 interpreter with `zhinst` 18.12 and talks to the instrument through it as a
-subprocess.
-
-The development machine keeps a project-local CPython under `.pyenv` with a
-`.venv311` environment. Both are ignored here and excluded from release
-packages. That environment was created at an earlier path, so its activation
-script no longer works; `Other-files/README.md` records the invocation that
-does.
-
-## License
-
-GPL-3.0. See [LICENSE](LICENSE).
+License: GNU GPL v3.0 ([LICENSE](LICENSE)).

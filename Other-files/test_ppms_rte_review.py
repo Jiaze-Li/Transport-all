@@ -70,22 +70,6 @@ class RTECurrentScanStartsAtItsLargestCurrent(unittest.TestCase):
         self.assertEqual(len(panel.ppms_field_scan_rows), len(plan))
         panel._stop_ppms_transport_source.assert_not_called()
 
-    def test_descending_scan_passes_the_range_check(self):
-        # Start 0.1 -> End 0.01 mA: the first point is the largest current.
-        self.check(app.rte_scan_plan('Current', .1, .01, .01, 1, False))
-
-    def test_single_point_at_the_default_current(self):
-        plan = app.rte_scan_plan('Current', .1, .1, .01)
-        self.assertEqual(plan, ((1, 1, .1),))
-        self.check(plan)
-
-    def test_other_single_currents_and_an_ascending_scan(self):
-        for start in (.3, .7, 1.1, 2.9, 3.3, 7.7, 10., 70.7):
-            with self.subTest(start=start):
-                self.check(app.rte_scan_plan('Current', start, start, .01))
-        self.check(app.rte_scan_plan('Current', .01, .1, .01, 1, False))
-
-
 class PPMSExitKeepsFieldOutsideFieldScans(unittest.TestCase):
     def stand_in(self, mode, owner=None):
         a = owner if owner is not None else types.SimpleNamespace()
@@ -244,23 +228,6 @@ class RTESR830AddressesCanBeTyped(unittest.TestCase):
         widget.configure.assert_called_once()
         return widget.configure.call_args.kwargs['state']
 
-    def test_rte_entries_are_editable_when_idle(self):
-        for key in app.PPMS_SR830_KEYS:
-            with self.subTest(key=key):
-                # 'readonly' on a ttk.Entry refused every keystroke.
-                self.assertEqual(self.state(app.RTEPanel, app.ttk.Entry, key), 'normal')
-                self.assertEqual(self.state(app.RTEPanel, app.ttk.Entry, key, connected=True), 'disabled')
-                self.assertEqual(self.state(app.RTEPanel, app.ttk.Entry, key, busy=True), 'disabled')
-
-    def test_ppms_page_lists_and_keithley_entries_unchanged(self):
-        for panel_class in (app.CombinedControlApp, app.PPMSPanel):
-            with self.subTest(panel=panel_class.__name__):
-                self.assertEqual(self.state(panel_class, app.ttk.Combobox, '830_b'), 'readonly')
-                self.assertEqual(self.state(panel_class, app.ttk.Combobox, '830_b', connected=True), 'disabled')
-                self.assertEqual(self.state(panel_class, app.ttk.Entry, '6221'), 'normal')
-        self.assertEqual(self.state(app.RTEPanel, app.ttk.Entry, '2400'), 'normal')
-
-
 class TracedVar(Var):
     """A StringVar stand-in whose write trace runs, as Tk's does."""
 
@@ -394,41 +361,6 @@ class RTEStartIgnoresUnusedKepcoBoxes(unittest.TestCase):
                 patch.object(app.messagebox, 'showerror') as showerror:
             panel.start_ppms_field_scan()
         return panel, showerror
-
-    def test_current_scan_ignores_both_kepco_boxes(self):
-        for drive, limit in (('', ''), ('12', '25'), ('0', '5')):
-            with self.subTest(drive=drive, limit=limit):
-                panel, showerror = self.start('Current', drive, limit)
-                showerror.assert_not_called()
-                # (worker, mode, plan, passes, limit, stable, duration)
-                args = panel.ppms_executor.submit.call_args.args
-                self.assertEqual(args[1], 'Current')
-                self.assertIsNone(args[4])
-                self.assertTrue(panel.ppms_field_scan_running)
-
-    def test_field_scan_checks_only_the_voltage_limit(self):
-        for drive in ('', '12', '0'):
-            with self.subTest(drive=drive):
-                panel, showerror = self.start('Field', drive, '5')
-                showerror.assert_not_called()
-                self.assertEqual(panel.ppms_executor.submit.call_args.args[4], 5.)
-        for limit in ('', '25', '0', 'nan'):
-            with self.subTest(limit=limit):
-                panel, showerror = self.start('Field', '0', limit)
-                showerror.assert_called_once()
-                self.assertEqual(showerror.call_args.args[0], 'SHV scan parameters')
-                panel.ppms_executor.submit.assert_not_called()
-
-    def test_apply_still_checks_both(self):
-        panel = rte_tests.RTE.make_worker(self)
-        for drive, limit, error in (('12', '5', '10 A'), ('1', '25', '20 V'), ('', '5', 'float')):
-            with self.subTest(drive=drive, limit=limit):
-                panel.rte_drive_target, panel.rte_voltage_limit = Var(drive), Var(limit)
-                with self.assertRaisesRegex(ValueError, error):
-                    panel._rte_drive_parameters()
-        panel.rte_drive_target, panel.rte_voltage_limit = Var('-1.5'), Var('5')
-        self.assertEqual(panel._rte_drive_parameters(), (-1.5, 5.))
-
 
 if __name__ == '__main__':
     unittest.main()
