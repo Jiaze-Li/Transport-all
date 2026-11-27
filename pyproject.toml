@@ -1,5 +1,5 @@
 # The standalone SHHV & Switch application as an installable package: Transport_RT.py
-# plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
+# plus the transport package beside it.  `pip install transport_rt-<version>-py3-none-any.whl`
 # adds the `transport-rt` command; `python Transport_RT.py` in a copied
 # folder works too.  The version follows APP_VERSION in transport/rt/app.py.
 [build-system]

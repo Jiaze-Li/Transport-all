@@ -16640,7 +16640,7 @@ def main() -> None:
         app.safe_close_hardware()
         app.executor.shutdown(wait=False, cancel_futures=True)
 def run() -> None:
-    """The installed command (pyproject.toml: transport-ppms)."""
+    """The installed command (pyproject.toml: transport-rt)."""
     main()
 if __name__ == "__main__":
     main()
