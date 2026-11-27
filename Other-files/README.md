@@ -1,5 +1,21 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## No Transport_all.exe any more; the standalone programs are v1.0 (user, 2026-11-27)
+
+- **Asked:** "delete the main exe version and only save the py script for backup", then "name PPMS, RT, MOKE, FMR
+  exe all as v1.0".
+- **Gone:** the pre-release "Windows exe (newest main)" with its tag `windows-exe` (`Transport_all.exe`,
+  `Transport_all-folder.zip`) and the workflow `.github/workflows/build-windows.yml` that filled it on every push to
+  `main`. `Transport_all.py` stays on `main` as the backup; the tagged releases v1.0.0, v1.0.1, v1.0.2 and
+  v1.0.2-modular stay. The recipe (`Other-files/packaging/Transport_all.spec`, `package_self_test.py`) is kept for a
+  build by hand. Sections below that describe the main exe's workflow and release are history.
+- **v1.0:** each standalone program has its own version (`APP_VERSION = "1.0"` in its branch's `tools/<key>_host.py`,
+  written into the generated module by `tools/extract_app.py`) instead of the main program's 1.0.2. Its release is
+  "Transport_<X> v1.0" with the tag `<key>-v1.0` (was the pre-release "... Windows exe (newest Transport-<X>)", tag
+  `<key>-windows-exe`); the download links at the top of the main README follow. A push to the branch still replaces
+  the release's files. A raised version needs its tag pushed by the owner first (the repository's rule "Only the
+  owner makes or changes tags" stops the workflow making one); the release job then makes the release on it.
+
 ## An instrument held by one Transport program is refused to another (user, 2026-11-27)
 
 - **Request:** "add the cross-program instrument lock". Since the standalone page programs (Transport_PPMS,

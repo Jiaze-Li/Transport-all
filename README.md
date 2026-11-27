@@ -2,20 +2,21 @@
 
 ## Download the Windows programs
 
-No Python needed (Windows 10/11, 64-bit). Each link is the newest build of its branch.
+No Python needed (Windows 10/11, 64-bit). Version 1.0 of each program:
 
 | | Program | One file | One folder (starts faster) | Source |
 |---|---|---|---|---|
-| <img src="Other-files/assets/Magneto_Electro_Optical_Microwave_Transport_NH_icon_64.png" width="32" alt=""> | **Transport_all**: the whole program, every page | [Transport_all.exe](https://github.com/nbb2026/Transport-all/releases/download/windows-exe/Transport_all.exe) | [Transport_all-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/windows-exe/Transport_all-folder.zip) | [`main`](https://github.com/nbb2026/Transport-all/tree/main) |
-| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-PPMS/Other-files/assets/Transport_PPMS_icon_64.png" width="32" alt=""> | **Transport_PPMS**: the PPMS page | [Transport_PPMS.exe](https://github.com/nbb2026/Transport-all/releases/download/ppms-windows-exe/Transport_PPMS.exe) | [Transport_PPMS-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/ppms-windows-exe/Transport_PPMS-folder.zip) | [`Transport-PPMS`](https://github.com/nbb2026/Transport-all/tree/Transport-PPMS) |
-| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-RT/Other-files/assets/Transport_RT_icon_64.png" width="32" alt=""> | **Transport_RT**: the SHHV & Switch page | [Transport_RT.exe](https://github.com/nbb2026/Transport-all/releases/download/rt-windows-exe/Transport_RT.exe) | [Transport_RT-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/rt-windows-exe/Transport_RT-folder.zip) | [`Transport-RT`](https://github.com/nbb2026/Transport-all/tree/Transport-RT) |
-| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-MOKE/Other-files/assets/Transport_MOKE_icon_64.png" width="32" alt=""> | **Transport_MOKE**: MOKE light, MOKE motor, MOKE magnet, CIDWM, MOKE-24 | [Transport_MOKE.exe](https://github.com/nbb2026/Transport-all/releases/download/moke-windows-exe/Transport_MOKE.exe) | [Transport_MOKE-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/moke-windows-exe/Transport_MOKE-folder.zip) | [`Transport-MOKE`](https://github.com/nbb2026/Transport-all/tree/Transport-MOKE) |
-| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-FMR/Other-files/assets/Transport_FMR_icon_64.png" width="32" alt=""> | **Transport_FMR**: the FMR and STFMR pages | [Transport_FMR.exe](https://github.com/nbb2026/Transport-all/releases/download/fmr-windows-exe/Transport_FMR.exe) | [Transport_FMR-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/fmr-windows-exe/Transport_FMR-folder.zip) | [`Transport-FMR`](https://github.com/nbb2026/Transport-all/tree/Transport-FMR) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-PPMS/Other-files/assets/Transport_PPMS_icon_64.png" width="32" alt=""> | **Transport_PPMS v1.0**: the PPMS page | [Transport_PPMS.exe](https://github.com/nbb2026/Transport-all/releases/download/ppms-v1.0/Transport_PPMS.exe) | [Transport_PPMS-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/ppms-v1.0/Transport_PPMS-folder.zip) | [`Transport-PPMS`](https://github.com/nbb2026/Transport-all/tree/Transport-PPMS) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-RT/Other-files/assets/Transport_RT_icon_64.png" width="32" alt=""> | **Transport_RT v1.0**: the SHHV & Switch page | [Transport_RT.exe](https://github.com/nbb2026/Transport-all/releases/download/rt-v1.0/Transport_RT.exe) | [Transport_RT-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/rt-v1.0/Transport_RT-folder.zip) | [`Transport-RT`](https://github.com/nbb2026/Transport-all/tree/Transport-RT) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-MOKE/Other-files/assets/Transport_MOKE_icon_64.png" width="32" alt=""> | **Transport_MOKE v1.0**: MOKE light, MOKE motor, MOKE magnet, CIDWM, MOKE-24 | [Transport_MOKE.exe](https://github.com/nbb2026/Transport-all/releases/download/moke-v1.0/Transport_MOKE.exe) | [Transport_MOKE-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/moke-v1.0/Transport_MOKE-folder.zip) | [`Transport-MOKE`](https://github.com/nbb2026/Transport-all/tree/Transport-MOKE) |
+| <img src="https://raw.githubusercontent.com/nbb2026/Transport-all/Transport-FMR/Other-files/assets/Transport_FMR_icon_64.png" width="32" alt=""> | **Transport_FMR v1.0**: the FMR and STFMR pages | [Transport_FMR.exe](https://github.com/nbb2026/Transport-all/releases/download/fmr-v1.0/Transport_FMR.exe) | [Transport_FMR-folder.zip](https://github.com/nbb2026/Transport-all/releases/download/fmr-v1.0/Transport_FMR-folder.zip) | [`Transport-FMR`](https://github.com/nbb2026/Transport-all/tree/Transport-FMR) |
 
-The four smaller programs are single pages of Transport_all as programs of their own; they do not need
-Transport_all. Each release page gives the commit and the SHA-256 of its files:
-[all](https://github.com/nbb2026/Transport-all/releases/tag/windows-exe), [PPMS](https://github.com/nbb2026/Transport-all/releases/tag/ppms-windows-exe), [RT](https://github.com/nbb2026/Transport-all/releases/tag/rt-windows-exe),
-[MOKE](https://github.com/nbb2026/Transport-all/releases/tag/moke-windows-exe), [FMR](https://github.com/nbb2026/Transport-all/releases/tag/fmr-windows-exe).
+Each is one page, or one rack's pages, of the whole program as a program of its own. Each release page
+gives the commit and the SHA-256 of its files: [PPMS](https://github.com/nbb2026/Transport-all/releases/tag/ppms-v1.0), [RT](https://github.com/nbb2026/Transport-all/releases/tag/rt-v1.0), [MOKE](https://github.com/nbb2026/Transport-all/releases/tag/moke-v1.0), [FMR](https://github.com/nbb2026/Transport-all/releases/tag/fmr-v1.0).
+
+The whole program, every page in one window, is the Python script [`Transport_all.py`](Transport_all.py)
+on `main`. It is kept as the backup and is no longer built as an .exe (user, 2026-11-27); see
+[Windows .exe](#windows-exe) to build one by hand.
 
 Two of these programs can be open at once: an instrument one of them has connected is refused to the
 others until it is disconnected there.
@@ -58,65 +59,26 @@ them (on a Mac only the first five; the vendor packages are Windows-only).
 
 ## Windows .exe
 
-Every push to `main` also builds the whole program as one Windows file,
-`Transport_all.exe`, which runs on Windows 10/11 (64-bit) without Python or any
-package installed ([`.github/workflows/build-windows.yml`](.github/workflows/build-windows.yml)).
+`Transport_all.py` is no longer built or published as an .exe (user,
+2026-11-27: "delete the main exe version and only save the py script for
+backup"). The Windows programs are the four standalone ones at the top of this
+page, each built on its own branch. The pre-release "Windows exe (newest
+main)" and the workflow that filled it are gone; the recipe is kept, so the
+whole program can still be built by hand (below).
 
-**Download.** Releases, then the pre-release "Windows exe (newest main)", then
-`Transport_all.exe`; or directly
-<https://github.com/nbb2026/Transport-all/releases/download/windows-exe/Transport_all.exe>.
-No sign-in is needed. After every push to `main` whose build passes its checks,
-the workflow replaces the .exe there; the release notes give its commit and
-SHA-256, and `BUILD_INFO.txt` beside it the package versions. Each build is
-also kept as an Actions artifact (signed in, 90 days): Actions, then
-"Windows exe", then the run, then `Transport_all-windows-x64`. A build can be
-started by hand with Run workflow.
-
-**Install.** Put `Transport_all.exe` in a folder you keep, such as
-`C:\Transport_all\`, not Downloads: the results folders
-(`Transport_all_<page>_Results`) are made beside the .exe, as they are beside
-the .py. Check the file if you like: `certutil -hashfile Transport_all.exe SHA256`
-must print the SHA-256 in the release notes (on a Mac, with the `.sha256` file
-beside it: `shasum -a 256 -c Transport_all.exe.sha256`).
-
-**Run.** Double-click `Transport_all.exe`. It unpacks itself on each start,
-so the window takes a few seconds longer to appear than the .py's. Its
-publisher, HengNiu & ClaudeCode, is in the file's version information, which
-Windows shows as "Company" (Explorer), "Publisher" (Task Manager) and the
-copyright "© 2026 HengNiu & ClaudeCode" (Properties, then Details). The .exe
-is not code-signed, though, so Windows SmartScreen may still say "Windows
-protected your PC" with "Unknown publisher" (More info, then Run anyway), and
-antivirus may hold it until IT allows it.
-The .exe holds every Python package but not the instrument drivers, which are
+A hand-built `Transport_all.exe` runs on Windows 10/11 (64-bit) without Python.
+Put it in a folder you keep, such as `C:\Transport_all\`: the results folders
+(`Transport_all_<page>_Results`) are made beside it, as they are beside the
+.py. It holds every Python package but not the instrument drivers, which are
 installed as for the .py: NI-VISA and the GPIB driver, the PCO camera driver,
 Thorlabs Kinesis, LabOne and MultiVu/QDInstrument. DLLs kept beside the .py
 (`PerformaxCom.dll` and `SiUSBXp.dll` for the Newmark stage) go beside the
 .exe. An MFLI on LabOne 18.12 still needs the Python 3.7 bridge from
-`Other-files/INSTALL_MFLI_LABONE_18_12.bat`.
-
-**One-folder build (starts faster).** The release also has
-`Transport_all-folder.zip`, the same program from the same commit as one
-folder (user, 2026-11-25): `Transport_all\Transport_all.exe` with its
-libraries in `Transport_all\_internal`. It does not unpack itself on each
-start, so its window appears sooner, and the antivirus checks its DLLs once
-rather than on every start. Unzip it to a folder you keep, such as
-`C:\Transport_all\`, and double-click `Transport_all.exe` inside; keep
-`_internal` beside it and put the Newmark DLLs beside the .exe as above. The
-results folders are made beside that .exe. Its SHA-256 is in the release notes
-and in `Transport_all-folder.zip.sha256`. To update, close the program and
-replace the whole `Transport_all` folder with the new one (move your results
-folders out first, or unzip the new one elsewhere). GitHub checks both builds
-the same way (below) and logs how long each takes to show its window.
-
-**Update.** Close the program, download `Transport_all.exe` again from the
-release and replace the old one; the results folders beside it are not touched.
-
-**Check.** `Transport_all.exe --package-self-test` loads every library inside
-the .exe without opening the program and writes the result to
-`Transport_all_package_self_test.txt` beside it. GitHub runs this, the PCO DLL
-self-test (`--pco-dll-self-test`) and a start of the program up to its main
-window after every build; no instrument is attached there, so instrument
-control is still tested only on the lab PC.
+`Other-files/INSTALL_MFLI_LABONE_18_12.bat`. The .exe is not code-signed, so
+Windows SmartScreen may say "Windows protected your PC" (More info, then Run
+anyway). `Transport_all.exe --package-self-test` loads every library inside it
+without opening the program and writes the result to
+`Transport_all_package_self_test.txt` beside it.
 
 **Build it yourself** on Windows, from the repository root:
 
@@ -127,6 +89,9 @@ py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_all.
 
 The .exe is `dist\Transport_all.exe`. The recipe is
 [`Other-files/packaging/Transport_all.spec`](Other-files/packaging/Transport_all.spec).
+With `set TRANSPORT_ONE_FOLDER=1` first, the same recipe makes the one-folder
+build (`dist\Transport_all\Transport_all.exe` with `_internal` beside it),
+which starts faster.
 
 ## Pages
 
@@ -389,8 +354,8 @@ GitHub's Linux and Windows machines on every push to `main`
 ([`.github/workflows/gui-tests.yml`](.github/workflows/gui-tests.yml),
 [`Other-files/ci/gui_checks.py`](Other-files/ci/gui_checks.py)). Results and
 screenshots are on the repository's Actions tab. Running them there keeps
-test windows off the desk computer's screen. The Windows .exe is built and
-checked by a separate workflow ([Windows .exe](#windows-exe)).
+test windows off the desk computer's screen. The .exe files of the standalone
+programs are built and checked by workflows on their own branches.
 
 Passing tests are not hardware acceptance. They build panels from stubs and
 never run the real constructor, so a change should also be checked by starting

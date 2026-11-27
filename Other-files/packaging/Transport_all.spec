@@ -2,8 +2,8 @@
 # PyInstaller recipe for Transport_all.exe: the whole program as one Windows
 # file that runs without Python (Windows .exe build, user, 2026-11-10).
 #
-# GitHub Actions builds it on every push to main
-# (.github/workflows/build-windows.yml).  To build it by hand on a Windows PC,
+# GitHub no longer builds it (user, 2026-11-27: "delete the main exe version
+# and only save the py script for backup").  To build it by hand on a Windows PC,
 # from the repository root:
 #     py -3.11 -m pip install -r requirements.txt pyinstaller==6.22.3
 #     py -3.11 -m PyInstaller --noconfirm --clean Other-files/packaging/Transport_all.spec
