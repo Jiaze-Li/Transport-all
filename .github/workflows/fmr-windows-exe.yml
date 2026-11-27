@@ -7,7 +7,8 @@
 # Transport-FMR also puts its files in the release "Transport_FMR v<version>"
 # (tag fmr-v<version>; the version is APP_VERSION of tools/fmr_host.py), so they
 # can be downloaded directly, without signing in: a release that is there
-# gets the new files, and a raised version starts a new release.
+# gets the new files, and a raised version starts a new release on the tag
+# the owner pushed for it (the repository lets only its owner make tags).
 # The same commit is also built as one folder (Transport_FMR\Transport_FMR.exe
 # with its libraries in _internal), released beside it as
 # Transport_FMR-folder.zip: it starts faster, as nothing is unpacked on start.
@@ -193,9 +194,13 @@ jobs:
           if [ -z "$version" ]; then echo "No program version in BUILD_INFO.txt"; exit 1; fi
           RELEASE_TAG="$RELEASE_TAG_PREFIX$version"
           title="Transport_FMR v$version"
-          # A version without a release yet: a new release, tagged at this commit.
+          # A version without a release yet: a new release on its tag.  Only the owner can make tags in
+          # this repository, so the tag is not made here.
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$title" --notes "$title" --latest=false --repo "$GITHUB_REPOSITORY"
+            if ! gh release create "$RELEASE_TAG" --verify-tag --title "$title" --notes "$title" --latest=false --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::No release $RELEASE_TAG. Only the owner can make tags in this repository: push the tag (git push origin $GITHUB_SHA:refs/tags/$RELEASE_TAG), then re-run this job."
+              exit 1
+            fi
           fi
           tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
           cat > notes.md <<EOF

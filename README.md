@@ -26,7 +26,8 @@ stays on `main`.
 Both are rebuilt from this branch after every push that passes its checks; the
 release notes give the commit and the SHA-256 of each file. The version is this
 program's own (`APP_VERSION` in [`tools/fmr_host.py`](tools/fmr_host.py)), not the main
-program's; raising it starts a new release.
+program's. Raising it starts a new release, once the owner has pushed the tag
+`fmr-v<version>` (only the owner can make tags in this repository).
 
 **From the source (64-bit Python 3.11):**
 
