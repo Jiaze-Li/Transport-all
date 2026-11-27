@@ -15,8 +15,8 @@ with its MOKE, CIDWM, Non-local, SHHV & Switch, FMR and ST-FMR pages, stays on
 
 ## Running it
 
-**Windows .exe (no Python needed).** Download from the pre-release
-[PPMS Windows exe (newest Transport-PPMS)](https://github.com/nbb2026/Transport-all/releases/tag/ppms-windows-exe):
+**Windows .exe (no Python needed).** Download from the release
+[Transport_PPMS v1.0](https://github.com/nbb2026/Transport-all/releases/tag/ppms-v1.0):
 
 - `Transport_PPMS.exe`: one file. Put it in a folder you keep and
   double-click it.
@@ -25,7 +25,9 @@ with its MOKE, CIDWM, Non-local, SHHV & Switch, FMR and ST-FMR pages, stays on
   the `_internal` folder beside it.
 
 Both are rebuilt from this branch after every push that passes its checks; the
-release notes give the commit and the SHA-256 of each file.
+release notes give the commit and the SHA-256 of each file. The version is this
+program's own (`APP_VERSION` in [`tools/ppms_host.py`](tools/ppms_host.py)), not the main
+program's; raising it starts a new release.
 
 **From the source (64-bit Python 3.11):**
 

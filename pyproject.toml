@@ -1,14 +1,14 @@
 # The standalone PPMS application as an installable package: Transport_PPMS.py
 # plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
 # adds the `transport-ppms` command; `python Transport_PPMS.py` in a copied
-# folder works too.  The version follows APP_VERSION in transport/ppms/app.py.
+# folder works too.  The version is APP_VERSION of tools/ppms_host.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "transport-ppms"
-version = "1.0.2"
+version = "1.0"
 description = "PPMS transport measurement control program (Tk GUI): the PPMS page of Transport-all as a program of its own"
 readme = "README.md"
 license = "GPL-3.0-only"

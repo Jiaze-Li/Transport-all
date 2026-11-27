@@ -10,6 +10,10 @@ it is not imported by the application).
 # What is extracted, and where to.
 PAGE_CLASS = "PPMSPanel"
 APP_NAME = "the PPMS page"
+# This program's own version (user, 2026-11-27: "name PPMS, RT, MOKE, FMR exe all as v1.0"), not the
+# main program's.  It is in the .exe's properties and in every results file, and it names the release
+# ("Transport_PPMS v1.0"): raise it here, and in pyproject.toml, to start a new release.
+APP_VERSION = "1.0"
 OUTPUT = "transport/ppms/app.py"
 GLUE_FILES = ("ppms_package_glue.py",)
 # Everything named after the page is kept, used by kept code or not.

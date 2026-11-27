@@ -1541,7 +1541,7 @@ class LabOneCAPIAdapter:
                 self._lib.ziAPIDisconnect(self._connection)
         finally:
             self._destroy()
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0"
 MAIN_WINDOW_TITLE = "Transport_PPMS_NH"
 APPLICATION_ICON_BASENAME = "Transport_PPMS"
 def program_directory() -> Path:
