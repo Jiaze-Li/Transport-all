@@ -13,7 +13,7 @@ Status: **Completed independent audit** (A1 and A2). This is the single evidence
 ## A1 — Extraction integrity
 
 ### 1. Feature and behavior parity matrix
-AST comparison of `PPMSPanel` and `CombinedControlApp` between `main@56908d88` (`Transport_all.py`) and `Transport-PPMS@8369a29e` (`transport/ppms/app.py`) shows **exact parity** on all PPMS measurement, UI, plotting, recording, and safety logic:
+AST comparison of `PPMSPanel` and `CombinedControlApp` between `main@56908d88` (`Transport_all.py`) and `Transport-PPMS@8369a29e` (`transport/ppms/app.py`) shows **AST-level structural parity** on PPMS measurement, UI, plotting, recording, and safety logic (note: AST parity + retained offline tests do **not** establish complete runtime behavioral equivalence where tests were pruned or real hardware is required):
 
 - `PPMSPanel`: **28 / 28 methods** identical at AST level (0 added, 0 removed, 0 modified).
 - `CombinedControlApp`: **158 methods** kept (of 796 in `main`; 638 non-PPMS methods dropped). The only **8** modified methods are intentional host/glue/pruning changes:
@@ -62,11 +62,14 @@ Comparing `main@56908d88` vs `Transport-PPMS@8369a29e` across `Other-files/`:
 - **Cross-program instrument lock (`0ab9d0a`, `L1877–1996`)**:
   - **Windows (`win32`)**: Uses `kernel32.CreateFileMappingW` (`Local\TransportInstrumentLease_<key>`, 512 bytes) — kernel-backed, auto-released on process crash.
   - **macOS / Linux (`else`)**: Uses `fcntl.flock(..., LOCK_EX | LOCK_NB)` on `tempfile.gettempdir() / "Transport_instrument_leases" / "<name>.lock"`.
-  - **Limitation**: `NonLocalACController` (Zurich MFLI) uses its own connection path (`connect_mfli`), not `SafeVisaIdentityController.acquire_instrument_lease`.
+  - **Zurich MFLI (`NonLocalACController`)**: Verified that `connect_mfli` acquires a cross-program lease (`acquire_instrument_lease(f"LABONE::{requested}", self, 'Non-local Zurich MFLI')` at `L4211–4213`) and releases it on disconnect (`L4391`, `L5528`, `L5618`, `L5660`).
 
 ### 5. A1 Verdict
-- **A1 Verdict: PASS with minor test-restoration follow-ups (no extraction blockers for D1).**
-- Runtime extraction parity is complete (`PPMSPanel` 28/28 identical; all 46 retained test modules / 610 tests pass locally and on Linux/Windows CI; Windows EXE self-test passes).
+- **A1 Verdict: PASS (static extraction & retained offline checks) with uncovered runtime/test gaps (no extraction blockers for D1).**
+- **Distinction of evidence layers**:
+  - *AST parity*: `PPMSPanel` 28/28 methods unchanged; `CombinedControlApp` 158 kept / 8 intentionally modified.
+  - *Offline behavioral verification*: All 46 retained modules (610 tests), `ppms_checks.py` layout checks, Linux/Windows CI (`45996570966`), and Windows EXE `--package-self-test` (`45996570863` `build` job) pass.
+  - *Uncovered runtime behavior*: PNG snapshot saving (`test_scan_plot_snapshots.py`), `PPMSQDInstrumentReadbackController` / `SharedVisaManager` unit tests (`test_instrument_safety_logic.py`), and live hardware/lab-PC execution are **not** verified by current `Transport-PPMS` tests; complete behavioral equivalence is therefore **not claimed**.
 - **Required follow-up before release hardening (non-blocking for D1 design)**: Restore the deleted PPMS PNG snapshot test from `test_scan_plot_snapshots.py` and the PPMS/QDInstrument/SharedVisa unit tests from `test_instrument_safety_logic.py` as standalone PPMS test modules.
 
 ---
@@ -95,7 +98,7 @@ Transport_PPMS.py (19 L)
 ### 2. End-to-end execution flows
 - **Representative Field scan & Nested scan**:
   1. **UI → Settings**: `start_ppms_field_scan` (`L8727`) validates inputs from Tk `StringVar`s, builds axes via `ppms_scan_axis` / `ppms_prime_frequencies`, resolves `PPMS_FIELD_COMMANDING_MODES`, and calls `_ppms_run_settings` (`L9058`).
-  2. **Scheduling & Passes**: Submits `_ppms_scan_with_final_field` (`L9185`) to `self.ppms_executor` (single-worker `ThreadPoolExecutor`). Calls `ScanCloseHandoff.begin()`, iterates `_ppms_harmonic_passes(settings)` (via `transport.common.harmonics`), and invokes `_ppms_nested_scan_worker` (`L9300`) → `_ppms_field_scan_worker` (`L9661`).
+  2. **Scheduling & Passes**: Submits `_ppms_scan_with_final_field` (`L9185`) to `self.ppms_executor` (`ThreadPoolExecutor(max_workers=5, thread_name_prefix='ppms-control')`, `L5832`). Because `ppms_executor` has 5 workers (also used for live PPMS/cryogen polling, motor/macro commands, and device connect/disconnect), tasks do not serialize on the executor itself; hardware safety relies on per-controller `lock`s (`SafeVisaIdentityController.lock`, `zurich_controller.lock`) and environment controller locking. Calls `ScanCloseHandoff.begin()`, iterates `_ppms_harmonic_passes(settings)` (via `transport.common.harmonics`), and invokes `_ppms_nested_scan_worker` (`L9300`) → `_ppms_field_scan_worker` (`L9661`).
   3. **Hardware I/O**: Worker acquires `controller.lock` on `SafeVisaIdentityController` (`6221`, `830_a/b/c`) / `zurich_controller.lock` (`NonLocalACController`) and commands `ppms_environment_controller` (`PPMSRemoteReadbackController` wrapping `PPMSQDInstrumentReadbackController` or `PPMSMultiVuReadbackController`).
   4. **Persistence & Display**: Each point flushes + `os.fsync`s to `ppms_live_csv_path` (`_append_ppms_live_csv`, `L9889`), appends to `ScanRunRecorder` JSONL, and calls `self.post_ui(...)` → `ui_queue` → `drain_ui_queue` (`L10196`) to update `_redraw_ppms_transport_plot`.
 - **Cancellation / Error / Close**:
@@ -108,7 +111,7 @@ Transport_PPMS.py (19 L)
 - **Duplicate initialization**: `CombinedControlApp.__init__` (`L5746`) calls `self._initialize_ppms_state()`, creating an unused set of `ppms_*` `StringVar`s, `ppms_executor`, and `instrument_connection_indicators`; `PPMSPanel.__init__` (`L10319`) does **not** call `super().__init__()`, instead calling `self._initialize_ppms_state()` a second time on `self`. Consequently `request_close` (`L10290–10294`) must iterate `(self, panel)` to set stop events, and `safe_close_ppms` runs twice (once on `ppms_panel`, once on `CombinedControlApp`).
 - **Executors & timers**:
   - `CombinedControlApp`: `executor` (`led-io`), `file_executor` (`file-export`), `ui_queue` + `drain_ui_queue` (`root.after(20, ...)`).
-  - `PPMSPanel`: `ppms_executor` (from `_initialize_ppms_state`), `zurich_executor` (`ppms-zurich`), `ppms_poll_after_id`, `zurich_after_id`.
+  - `PPMSPanel`: `ppms_executor` (`max_workers=5`, `ppms-control`, from `_initialize_ppms_state` at `L5832`), `zurich_executor` (`max_workers=1`, `ppms-zurich`, `L10335`), `ppms_poll_after_id`, `zurich_after_id`.
   - Note: `ppms_checks.py` emits `invalid command name "...drain_ui_queue"` on stderr during rapid window destruction because `drain_ui_queue` / `after` callbacks fire as `root` is destroyed.
 
 ### 4. Classification of inherited / legacy code in `app.py`
@@ -118,7 +121,7 @@ Transport_PPMS.py (19 L)
 | `PPMSQDInstrumentReadbackController`, `PPMSRemoteReadbackController`, `PPMSMotorDebug` | `L2332–2967` | **PPMS-specific logic** | Core PPMS QDInstrument/DLL backend, unified remote wrapper, and rotator debug state. |
 | `SafeVisaIdentityController`, `ConnectionOverview`, `EditableFolderDialog` | `L469–770`, `L1094–1193`, `L1997–2132` | **Required shared logic** | Active VISA identity/lease controller, connection lamp overview, and folder picker. |
 | `LabOneDotNetAdapter`, `LabOneCAPIAdapter`, `LegacyMFLIBridge` | `L1266–1543`, `L3621–3747` | **Required shared logic** (Zurich MFLI) | Used by `NonLocalACController` (`L3758`, `L4215`, `L4333`) for PPMS Zurich MFLI connection/readback. |
-| `NonLocalACController` | `L3748–5662` (1,915 L, 63 methods) | **Mixed: 10 external methods (+ `__init__`) called from `app.py`, reaching 17 methods transitively; 46 methods unreachable** | `PPMSPanel` uses `zurich_controller = NonLocalACController(...)` (`L10334`) for MFLI only (`L10428–10901`) and 2 class constants (`L8129`, `L8172`). The 46 Keithley 6221 AC/DC/Pulse/Gate-VI methods are unused in PPMS. |
+| `NonLocalACController` | `L3748–5662` (1,915 L, 63 methods) | **Mixed (pending verification): 10 external methods (+ `__init__`) called statically from `app.py`, reaching 17 methods transitively; 46 methods unreferenced statically** | `PPMSPanel` uses `zurich_controller = NonLocalACController(...)` (`L10334`) for MFLI (`L10428–10901`) and 2 class constants (`L8129`, `L8172`). Static call-graph inspection leaves 46 methods unreferenced, **pending further verification** (dynamic/string/test callers) before any removal. |
 | `rte_panel` check in `safe_close_ppms` | `L10126` | **Harmless residual** | `self.__dict__.get("rte_panel")` is always `None` in standalone PPMS. |
 
 ### 5. Source authority and generator lifecycle
@@ -136,10 +139,10 @@ Transport_PPMS.py (19 L)
 | A1-1 | **P2** | `main@56908d8:Other-files/test/test_instrument_safety_logic.py` L1668–2404 deleted in `8369a29e` | `PPMSQDInstrumentReadbackController` (436 L) and `SharedVisaManager` disconnect/IDN-fail paths have 0 unit tests in `Transport-PPMS`. | Restore PPMS/QDInstrument/SharedVisa unit tests into standalone `Other-files/test_ppms_qdinstrument.py` & `test_visa_shared_manager.py`. | Open (non-blocking for D1) |
 | A1-2 | **P2** | `main@56908d8:Other-files/test_scan_plot_snapshots.py` L375–391 (`PpmsTests`) deleted in `8369a29e` | PPMS PNG plot snapshot saving (`run1_plots_snapshot.png`, `plot_snapshots` event) is no longer verified by tests. | Restore `PpmsTests` into `Other-files/test_ppms_scan_plot_snapshots.py`. | Open (non-blocking for D1) |
 | A2-1 | **P1** (Arch) | `8369a29e:transport/ppms/app.py` L5746 vs L10319 (`_initialize_ppms_state` called twice), L10313 (`PPMSPanel(CombinedControlApp)`), L10422 (`__getattr__`) | Dual ownership of `ppms_*` Tk vars, `ppms_executor`, and `instrument_connection_indicators` complicates close/stop logic and blocks clean testing. | In D1, replace inheritance + `__getattr__` delegation with explicit composition (single state owner, single executor owner). | Proposed for D1 |
-| A2-2 | **P2** (Arch) | `8369a29e:transport/ppms/app.py` L3748–5662 (`NonLocalACController`, 1,915 L) vs L10334–10901 | 46 unused NonLocal 6221 AC/DC/Pulse methods remain bundled in `app.py`; `STFMRSR830Controller` (`L2143`) carries misleading `STFMR` name. | In D1, extract a focused `ZurichMFLIController` (wrapping `LabOne*Adapter`/`LegacyMFLIBridge`) and rename/extract `SR830Controller`. | Proposed for D1 |
+| A2-2 | **P2** (Arch) | `8369a29e:transport/ppms/app.py` L3748–5662 (`NonLocalACController`, 1,915 L) vs L10334–10901 | 46 static-unreferenced methods remain bundled in `app.py` (pending dynamic/test-caller verification; not yet deletion evidence); `STFMRSR830Controller` (`L2143`) carries misleading `STFMR` name. | In D1, verify remaining callers of `NonLocalACController`, extract a focused `ZurichMFLIController`, and rename/extract `SR830Controller`. | Proposed for D1 |
 | A2-3 | **P2** | `8369a29e:transport/ppms/app.py` L10894–10903 (`PPMSPanel.safe_close_ppms`) vs L10178 (`ScanCloseHandoff`) | `zurich_executor.submit(disconnect_mfli)` and `shutdown(wait=False)` run before `super().safe_close_ppms()` checks `ScanCloseHandoff`, risking concurrent MFLI disconnect while an active scan finishes. | Coordinate `zurich_controller.disconnect_mfli` with `ScanCloseHandoff` in D1 close lifecycle. | Proposed for D1 |
 | A2-4 | **P3** | `8369a29e:transport/ppms/app.py` L10196–10227 (`drain_ui_queue`), observed in `ppms_checks.py` stderr (`invalid command name "...drain_ui_queue"`) and `text cut ['Sample, ranges, wiring and m']` at `1920x1080` (`ui_scale 0.86`) / `1600x1586` (`ui_scale 1.18`) | Harmless Tk `after` teardown noise and minor label clipping on narrower/scaled layouts. | Cancel `drain_ui_queue` `after` ID on close and adjust label width/text if needed in UI cleanup. | Deferred / P3 |
-| A1-3 | **P3** | `8369a29e:transport/ppms/app.py` L1877–1996 vs L10786 (`connect_mfli`) | Cross-program lease protects VISA resources (`SafeVisaIdentityController`) on Windows/Mac, but Zurich MFLI (`NonLocalACController`) does not acquire a cross-program lease. | Evaluate adding MFLI device ID to cross-program lease in a follow-up if two programs share one MFLI. | Proposed for D1/follow-up |
+| A1-3 | **Withdrawn** | `8369a29e:transport/ppms/app.py` L4211–4213 (`connect_mfli`), L4391 / L5528 / L5618 / L5660 (`release_instrument_lease`) | False positive withdrawn: `NonLocalACController.connect_mfli` already acquires `LABONE::<device>` cross-program lease and releases it on disconnect. | No action needed. | Withdrawn |
 | T-1 | **P2** (DevEx) | `Other-files/ci/run_suite.py` & `Other-files/ci/ppms_checks.py` vs `.github/workflows/ppms-tests.yml` | Running the full suite locally on macOS spawns native Aqua Tk windows on the user's desktop (`tk.Tk()`), interrupting local work, whereas Linux (`xvfb-run`) and Windows CI run headlessly. | Add a `--headless` / non-GUI test filter (or separate pure-unit vs Tk-GUI test groups) in `Other-files/ci/run_suite.py` so local macOS runs execute non-GUI tests silently without desktop popups while full GUI/layout verification runs on GitHub Actions CI (Linux `xvfb` + Windows). | Requested by user for follow-up |
 
 ---
@@ -153,14 +156,16 @@ Transport_PPMS.py (19 L)
   - `Transport-PPMS@8369a29e117e643bb9a3e38a5fc795b473f5dfe8`:
     - `PPMS tests` ([run 45996570966](https://github.com/Jiaze-Li/Transport-all/actions/runs/45996570966)): **success** (`linux` suite + layout + wheel build/install, `windows` suite + layout).
     - `PPMS Windows exe` ([run 45996570863](https://github.com/Jiaze-Li/Transport-all/actions/runs/45996570863)): `build` job **success** (PyInstaller `.exe` + one-folder, `--package-self-test`, window startup check); `release` job **failed** only because tag `ppms-v1.0` was not pushed in the `Jiaze-Li/Transport-all` fork.
-  - `audit/ppms-extraction-and-architecture@5e5430b070fab0645cef6c26dda8f3cfa55c2085`:
-    - `PPMS tests` ([run 45999165068](https://github.com/Jiaze-Li/Transport-all/actions/runs/45999165068)): **success**.
+  - `audit/ppms-extraction-and-architecture`:
+    - `5e5430b070fab0645cef6c26dda8f3cfa55c2085`: `PPMS tests` ([run 45999165068](https://github.com/Jiaze-Li/Transport-all/actions/runs/45999165068)) — **success**.
+    - `ba9f5e79732c510ff40fa07f184e769e7035331a`: `PPMS tests` ([run 46007283275](https://github.com/Jiaze-Li/Transport-all/actions/runs/46007283275)) — **success**.
+    - `5d8493e5657e886baf76583c438fa40cdc998945`: `PPMS tests` ([run 46007519889](https://github.com/Jiaze-Li/Transport-all/actions/runs/46007519889)) — **in_progress** at time of revision (docs-only commit).
 - **Unverified / out of scope**: Live hardware communication (PPMS MultiVu/QDInstrument, Keithley 6221/2400, SR830, Zurich MFLI) and physical lab PC execution were not performed.
 
 ---
 
 ## Exit decision
-- **A1 (Extraction integrity)**: **PASS** (with 2 non-blocking P2 test-restoration follow-ups: `test_scan_plot_snapshots.py` PPMS case and `test_instrument_safety_logic.py` QDInstrument/SharedVisa cases).
+- **A1 (Extraction integrity)**: **PASS (static extraction & retained offline checks)** — AST parity and 46 retained offline test modules pass, with uncovered runtime gaps (`test_scan_plot_snapshots.py` PPMS case, `test_instrument_safety_logic.py` QDInstrument/SharedVisa cases, and live hardware execution); complete behavioral equivalence is not claimed.
 - **A2 (Internal architecture)**: **Complete** — core pure-logic/recording/protocol/MultiVu modules (`~1,002 L`) are cleanly decoupled; remaining `10,926 L` in `app.py` has clear refactoring targets (`PPMSPanel`/`CombinedControlApp` dual init, `NonLocalACController` MFLI split, `ScanCloseHandoff` + Zurich close ordering, `STFMRSR830Controller` naming).
 - **Design readiness (D1)**: **Safe to proceed to a separate D1 modularization design PR** (recommended: freeze `tools/extract_app.py` regeneration and make `transport/ppms/*` the authoritative source, while restoring the missing A1-1/A1-2 unit tests and adding the `T-1` non-GUI/headless local test runner mode alongside or ahead of D1).
 - **Hardware acceptance**: Not performed by this audit.
