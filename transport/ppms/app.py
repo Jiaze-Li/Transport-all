@@ -10170,6 +10170,12 @@ class CombinedControlApp:
                 self.ppms_environment_controller.disconnect()
             except BaseException as error:
                 errors.append(str(error))
+            zurich_executor = self.__dict__.get("zurich_executor")
+            if zurich_executor is not None:
+                try:
+                    zurich_executor.shutdown(wait=True, cancel_futures=True)
+                except BaseException as error:
+                    errors.append(str(error))
             zurich_controller = self.__dict__.get("zurich_controller")
             if zurich_controller is not None:
                 try:

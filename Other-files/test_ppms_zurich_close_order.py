@@ -397,6 +397,61 @@ class ZurichCloseOrderTests(unittest.TestCase):
         self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
         self.assertEqual(events.count("disconnect:mfli"), 1)
 
+    def test_inflight_zurich_connect_finishes_before_disconnect_and_releases_lease(self):
+        mfli_disconnected = threading.Event()
+        connect_started = threading.Event()
+        allow_connect_finish = threading.Event()
+        after_cancelled = threading.Event()
+        connect_errors = []
+
+        panel, daq, events, record, lease_key = _make_panel_with_zurich(
+            on_mfli_disconnect_done=mfli_disconnected.set
+        )
+        # Reset to disconnected state before simulating an in-flight connect task.
+        app.release_instrument_lease(lease_key, panel.zurich_controller)
+        panel.zurich_controller.mfli_daq = None
+        panel.zurich_controller.mfli_device = ""
+        panel.zurich_controller.mfli_lease_resource = ""
+        panel.zurich_after_id = "after#connect"
+        panel.root = types.SimpleNamespace(after_cancel=lambda _aid: after_cancelled.set())
+
+        def connect_work():
+            try:
+                connect_started.set()
+                if not allow_connect_finish.wait(timeout=5.0):
+                    raise TimeoutError("allow_connect_finish not signaled")
+                with panel.zurich_controller.lock:
+                    app.acquire_instrument_lease(
+                        lease_key, panel.zurich_controller, "PPMS Zurich MFLI"
+                    )
+                    panel.zurich_controller.mfli_daq = daq
+                    panel.zurich_controller.mfli_device = "dev4414"
+                    panel.zurich_controller.mfli_lease_resource = lease_key
+                record("connect:finished")
+            except BaseException as exc:
+                connect_errors.append(exc)
+
+        panel.zurich_executor.submit(connect_work)
+        self.assertTrue(connect_started.wait(timeout=5.0))
+
+        close_thread = threading.Thread(target=panel.safe_close_ppms)
+        close_thread.start()
+        self.assertTrue(after_cancelled.wait(timeout=5.0))
+        self.assertFalse(mfli_disconnected.is_set())
+
+        allow_connect_finish.set()
+        close_thread.join(timeout=5.0)
+        self.assertFalse(close_thread.is_alive())
+        panel.ppms_executor.shutdown(wait=True)
+
+        self.assertEqual(connect_errors, [])
+        self.assertTrue(mfli_disconnected.is_set())
+        self.assertTrue(daq.disconnected)
+        self.assertIsNone(panel.zurich_controller.mfli_daq)
+        self.assertEqual(panel.zurich_controller.mfli_lease_resource, "")
+        self.assertNotIn(lease_key, app._INSTRUMENT_LEASES)
+        self.assertLess(events.index("connect:finished"), events.index("disconnect:mfli"))
+
     def test_cleanup_failure_does_not_skip_other_instruments_or_raise(self):
         for failing in ("ppms_env", "mfli"):
             with self.subTest(failing=failing):

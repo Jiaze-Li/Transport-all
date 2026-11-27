@@ -60,6 +60,31 @@ EXTRA_IMPORTS = (
 # so it does not group under the main program's button when both are open.
 REPLACE = {
     "'NH.ProfChen.MagnetoElectroOpticalMicrowaveTransport'": "'NH.ProfChen.TransportPPMS'",
+    (
+        "    def safe_close_ppms(self):\n"
+        "        if self.zurich_closed:\n"
+        "            return\n"
+        "        self.zurich_closed = True\n"
+        "        if self.zurich_after_id is not None:\n"
+        "            self.root.after_cancel(self.zurich_after_id)\n"
+        "            self.zurich_after_id = None\n"
+        "        self.zurich_executor.submit(self.zurich_controller.disconnect_mfli)\n"
+        "        self.zurich_executor.shutdown(wait=False)\n"
+        "        super().safe_close_ppms()"
+    ): (
+        "    def safe_close_ppms(self):\n"
+        "        if self.zurich_closed:\n"
+        "            return\n"
+        "        self.zurich_closed = True\n"
+        "        if self.zurich_after_id is not None:\n"
+        "            try:\n"
+        "                self.root.after_cancel(self.zurich_after_id)\n"
+        "            except (AttributeError, tk.TclError):\n"
+        "                pass\n"
+        "            self.zurich_after_id = None\n"
+        "        self.zurich_executor.shutdown(wait=False, cancel_futures=True)\n"
+        "        super().safe_close_ppms()"
+    ),
 }
 
 MAIN_WINDOW_TITLE = "Transport_PPMS_NH"
@@ -155,6 +180,12 @@ class CombinedControlApp:
                 self.ppms_environment_controller.disconnect()
             except BaseException as error:
                 errors.append(str(error))
+            zurich_executor = self.__dict__.get("zurich_executor")
+            if zurich_executor is not None:
+                try:
+                    zurich_executor.shutdown(wait=True, cancel_futures=True)
+                except BaseException as error:
+                    errors.append(str(error))
             zurich_controller = self.__dict__.get("zurich_controller")
             if zurich_controller is not None:
                 try:
