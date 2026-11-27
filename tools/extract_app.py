@@ -37,7 +37,8 @@ The host file's settings: PAGE_CLASS (or none: the pages are the main
 window's own, built by the host's build_ui), APP_NAME, OUTPUT, GLUE_FILES,
 KEEP_PATTERNS, DROP,
 STUBS, INIT_DROP, KEEP, PACKAGE_IMPORTS, EXTRA_IMPORTS, REPLACE (literal text of
-the generated module to replace; each must occur).  Its other top-level
+the generated module to replace; each must occur), APP_VERSION (the
+application's own version, in place of the main program's).  Its other top-level
 definitions replace, or add to, the main program's; the methods of its
 ``class CombinedControlApp`` replace that class's.
 """
@@ -51,7 +52,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 APP_CLASS = "CombinedControlApp"
 SETTINGS = ("DROP", "STUBS", "INIT_DROP", "PACKAGE_IMPORTS", "KEEP", "EXTRA_IMPORTS", "PAGE_CLASS", "OUTPUT",
-            "GLUE_FILES", "KEEP_PATTERNS", "APP_NAME", "REPLACE")
+            "GLUE_FILES", "KEEP_PATTERNS", "APP_NAME", "REPLACE", "APP_VERSION")
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -337,6 +338,11 @@ def main(argv) -> int:
         if old not in result:
             raise SystemExit(f"REPLACE: {old!r} is not in the generated module")
         result = result.replace(old, new)
+    if settings.get("APP_VERSION"):
+        # The application's own version, not the main program's (user, 2026-11-27).
+        result, count = re.subn(r'^APP_VERSION = "[^"]*"$', f'APP_VERSION = "{settings["APP_VERSION"]}"', result, flags=re.M)
+        if count != 1:
+            raise SystemExit(f"APP_VERSION: {count} assignments in the generated module")
     ast.parse(result)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(result, encoding="utf-8")

@@ -1,14 +1,14 @@
 # The standalone MOKE application as an installable package: Transport_MOKE.py
 # plus the transport package beside it.  `pip install transport_moke-<version>-py3-none-any.whl`
 # adds the `transport-moke` command; `python Transport_MOKE.py` in a copied
-# folder works too.  The version follows APP_VERSION in transport/moke/app.py.
+# folder works too.  The version is APP_VERSION of tools/moke_host.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "transport-moke"
-version = "1.0.2"
+version = "1.0"
 description = "Magneto-optic Kerr imaging and current-induced domain-wall motion control program (Tk GUI): the MOKE and CIDWM pages of Transport-all as a program of their own"
 readme = "README.md"
 license = "GPL-3.0-only"

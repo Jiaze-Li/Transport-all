@@ -7,6 +7,10 @@ program's with the other pages (Non-local, PPMS, SHHV & Switch, FMR, STFMR)
 taken out: the window, the redraw on a tab change, and the close.
 """
 APP_NAME = "the MOKE light, MOKE motor, MOKE magnet, CIDWM and MOKE-24 pages"
+# This program's own version (user, 2026-11-27: "name PPMS, RT, MOKE, FMR exe all as v1.0"), not the
+# main program's.  It is in the .exe's properties and in every results file, and it names the release
+# ("Transport_MOKE v1.0"): raise it here, and in pyproject.toml, to start a new release.
+APP_VERSION = "1.0"
 OUTPUT = "transport/moke/app.py"
 GLUE_FILES = ("ppms_package_glue.py",)
 KEEP_PATTERNS = ("(?i)moke", "(?i)cidwm")
