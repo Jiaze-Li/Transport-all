@@ -91,7 +91,7 @@ class ModeTests(unittest.TestCase):
         if selected is not None:
             obj.ppms_lockin_selection = {key: Mock(get=lambda key=key: key in selected)
                                         for key in ('830_a', '830_b', 'zurich')}
-            obj.zurich_controller = types.SimpleNamespace(mfli_connected='zurich' in selected)
+            obj.zurich_controller = types.SimpleNamespace(mfli_connected='zurich' in selected, mfli_has_multi_demod=lambda: True)
             for key in ('830_a', '830_b'):
                 obj.ppms_instrument_controllers[key].connected = key in selected
         obj.ppms_last_readback = dict(temperature_k=300, field_oe=100)

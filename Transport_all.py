@@ -7658,12 +7658,18 @@ try:
         has_demod_2 = True
     except Exception:
         has_demod_2 = False
+    try:
+        daq.getInt("/%s/demods/3/enable" % device)
+        daq.getInt("/%s/extrefs/1/demodselect" % device)
+        has_demod_4 = True
+    except Exception:
+        has_demod_4 = False
     identity = "Zurich Instruments MFLI - " + device
     if version:
         identity += " - LabOne " + version
     emit({"ok": True, "event": "ready", "device": device,
           "version": version, "options": options,
-          "has_demod_2": has_demod_2, "identity": identity})
+          "has_demod_2": has_demod_2, "has_demod_4": has_demod_4, "identity": identity})
 except BaseException:
     emit({"ok": False, "event": "ready", "error": traceback.format_exc()})
     try:
@@ -7836,7 +7842,7 @@ for request_line in sys.stdin:
             emit({"ok": True, "sample": payload})
         elif command == "read_demods":
             channels = []
-            for index in range(4):
+            for index in range(int(request.get("count", 4))):
                 node = "/%s/demods/%d" % (device, index)
                 enabled = int(daq.getInt(node + "/enable"))
                 if not enabled:
@@ -7949,6 +7955,7 @@ class LegacyMFLIBridge:
             self.version = str(ready.get("version", ""))
             self.options = str(ready.get("options", ""))
             self.has_demod_2 = bool(ready.get("has_demod_2", False))
+            self.has_demod_4 = bool(ready.get("has_demod_4", False))
             self.identity = str(ready.get("identity", self.device))
         except BaseException:
             self.close(force=True)
@@ -8452,7 +8459,7 @@ class NonLocalACController:
                     raise RuntimeError('Zurich 3rd-harmonic configuration readback mismatch: ' + name)
     def disable_unused_ppms_demods(self, mode):
         extref = self.mfli_config.get('extref_demodulator')
-        measuring = (0, 1, 2) if extref == 3 else (0, 2, 3) if extref == 1 else (0,)
+        measuring = (0, 1, 2) if extref == 3 else (0, 2, 3) if extref == 1 and self.mfli_has_multi_demod() else (0,)
         used = len(PPMS_ZURICH_MODE_ORDERS.get(str(mode), (1,)))
         indices = tuple(measuring[used:])
         with self.lock:
@@ -8641,6 +8648,7 @@ class NonLocalACController:
                     "python": str(bridge.python_path),
                     "options": bridge.options,
                     "has_demod_2": bridge.has_demod_2,
+                    "has_demod_4": bridge.__dict__.get("has_demod_4", False),
                 }
                 self.mfli_config = {}
                 self.mfli_identity = bridge.identity
@@ -8813,7 +8821,7 @@ class NonLocalACController:
         has_multi_demod = 'MD' in options_text if options_text else has_demod_2
         extref_demod = NONLOCAL_MFLI_EXTREF_DEMODULATOR if has_multi_demod else NONLOCAL_MFLI_DEMODULATOR
         if external_reference_demodulator is not None:
-            if external_reference_demodulator != 3 or not has_multi_demod:
+            if external_reference_demodulator != 3 or not self.mfli_has_multi_demod():
                 raise RuntimeError('Demod 4 external reference requires MF-MD multi-demodulator support')
             extref_demod = 3
         extref = NONLOCAL_MFLI_EXTREF_CHANNEL
@@ -9084,11 +9092,12 @@ class NonLocalACController:
         with self.lock:
             if not self.mfli_connected:
                 raise RuntimeError("Zurich MFLI is not connected")
+            count = 4 if self.mfli_has_multi_demod() else 2 if self.mfli_props.get("has_demod_2") else 1
             if self.mfli_bridge is not None:
-                channels = self.mfli_bridge.request("read_demods")["demods"]
+                channels = self.mfli_bridge.request("read_demods", count=count)["demods"]
             else:
                 channels = []
-                for index in range(4):
+                for index in range(count):
                     node = f"/{self.mfli_device}/demods/{index}"
                     enabled = int(self.mfli_daq.getInt(node + "/enable"))
                     if not enabled:
@@ -9103,6 +9112,7 @@ class NonLocalACController:
                         frequency=self._mfli_scalar(raw, "frequency"), timestamp=timestamp,
                         harmonic=int(self.mfli_daq.getInt(node + "/harmonic")),
                         adcselect=int(self.mfli_daq.getInt(node + "/adcselect")), enabled=enabled))
+            channels = list(channels) + [dict(enabled=0)] * (4 - len(channels))
             if len(channels) != 4:
                 raise RuntimeError("Zurich must read back all four Demod channels")
             fields = {}
@@ -9667,21 +9677,23 @@ class NonLocalACController:
     def mfli_has_multi_demod(self) -> bool:
         with self.lock:
             options = str(self.mfli_props.get("options", "")).upper()
-            has_demod_2 = self.mfli_props.get("has_demod_2")
-            if self.mfli_bridge is None and self.mfli_daq is not None:
-                if not options:
-                    try:
-                        options = str(self.mfli_daq.getString(f'/{self.mfli_device}/features/options')).upper()
-                        self.mfli_props["options"] = options
-                    except BaseException:
-                        pass
-                if has_demod_2 is None:
-                    try:
-                        self.mfli_daq.getInt(f'/{self.mfli_device}/demods/{NONLOCAL_MFLI_EXTREF_DEMODULATOR}/enable')
-                        has_demod_2 = True
-                    except BaseException:
-                        has_demod_2 = False
-            return ("MD" in options) if options else bool(has_demod_2)
+            if self.mfli_bridge is None and self.mfli_daq is not None and not options:
+                try:
+                    options = str(self.mfli_daq.getString(f'/{self.mfli_device}/features/options')).upper()
+                    self.mfli_props["options"] = options
+                except BaseException:
+                    pass
+            if options:
+                return "MD" in options
+            has_demod_4 = self.mfli_props.get("has_demod_4")
+            if not has_demod_4 and self.mfli_bridge is None and self.mfli_daq is not None:
+                try:
+                    self.mfli_daq.getInt(f'/{self.mfli_device}/demods/3/enable')
+                    self.mfli_daq.getInt(f'/{self.mfli_device}/extrefs/1/demodselect')
+                    has_demod_4 = self.mfli_props["has_demod_4"] = True
+                except BaseException:
+                    has_demod_4 = False
+            return bool(has_demod_4)
     def update_amplitude(self, rms_ma: float) -> float:
         with self.lock:
             sweep_peak_a = getattr(self, "sweep_peak_a", None)
@@ -35986,6 +35998,9 @@ class PPMSPanel(CombinedControlApp):
                 self.zurich_scan_tau = float(self.zurich_timeconstant.get())
                 if self.zurich_scan_harmonic not in ('1', '2', '3', '1+2', '1+2+3') or not math.isfinite(self.zurich_scan_tau) or self.zurich_scan_tau <= 0:
                     raise ValueError('Please check the Zurich harmonic and time constant')
+                problem = self._zurich_needs_md_text(self.zurich_scan_harmonic)
+                if problem:
+                    raise ValueError(problem)
             except (ValueError, tk.TclError) as error:
                 messagebox.showerror('PPMS Zurich parameters', str(error), parent=self.root)
                 return
@@ -35994,10 +36009,13 @@ class PPMSPanel(CombinedControlApp):
         if getattr(self, 'zurich_scan_enabled', False) and not getattr(self, 'zurich_scan_configured', False):
             with self.zurich_controller.lock:
                 dual = str(self.zurich_scan_harmonic) in ('1+2', '1+2+3')
+                problem = self._zurich_needs_md_text(self.zurich_scan_harmonic)
+                if problem:
+                    raise RuntimeError(problem)
                 self.zurich_controller.configure_mfli('AC', 1 if dual else int(self.zurich_scan_harmonic), 'R',
                     reference_source=self.zurich_scan_reference, sample_rate_hz=NONLOCAL_SAMPLE_HZ,
                     input_impedance='10 MΩ', input_scaling=1.0, timeconstant_s=self.zurich_scan_tau,
-                    external_reference_demodulator=3)
+                    external_reference_demodulator=3 if self.zurich_controller.mfli_has_multi_demod() else None)
                 if dual:
                     self.zurich_controller.configure_second_harmonic(self.zurich_scan_tau)
                 if self.zurich_scan_harmonic == '1+2+3':
@@ -36270,6 +36288,12 @@ class PPMSPanel(CombinedControlApp):
                     angle_x_range=self.__dict__.get('ppms_plot_angle_range') if axis == 'angle' else None,
                     series_colors=colors[channel], series_labels=labels[channel],
                     series_markers=markers[channel])
+    def _zurich_needs_md_text(self, harmonic):
+        controller = self.__dict__.get('zurich_controller')
+        if controller is None or '+' not in str(harmonic) or self.__dict__.get('zurich_has_md', True) or not controller.mfli_connected:
+            return None
+        device = str(controller.mfli_device or 'This Zurich').upper()
+        return f'{device} has no MF-MD option: it reads one harmonic at a time. Choose Zurich harmonic 1, 2 or 3 (1+2 and 1+2+3 need MF-MD, as on DEV4414)'
     def _apply_ppms2_zurich_harmonic(self):
         if self.zurich_closed or self.closing or self.ppms_field_scan_running:
             return
@@ -36298,7 +36322,9 @@ class PPMSPanel(CombinedControlApp):
         self._set_zurich_busy(True)
         self.zurich_status.set("Updating harmonic and verifying configuration…" if apply_only else "Connecting and configuring…")
         self._set_connection_indicator("zurich_reference", False)
+        one_order = {}
         def work():
+            nonlocal harmonic
             controller = self.zurich_controller
             try:
                 if not apply_only:
@@ -36306,10 +36332,14 @@ class PPMSPanel(CombinedControlApp):
                 elif not controller.mfli_connected:
                     raise RuntimeError('Zurich is disconnected; harmonic not updated')
                 with controller.lock:
+                    multi = controller.mfli_has_multi_demod()
+                    self.zurich_has_md = multi
+                    if not multi and harmonic in ('1+2', '1+2+3'):
+                        one_order['was'], harmonic = harmonic, '1'
                     controller.configure_mfli("AC", 1 if harmonic in ('1+2', '1+2+3') else int(harmonic), "R", reference_source=reference,
                         sample_rate_hz=NONLOCAL_SAMPLE_HZ, input_impedance="10 MΩ",
                         input_scaling=1.0, timeconstant_s=tau,
-                        external_reference_demodulator=3)
+                        external_reference_demodulator=3 if multi else None)
                     if harmonic in ('1+2', '1+2+3'):
                         controller.configure_second_harmonic(tau)
                     if harmonic == '1+2+3':
@@ -36331,7 +36361,10 @@ class PPMSPanel(CombinedControlApp):
             try:
                 future.result()
                 self.zurich_expected_frequency = frequency
-                self.zurich_status.set(f"Connected; harmonic {harmonic} applied; AC / 10 MΩ")
+                if one_order:
+                    self.zurich_harmonic.set(harmonic)
+                    self.thread_log(f'{self.ppms_page_name} Zurich {device.upper()} has no MF-MD option: it reads one harmonic at a time, so harmonic {one_order["was"]} was changed to {harmonic} (its reference on Demod 2, as on the Non-local pages)')
+                self.zurich_status.set(f"Connected; harmonic {harmonic} applied; AC / 10 MΩ" + ('; no MF-MD: one harmonic' if one_order else ''))
                 self.thread_log(f'PPMS Zurich harmonic {harmonic} applied and configuration verified')
             except Exception as error:
                 self.zurich_status.set(f"Connect/configure failed: {short_status_error(error, 90)}")
@@ -36342,6 +36375,11 @@ class PPMSPanel(CombinedControlApp):
                         messagebox.showerror('Zurich harmonic update failed' if apply_only else 'PPMS Zurich connect / configure failed', str(error), parent=self.root)
                     except Exception:
                         pass
+            if one_order:
+                try:
+                    self._refresh_ppms2_plot_layout()
+                except Exception as error:
+                    self.thread_log(f'{self.ppms_page_name} plot layout not refreshed after the harmonic change: {error}')
             self._set_zurich_busy(False)
         future.add_done_callback(lambda _: self.post_ui(finished))
     def disconnect_ppms2_zurich(self):
@@ -38882,6 +38920,9 @@ class RTEPanel(PPMSPanel):
         self.zurich_scan_tau = float(self.zurich_timeconstant.get())
         if self.zurich_scan_enabled and (self.zurich_scan_harmonic not in PPMS_ZURICH_MODE_ORDERS or not math.isfinite(self.zurich_scan_tau) or self.zurich_scan_tau <= 0):
             raise ValueError('Check the Zurich harmonic and positive time constant')
+        problem = self._zurich_needs_md_text(self.zurich_scan_harmonic) if self.zurich_scan_enabled else None
+        if problem:
+            raise ValueError(problem)
     def _ppms_set_current_direct(self):
         try:
             self._require_ppms_control_ready()

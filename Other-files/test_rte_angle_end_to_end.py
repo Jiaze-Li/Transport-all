@@ -243,7 +243,7 @@ class EndToEnd(unittest.TestCase):
         source = types.SimpleNamespace(connected=True, label="Keithley 6221", resource_name="GPIB0::12::INSTR",
                                        disconnect=lambda: None)
         panel.ppms_instrument_controllers["6221"] = source
-        panel.zurich_controller = types.SimpleNamespace(mfli_connected=meter == "zurich", lock=threading.Lock(),
+        panel.zurich_controller = types.SimpleNamespace(mfli_connected=meter == "zurich", lock=threading.Lock(), mfli_has_multi_demod=lambda: True,
                                                         disconnect_mfli=lambda: None)
         panel.zurich_timeconstant.set(tc_zurich)
         if meter == "zurich":

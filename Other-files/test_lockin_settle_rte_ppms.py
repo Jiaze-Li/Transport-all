@@ -673,7 +673,7 @@ class PPMSStartTests(NoWindows):
                 connected=True, resource_name="GPIB0::9::INSTR")
         if zurich_tau is not None:
             obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(True)}
-            obj.zurich_controller = types.SimpleNamespace(mfli_connected=True)
+            obj.zurich_controller = types.SimpleNamespace(mfli_connected=True, mfli_has_multi_demod=lambda: True)
             obj.zurich_scan_enabled, obj.zurich_scan_tau = True, zurich_tau
         obj.ppms_last_readback = dict(temperature_k=300, field_oe=100)
         obj.ppms_field_scan_stop_event = threading.Event()

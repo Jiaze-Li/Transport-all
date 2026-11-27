@@ -1,5 +1,24 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## Zurich without MF-MD on SHHV & Switch and PPMS (user, 2026-11-27)
+
+- **Report:** DEV4435 ("Normal") on SHHV & Switch: Connect failed, legacy LabOne bridge, `ZIAPINotFoundException ...
+  Path '/dev4435/extrefs/1/demodselect'`, the device found "with options ." (none). User chose "make it work, 1
+  harmonic".
+- **Cause:** with no options text, MF-MD was taken from a second demodulator, which every MFLI has, so DEV4435 was
+  set up for the Demod 4 reference; `extrefs/1` exists only with MF-MD.
+- **Now:** MF-MD (Demod 4 routing) is the options' "MD", or else a fourth demodulator with a second external
+  reference (`mfli_has_multi_demod`; the legacy bridge reports `has_demod_4`; only a found one is remembered). A
+  Zurich without it keeps the routing it always had on the Non-local pages, the reference on Demod 2 and the
+  harmonic measured on Demod 1 (`external_reference_demodulator=None`; review: a reference on the measuring
+  demodulator would lock to f/n at harmonic n); its Demods 1 and 2 are read (`read_mfli_four_demods`, 3 and 4
+  "disabled"), and none is switched off. The scan-start check reads the MF-MD answer kept at Connect
+  (`zurich_has_md`), not the instrument. Connect with 1+2 or 1+2+3 on such a Zurich sets the
+  harmonic to 1 and says so (status "no MF-MD: one harmonic", log line); a scan started with 1+2 / 1+2+3 is refused
+  before anything is sent (`_zurich_needs_md_text`). A Zurich with MF-MD (DEV4414) is set up as before. The Non-local
+  pages share the detection, so they too stop taking a Zurich without MF-MD for one with it.
+- Not tried on DEV4435 yet. Its reference input must match the wiring (the Non-local rack uses Aux Input 1 for it).
+
 ## SHHV & Switch: Switch-loop scan (user, 2026-11-26)
 
 - **Request:** "add a switch-loop in the scan mode below switch which input start, end, step, loops like field".

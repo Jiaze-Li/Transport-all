@@ -162,6 +162,9 @@ class FakeZurich:
     that many reads still report the frequency it followed before, valid
     whenever that is within 0.5 % of the one expected."""
 
+    def mfli_has_multi_demod(self):
+        return True
+
     def __init__(self, log, source):
         self.log, self.source = log, source
         self.lock = threading.RLock()
