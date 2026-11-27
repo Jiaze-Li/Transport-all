@@ -17,8 +17,8 @@ Transport_all. Each release page gives the commit and the SHA-256 of its files:
 [all](https://github.com/nbb2026/Transport-all/releases/tag/windows-exe), [PPMS](https://github.com/nbb2026/Transport-all/releases/tag/ppms-windows-exe), [RT](https://github.com/nbb2026/Transport-all/releases/tag/rt-windows-exe),
 [MOKE](https://github.com/nbb2026/Transport-all/releases/tag/moke-windows-exe), [FMR](https://github.com/nbb2026/Transport-all/releases/tag/fmr-windows-exe).
 
-Do not run two of these programs on the same instruments at once: only pages inside one program know
-which of them holds an instrument.
+Two of these programs can be open at once: an instrument one of them has connected is refused to the
+others until it is disconnected there.
 
 ## What it is
 

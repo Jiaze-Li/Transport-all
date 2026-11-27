@@ -1,5 +1,24 @@
 # Magneto-Electro-Optical Transport Experiment Control Directory
 
+## An instrument held by one Transport program is refused to another (user, 2026-11-27)
+
+- **Request:** "add the cross-program instrument lock". Since the standalone page programs (Transport_PPMS,
+  Transport_RT, Transport_MOKE, Transport_FMR) two programs can be open at once. The lease table that keeps one page
+  off another page's instrument is per program, so both could connect the same 6221 (GPIB0::30), Keithley or KEPCO,
+  and a Connect or a close in one switched the output off under the other's scan (two reviews, 2026-11-27).
+- **Now:** `acquire_instrument_lease` also holds an object of the operating system named after the address
+  (`hold_instrument_for_this_process`: on Windows a named file mapping `Local\TransportInstrumentLease_<address>`
+  whose text is the holder, "program / page (process id)"; elsewhere a locked file in the temp folder). A second
+  program finds it and Connect fails with "<address> is in use by another Transport program on this PC (<holder>);
+  disconnect it there or close that program first, then connect from "<page>"". Nothing is sent to the instrument.
+  The object goes when the holder disconnects, closes or dies (the system frees it), so there is no stale lock.
+- Inside one program nothing changes: the same refusal and message as before. If the system cannot make the object,
+  the connect goes on without it. Serial devices (LED controller, magnets) were already one program at a time: a COM
+  port opens once. `Local\` is one Windows log-on session; two users logged on at once are not covered.
+- MS-fourState.py has the same code (its copied instrument core). The standalone page programs get it when their
+  branch is generated again from this program.
+- Tests: `test_instrument_lease_across_programs.py`, with a second Python process as the other program.
+
 ## Zurich without MF-MD on SHHV & Switch and PPMS (user, 2026-11-27)
 
 - **Report:** DEV4435 ("Normal") on SHHV & Switch: Connect failed, legacy LabOne bridge, `ZIAPINotFoundException ...
