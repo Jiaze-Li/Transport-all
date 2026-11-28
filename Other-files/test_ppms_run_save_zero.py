@@ -72,16 +72,19 @@ class Page:
         test.addCleanup(self.folder.cleanup)
 
     def start(self, name="run1", answer=True, folder=True):
+        import transport.ppms.ui.dialogs as dialogs_mod
+
         def error(title, text, **_options):
             self.dialogs.append((title, text))
         with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
                 mock.patch.object(motor_mod, "PPMSMotorDebug", Motor), \
                 mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer) as ask, \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer), \
                 mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory",
                                   return_value=self.folder.name if folder else "") as directory, \
-                mock.patch.object(panel_mod.simpledialog, "askstring", return_value=name):
+                mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=name):
             self.panel.start_ppms_field_scan()
         self.ask, self.directory = ask, directory
         return self

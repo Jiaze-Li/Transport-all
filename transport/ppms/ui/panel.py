@@ -1495,7 +1495,9 @@ class PPMSPanelView:
             self.ppms_zero_persist_button.configure(
                 state="normal" if scanning else "disabled"
             )
-        if hasattr(self, "ppms_scan_step_entry"):
+        if hasattr(self, "ppms_scan_target_widgets"):
+            self._update_ppms_scan_target_widgets(enabled)
+        elif hasattr(self, "ppms_scan_step_entry"):
             if enabled and self.ppms_simple_mode.get() == "Frequency":
                 self.ppms_scan_step_entry.configure(state="disabled")
         if hasattr(self, "ppms_motor_move_button"):
@@ -1508,6 +1510,21 @@ class PPMSPanelView:
                 if enabled and qd and self.ppms_motor_confirm_var.get()
                 else "disabled"
             )
+
+    def _update_ppms_scan_target_widgets(self, enabled: bool) -> None:
+        mode = self.ppms_simple_mode.get()
+        scanned = {
+            "Field+Temperature": {"Field", "Temperature"},
+            "Angle+Temperature": {"Angle", "Temperature"},
+            "Current+Temperature": {"Current", "Temperature"},
+            "Frequency+Current": {"Frequency", "Current"},
+        }.get(mode, {mode})
+        for parameter, widgets in self.ppms_scan_target_widgets.items():
+            widget_state = "disabled" if not enabled or parameter in scanned else "normal"
+            for widget in widgets:
+                widget.configure(state=widget_state)
+        if enabled and mode == "Frequency" and hasattr(self, "ppms_scan_step_entry"):
+            self.ppms_scan_step_entry.configure(state="disabled")
         for widget, idle_state in getattr(self, "ppms_lockin_choice_widgets", ()):
             widget.configure(
                 state="disabled" if scanning or busy else idle_state
@@ -3930,7 +3947,10 @@ class PPMSPanelView:
                 pass
         pass_settles = [
             self.runner.lockin_settle(
-                stable_s, settings["active_lockins"], use_zurich
+                stable_s,
+                settings["active_lockins"],
+                use_zurich,
+                fallback_code=sr830_tc_code,
             )
             for settings in harmonic_passes
         ]

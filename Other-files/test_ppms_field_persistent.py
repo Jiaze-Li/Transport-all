@@ -66,7 +66,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel._draw_ppms_helium_history = lambda: None
         panel._check_ppms_helium_warning = lambda result: None
         for name in ("ppms_connection_var", "ppms_temperature_var", "ppms_temperature_status_var",
-                     "ppms_field_var", "ppms_field_status_var"):
+                     "ppms_field_var", "ppms_field_status_var", "ppms_angle_live_var"):
             setattr(panel, name, Var(""))
         panel.ppms_field_target_var = Var("5000")
         panel.ppms_field_rate_var = Var("100")

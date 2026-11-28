@@ -418,6 +418,8 @@ class PPMSStartTests(NoWindows):
                 connected=True, resource_name="GPIB0::9::INSTR")
         obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(False)}
         obj.zurich_harmonic = Var("1")
+        obj.zurich_reference = Var("Trigger In 1")
+        obj.zurich_time_constant_var = Var("1")
         if zurich_tau is not None:
             obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(True)}
             obj.state.zurich_controller = types.SimpleNamespace(mfli_connected=True, mfli_has_multi_demod=lambda: True)

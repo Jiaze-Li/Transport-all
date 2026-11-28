@@ -118,19 +118,23 @@ class CurrentCallbacks(unittest.TestCase):
                 widget.configure.assert_called_with(state='disabled')
 
     def test_manual_large_angle_requires_yes_and_small_angle_has_no_dialog(self):
+        from transport.ppms.engine.motor import PPMSMotorService
+
         obj = self.make_app()
+        service = PPMSMotorService(obj.state.ppms_environment_controller)
         probe = Mock()
         probe.read.return_value = {'angle_deg': 0., 'status': 'AtTarget'}
+        confirm = lambda a, b: panel_mod.messagebox.askyesno("Confirm", f"{a}->{b}")
         with patch.object(panel_mod.messagebox, 'askyesno', return_value=False) as ask:
             with self.assertRaises(PPMSScanCancelled):
-                obj._ppms_confirmed_manual_move(probe, 60., 14)
+                service.confirmed_manual_move(probe, 60., 14, confirm_large_move=confirm, is_closed=lambda: False)
             probe.move_and_verify.assert_not_called()
             ask.assert_called_once()
         with patch.object(panel_mod.messagebox, 'askyesno', return_value=True):
-            obj._ppms_confirmed_manual_move(probe, 60., 14)
+            service.confirmed_manual_move(probe, 60., 14, confirm_large_move=confirm, is_closed=lambda: False)
             self.assertTrue(probe.move_and_verify.call_args.kwargs['allow_large'])
         with patch.object(panel_mod.messagebox, 'askyesno') as ask:
-            obj._ppms_confirmed_manual_move(probe, 30., 14)
+            service.confirmed_manual_move(probe, 30., 14, confirm_large_move=confirm, is_closed=lambda: False)
             ask.assert_not_called()
 
     def test_no_range_change_without_overload_for_either_lockin(self):
@@ -411,7 +415,7 @@ class CurrentCallbacks(unittest.TestCase):
             return 0
         reader._method.return_value.Invoke.side_effect = query
         system = types.SimpleNamespace(Array=Array, Object=object, Int32=int, Double=float)
-        with patch.object(app, "PPMSMotorDebug", return_value=reader), patch.dict('sys.modules', System=system):
+        with patch.object(panel_mod, "PPMSMotorDebug", return_value=reader), patch.dict('sys.modules', System=system):
             result = obj._read_ppms_cryogen_display()
         reader._read_item.assert_called_once_with(19)
         self.assertEqual(sent, ["LEVEL?"])

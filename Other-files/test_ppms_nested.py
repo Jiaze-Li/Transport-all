@@ -167,8 +167,12 @@ class NestedTests(unittest.TestCase):
         # 2026-11-15).
         obj.ppms_plot_angle_range = (-5, 355)
         calls, options = [], []
-        obj._draw_nonlocal_series = lambda *args, **kwargs: (calls.append(args), options.append(kwargs))
-        obj._redraw_ppms_transport_plot()
+        with patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **kwargs: (calls.append(args), options.append(kwargs)),
+        ):
+            obj._redraw_ppms_transport_plot()
         series = calls[-1][1]
         self.assertEqual(options[-1].get("angle_x_range"), (-5, 355))
         self.assertEqual(len(series), 4)  # Two temperatures, X/Y each.
@@ -466,8 +470,8 @@ class NestedTests(unittest.TestCase):
         self.recording_stop(obj, events)
         logged = []
         obj.thread_log = logged.append
-        set_temperature = obj.ppms_environment_controller.set_temperature
-        obj.ppms_environment_controller.set_temperature = lambda target, *args: (
+        set_temperature = obj.state.ppms_environment_controller.set_temperature
+        obj.state.ppms_environment_controller.set_temperature = lambda target, *args: (
             set_temperature(target, *args), events.append(('temperature', target)))
         self.run_worker(obj, motor, settings)
         order = [e for e in events if e[0] in ('temperature', 'delay', 'plane')]

@@ -165,10 +165,9 @@ class TwoPanelTests(unittest.TestCase):
             panel.state.scan_rows = [dict(measured_field_oe=10, sr830_8_harmonic=2, sr830_9_harmonic=3,
                 sr830_8_x_v=1, sr830_8_y_v=2, sr830_8_r_v=3, sr830_8_theta_deg=4,
                 sr830_9_x_v=1, sr830_9_y_v=2, sr830_9_r_v=3, sr830_9_theta_deg=4)]
-            panel._draw_nonlocal_series = Mock()
+            panel._redraw_ppms_transport_plot = Mock()
             # In PPMSPanelView, harmonic plots are updated directly; verify recorded order titles.
             panel._refresh_ppms2_plot_layout()
-            panel._redraw_ppms_transport_plot()
             for frame in panel.ppms_transport_plot_frames.values():
                 frame.configure.assert_not_called()
 
