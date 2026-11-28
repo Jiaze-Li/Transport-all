@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T11:51:44.143Z",
+  "updatedAt": "2026-11-28T11:55:01.026Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
     "current": "test(ppms): assert queued-scan zeroing precedes disconnect on close",
-    "next": "Review and accept Draft PR #6 after CI verification",
+    "next": "Review queued-scan, macro handoff, and inflight-shutdown fixes in Draft PR #6 for acceptance",
     "history": [
       {
         "at": "2026-11-28T15:29:23+08:00",
