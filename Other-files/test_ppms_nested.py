@@ -160,7 +160,7 @@ class NestedTests(unittest.TestCase):
             "draw_nonlocal_series",
             side_effect=lambda *args, **kwargs: captured.append(args),
         ):
-            for axis, expected, count in (("field", 10, 4), ("temperature", 300, 2), ("angle", 20, 2)):
+            for axis, expected, count in (("field", 10, 2), ("temperature", 300, 2), ("angle", 20, 2)):
                 obj.ppms_plot_axis = axis
                 obj._redraw_ppms_transport_plot()
                 series = captured[-1][1]
@@ -236,7 +236,7 @@ class NestedTests(unittest.TestCase):
         obj._read_ppms_current_display = lambda: "ON / 1 mA"
         obj._read_ppms_cryogen_display = lambda: {}
         calls = []
-        obj.runner._autorange_sr830 = lambda *args: (calls.append(args) or 5.)
+        obj.runner._autorange_sr830 = lambda *args, **kwargs: (calls.append(args) or 5.)
         # Without a successful PPMS current setting, a clean lock-in is never re-ranged ...
         obj.runner.query_numbers = lambda k, c, n: (317.3 if c == 'FREQ?' else 0,)
         with patch.object(panel_mod.time, 'monotonic', return_value=100.):

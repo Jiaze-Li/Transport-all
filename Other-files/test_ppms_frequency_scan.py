@@ -373,6 +373,7 @@ class Rig:
         try:
             with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
                     mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
+                    mock.patch.object(panel_mod.messagebox, "showerror"), \
                     mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
                 self.page.runner.run(request, sink=self.page)
         finally:

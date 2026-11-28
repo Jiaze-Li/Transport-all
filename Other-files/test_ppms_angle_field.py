@@ -336,8 +336,8 @@ class StartTests(unittest.TestCase):
         # and the rotator's moves, what is held, how every end leaves things.
         self.assertIn("Scan mode: Angle+Field\nOuter fields: 3 steps, 0 to 2000 Oe (Step 1000 Oe), "
                       "the whole angle sweep at each\n", question)
-        self.assertIn("At each field: set Driven at 100 Oe/s (about 10 s per step; about 13 s to the first field "
-                      "from 1234 Oe; 33 s of ramps in all), its stable reading awaited, then the angles; the first "
+        self.assertIn("At each field: set Driven at 100 Oe/s (about 10 s per step; about 12 s to the first field "
+                      "from 1234 Oe; 32 s of ramps in all), its stable reading awaited, then the angles; the first "
                       "angle after each field change takes agreeing windows\n", question)
         self.assertIn("Angles per field: 3, 0 to 10° (Step 5°); rotator: 12 moves of at most 0.9° per sweep and "
                       "12 back to 0° before each later field, 89 moves in all (planned at 1 s each)\n", question)

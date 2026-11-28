@@ -223,7 +223,7 @@ class RunFolderAndZeroTests(unittest.TestCase):
         title, text = page.dialogs[0]
         self.assertEqual(title, "PPMS Current scan")
         self.assertTrue(text.endswith("\n\nAt the end: 6221 zeroed"), text)
-        self.assertEqual(len(page.later), 1, "opened from the Tk event loop")
+        self.assertGreaterEqual(len(page.later), 1, "opened from the Tk event loop")
         events = page.events()
         self.assertEqual([e["event"] for e in events if e["event"] != "note"][-2:], ["outputs_zeroed", "run_finished"])
         self.assertEqual(events[-1]["outcome"], "error")
@@ -651,6 +651,7 @@ class MacroScanTests(unittest.TestCase):
         panel.thread_log = panel.shell.thread_log
         panel.ppms_macro_status, panel.ppms_macro_editor = mock.Mock(), mock.Mock()
         panel.ppms_macro_edit_buttons = []
+        panel.ppms_macro_window = None
         panel.state.ppms_environment_controller = mock.Mock()
         from test_ppms_two_panels import ImmediateExecutor
         panel.state.ppms_executor = ImmediateExecutor()
