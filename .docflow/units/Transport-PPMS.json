@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T05:56:12.031Z",
+  "updatedAt": "2026-11-28T14:03:18.323Z",
   "task": {
     "id": "Transport-PPMS",
     "branch": "Transport-PPMS",
@@ -8,7 +8,7 @@
     "task": "Development branch: Transport-PPMS",
     "started": "2026-11-27T23:24:15+08:00",
     "status": "In progress",
-    "current": "Merge pull request #5 from Jiaze-Li/refactor/ppms-foundation-modularization",
+    "current": "Merge pull request #6 from Jiaze-Li/refactor/ppms-core-architecture",
     "next": "",
     "history": [
       {
@@ -22,6 +22,10 @@
       {
         "at": "2026-11-28T13:56:01+08:00",
         "text": "Merge pull request #4 from Jiaze-Li/design/ppms-modular-architecture"
+      },
+      {
+        "at": "2026-11-28T22:03:07+08:00",
+        "text": "Merge pull request #5 from Jiaze-Li/refactor/ppms-foundation-modularization"
       }
     ],
     "commits": [
@@ -48,6 +52,12 @@
         "branch": "Transport-PPMS",
         "timestamp": "2026-11-28T13:56:01+08:00",
         "message": "Merge pull request #5 from Jiaze-Li/refactor/ppms-foundation-modularization"
+      },
+      {
+        "sha": "3e23be390332545e2bff0f48d56ceb01ad96ddcf",
+        "branch": "Transport-PPMS",
+        "timestamp": "2026-11-28T22:03:07+08:00",
+        "message": "Merge pull request #6 from Jiaze-Li/refactor/ppms-core-architecture"
       }
     ],
     "pr": null,
