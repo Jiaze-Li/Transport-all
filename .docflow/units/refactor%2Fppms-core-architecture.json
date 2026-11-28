@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T11:49:44.724Z",
+  "updatedAt": "2026-11-28T11:51:41.411Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test",
+    "current": "test(ppms): assert queued-scan zeroing precedes disconnect on close",
     "next": "Review and accept Draft PR #6 after CI verification",
     "history": [
       {
@@ -130,6 +130,10 @@
       {
         "at": "2026-11-28T19:49:30+08:00",
         "text": "test(ppms): fix GPIB address and immediate executor in contract tests"
+      },
+      {
+        "at": "2026-11-28T19:51:29+08:00",
+        "text": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test"
       }
     ],
     "commits": [
@@ -318,6 +322,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T19:49:30+08:00",
         "message": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test"
+      },
+      {
+        "sha": "a42b04e4f39db3e2d8ce7fffc95eab927918091e",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T19:51:29+08:00",
+        "message": "test(ppms): assert queued-scan zeroing precedes disconnect on close"
       }
     ],
     "pr": {
