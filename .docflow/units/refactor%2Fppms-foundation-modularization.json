@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T03:09:36.782Z",
+  "updatedAt": "2026-11-28T03:09:44.865Z",
   "task": {
     "id": "refactor/ppms-foundation-modularization",
     "branch": "refactor/ppms-foundation-modularization",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T10:59:05+08:00",
     "status": "In progress",
     "current": "refactor(ppms): enforce standalone source authority and extract controllers and scan planning",
-    "next": "",
+    "next": "Review Draft PR #5 (Batch 1 foundation modularization) and authorize Ready for review",
     "history": [
       {
         "at": "2026-11-28T11:09:23+08:00",
