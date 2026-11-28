@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T13:58:21.713Z",
+  "updatedAt": "2026-11-28T14:03:20.916Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
     "title": "refactor/ppms-core-architecture",
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
-    "status": "In progress",
+    "status": "Completed",
     "current": "fix(ppms): track in-flight tasks on the state instead of subclassing the executor",
     "next": "Bot review budget for PR #6 is nearly spent (PR too large to finish a full bot pass); decide whether to split the PR or accept it after CI and manual review",
     "history": [
@@ -362,13 +362,15 @@
     ],
     "pr": {
       "number": 6,
-      "state": "open",
+      "state": "closed",
       "title": "refactor(ppms): core architecture, lifecycle ownership and legacy cleanup",
       "url": "https://github.com/Jiaze-Li/Transport-all/pull/6",
-      "merged": false,
-      "updatedAt": "2026-11-28T13:58:04Z"
+      "merged": true,
+      "mergedAt": "2026-11-28T14:03:07Z",
+      "closedAt": "2026-11-28T14:03:07Z",
+      "updatedAt": "2026-11-28T14:03:07Z"
     },
-    "completed": null,
-    "outcome": null
+    "completed": "2026-11-28T14:03:07Z",
+    "outcome": "Merged"
   }
 }
