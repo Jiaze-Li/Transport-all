@@ -121,18 +121,32 @@ class NestedTests(unittest.TestCase):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
         obj.ppms_transport_canvas = object()
+        obj.ppms_harmonic_canvases = {(1, "x"): object(), (1, "y"): object()}
+        obj.ppms_lockin_selection = {
+            "830_a": types.SimpleNamespace(get=lambda: True),
+            "zurich": types.SimpleNamespace(get=lambda: False),
+        }
+        obj.ppms_transport_harmonic_a_var = types.SimpleNamespace(get=lambda: 1)
+        obj.state.ppms_instrument_controllers = {
+            "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")
+        }
+        obj.ppms_plot_angle_range = None
         obj.state.scan_rows = [dict(sr830_8_r_v=1, sr830_8_x_v=2,
             sr830_8_y_v=3, measured_field_oe=10, temperature_k=300+i,
             measured_angle_deg=20+i, angle_index=1, temperature_index=i+1)
             for i in range(2)]
         captured = []
-        obj._draw_nonlocal_series = lambda *args, **kwargs: captured.append(args)
-        for axis, expected, count in (("field", 10, 4), ("temperature", 300, 2), ("angle", 20, 2)):
-            obj.ppms_plot_axis = axis
-            obj._redraw_ppms_transport_plot()
-            series = captured[-1][1]
-            self.assertEqual(len(series), count)
-            self.assertEqual(next(iter(series.values()))[0][0], expected)
+        with patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **kwargs: captured.append(args),
+        ):
+            for axis, expected, count in (("field", 10, 4), ("temperature", 300, 2), ("angle", 20, 2)):
+                obj.ppms_plot_axis = axis
+                obj._redraw_ppms_transport_plot()
+                series = captured[-1][1]
+                self.assertEqual(len(series), count)
+                self.assertEqual(next(iter(series.values()))[0][0], expected)
 
     def test_idle_reads_reference_not_xy(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
@@ -518,7 +532,7 @@ class NestedTests(unittest.TestCase):
     def test_a_stopped_field_scan_still_zeroes_the_field(self):
         obj, motor, settings, events = self.harness()
         settings.update(nested=dict(angle=(26.,), temperature=(300.,)), scan_mode="Field")
-        obj._ppms_field_scan_worker = lambda *args: obj.ppms_field_scan_stop_event.set()
+        obj.runner.field_scan_worker = lambda *args, **kwargs: obj.state.scan_stop_event.set()
         self.run_worker(obj, motor, settings)
         self.assertIn(('zero',), events)
         self.assertEqual(events[-1], ('off',))
@@ -529,7 +543,10 @@ class NestedTests(unittest.TestCase):
         obj, motor, settings, events = self.harness()
         settings.update(scan_mode="Angle")
         fresh = []
-        obj._ppms_field_scan_worker = lambda *args: fresh.append(obj.__dict__.pop("ppms_source_fresh", False))
+        def capture_fresh(*_args, **_kwargs):
+            fresh.append(obj.state.source_fresh)
+            obj.state.source_fresh = False
+        obj.runner.field_scan_worker = capture_fresh
         self.run_worker(obj, motor, settings)
         self.assertEqual(fresh[0], True)
         self.assertFalse(any(fresh[1:]), fresh)

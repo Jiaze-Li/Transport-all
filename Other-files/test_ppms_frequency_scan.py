@@ -555,9 +555,12 @@ def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"),
     estimates = []
     format_duration = page._format_scan_duration
     page._format_scan_duration = lambda seconds: estimates.append(seconds) or format_duration(seconds)
+    import transport.ppms.ui.dialogs as dialogs_mod
+
     with tempfile.TemporaryDirectory() as folder, \
-            mock.patch.object(panel_mod.simpledialog, "askstring", return_value=""), \
-            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True) as ask, \
+            mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""), \
+            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True), \
+            mock.patch.object(panel_mod, "ask_scan_start", return_value=True) as ask, \
             mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
             mock.patch.object(panel_mod.messagebox, "showerror") as error:
         page.start_ppms_field_scan()
@@ -864,7 +867,16 @@ class SequenceTests(unittest.TestCase):
                 self.assertEqual(len(rig.rows()), 1)
                 rig.assert_switched_off()
                 with mock.patch.object(panel_mod.messagebox, "showerror") as dialog:
-                    rig.page._report_ppms_scan_finished("Frequency", True, caught.exception)
+                    rig.page.on_scan_finished(
+                        mode="Frequency",
+                        outcome="stopped",
+                        status="Stopped; 6221 zeroed",
+                        results=rig.page.state.scan_outputs,
+                        outputs_confirmed=True,
+                        field_note="",
+                        error=caught.exception,
+                        problems=[],
+                    )
                 dialog.assert_not_called()
                 self.assertEqual(rig.page.ppms_field_scan_status_var.get(), "Stopped; 6221 zeroed")
 
@@ -924,8 +936,17 @@ class SequenceTests(unittest.TestCase):
         first = dict(rig.settings, harmonic_pass=1)
         second = dict(rig.settings, harmonic_pass=2, harmonic_a=2, active_lockins=("830_a",))
         settings = dict(rig.settings, harmonic_passes=(first, second))
-        request = ScanRequest(sequence=[(1, 1, 1, 1234.0)], rate_oe_s=100.0, stable_s=0.0,
-                              approach_code=1, transport_settings=settings)
+        request = ScanRequest(
+            mode="Frequency",
+            sequence=[(1, 1, 1, 1234.0)],
+            rate_oe_s=100.0,
+            stable_s=0.0,
+            approach_code=1,
+            transport_settings=settings,
+            total_points=2,
+            estimated_seconds=1.0,
+            sr830_tc_code=10,
+        )
         with mock.patch.object(runner_mod.time, "monotonic", rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
                 mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):

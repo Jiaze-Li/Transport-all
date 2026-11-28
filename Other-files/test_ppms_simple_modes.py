@@ -217,14 +217,14 @@ class ModeTests(unittest.TestCase):
         # overwritten; blank: PPMS_<date>_<time>.
         for entered, expected in (("sampleA", "sampleA"), ("sampleA.csv", "sampleA")):
             obj, _, _ = self.launch("Angle", (0, 10, 5), filename=entered)
-            self.assertEqual(obj.ppms_run_folder.name, expected)
+            self.assertEqual(obj.state.run_folder.name, expected)
             self.assertEqual(obj.ppms_run_recorder.csv_path.name, f"{expected}.csv")
             self.assertEqual(obj.ppms_run_recorder.log_path.name, f"{expected}.log")
         obj, _, _ = self.launch("Angle", (0, 10, 5), filename="sampleA.csv", existing="sampleA")
-        self.assertEqual(obj.ppms_run_folder.name, "sampleA_01")
+        self.assertEqual(obj.state.run_folder.name, "sampleA_01")
         self.assertEqual(obj.ppms_run_recorder.csv_path.name, "sampleA_01.csv")
         obj, _, _ = self.launch("Angle", (0, 10, 5), filename=" ")
-        self.assertRegex(obj.ppms_run_folder.name, r"^PPMS_\d{8}_\d{6}$")
+        self.assertRegex(obj.state.run_folder.name, r"^PPMS_\d{8}_\d{6}$")
         self.launch("Angle", (0, 10, 5), filename=None)
 
     def test_temperature_field_launch(self):

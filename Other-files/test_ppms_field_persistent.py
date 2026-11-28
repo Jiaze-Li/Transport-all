@@ -230,7 +230,8 @@ class PersistentSetpointTests(unittest.TestCase):
         # hand-off is the last one before it.
         command = source.index("remote.set_field(field_target, rate, approach, 1)")
         hand_off = source.rindex('on_persistent_follow_up_ended("The field scan")', 0, command)
-        self.assertLess(source.index("PPMSMotorScanError(f\"{error}; field kept"), hand_off)
+        self.assertIn("field kept, not zeroed", source)
+        self.assertLess(source.index("PPMSMotorScanError("), hand_off)
         outer_command = source.index("remote.set_field(field, rate, approach, 1)")
         outer_hand_off = source.rindex('on_persistent_follow_up_ended("The field scan")', 0, outer_command)
         self.assertLess(source.index('"Scan stopped; the next field was not set"'), outer_hand_off,
@@ -290,7 +291,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
         panel.thread_log = lambda text: None
-        panel._ppms_zero_field_after_interrupted_scan(100., 1)
+        panel.runner._zero_field_after_interrupted_scan(100., 1, sink=panel)
         panel.state.ppms_environment_controller.set_field.assert_called_with(0., 100., 1, 1)
         self.assertEqual(panel.ppms_connection_var.get(),
                          "The scan clean-up now sets the field; Persistent no longer followed")

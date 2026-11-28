@@ -3516,10 +3516,11 @@ class PPMSPanelView:
                 return None
 
         resources = {}
+        resource_vars = getattr(self, "ppms_resource_vars", {})
         for key, controller in self.state.ppms_instrument_controllers.items():
             typed = (
-                box(self.ppms_resource_vars[key])
-                if key in self.ppms_resource_vars
+                box(resource_vars[key])
+                if key in resource_vars
                 else None
             )
             resources[key] = dict(
@@ -3531,7 +3532,7 @@ class PPMSPanelView:
         zurich = self.state.zurich_controller
         resources["zurich"] = dict(
             label="Zurich MFLI",
-            resource=str(box(self.zurich_resource) or ""),
+            resource=str(box(getattr(self, "zurich_resource", None)) or ""),
             connected=bool(getattr(zurich, "mfli_connected", False)),
             identity=str(getattr(zurich, "mfli_identity", "") or ""),
         )

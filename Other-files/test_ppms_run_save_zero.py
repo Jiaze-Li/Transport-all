@@ -356,12 +356,26 @@ class FieldScanEndTests(unittest.TestCase):
         self.assertEqual(str(caught.exception).count("field NOT zeroed"), 1, "the zero is tried once")
         # The finish keeps it on the status line, which ends at "; ".
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
+        obj.macro_runner = mock.Mock()
+        obj.ppms_field_scan_stop_button = mock.Mock()
+        obj.ppms_field_scan_save_button = mock.Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
         dialogs = []
         obj.shell.root = types.SimpleNamespace(after=lambda _ms, show: show())
         obj.root = obj.shell.root
         with mock.patch.object(panel_mod.messagebox, "showerror", side_effect=lambda *a, **k: dialogs.append(a)):
-            obj._report_ppms_scan_finished("Field", False, caught.exception)
+            obj.on_scan_finished(
+                mode="Field",
+                outcome="error",
+                status="Failed: Field set failed; field NOT zeroed: check MultiVu",
+                results=obj.state.scan_outputs,
+                outputs_confirmed=True,
+                field_note="field NOT zeroed: check MultiVu",
+                error=caught.exception,
+                problems=[],
+            )
         self.assertTrue(obj.ppms_field_scan_status_var.get().startswith("Failed: Field set failed"))
         self.assertTrue(obj.ppms_field_scan_status_var.get().endswith("; field NOT zeroed: check MultiVu"))
         self.assertIn("field NOT zeroed: check MultiVu", dialogs[0][1])
@@ -375,6 +389,11 @@ class FieldScanEndTests(unittest.TestCase):
         )
         obj.root = obj.shell.root
         obj.thread_log = obj.shell.thread_log
+        obj.macro_runner = mock.Mock()
+        obj.ppms_field_scan_stop_button = mock.Mock()
+        obj.ppms_field_scan_save_button = mock.Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
         obj.state.scan_outputs = {"6221": "zeroed"}
         for note, expected in (("", "Stopped; 6221 zeroed; field kept at its setpoint"),
@@ -383,11 +402,29 @@ class FieldScanEndTests(unittest.TestCase):
                                 "Stopped; 6221 zeroed; field NOT zeroed: check MultiVu")):
             with self.subTest(note=note):
                 obj.state.scan_field_note = note
-                obj._report_ppms_scan_finished("Field", True, None)
+                obj.on_scan_finished(
+                    mode="Field",
+                    outcome="stopped",
+                    status=expected,
+                    results=obj.state.scan_outputs,
+                    outputs_confirmed=True,
+                    field_note=note,
+                    error=None,
+                    problems=[],
+                )
                 self.assertEqual(obj.ppms_field_scan_status_var.get(), expected)
         obj.state.scan_field_note = ""
         obj.state.zero_persist_completed = True
-        obj._report_ppms_scan_finished("Field", False, None)
+        obj.on_scan_finished(
+            mode="Field",
+            outcome="completed",
+            status="Completed; 6221 zeroed; field zeroed and confirmed Persistent",
+            results=obj.state.scan_outputs,
+            outputs_confirmed=True,
+            field_note="",
+            error=None,
+            problems=[],
+        )
         self.assertEqual(obj.ppms_field_scan_status_var.get(),
                          "Completed; 6221 zeroed; field zeroed and confirmed Persistent")
 

@@ -445,7 +445,7 @@ class SequenceTests(unittest.TestCase):
     def test_the_files_and_log_events(self):
         page = AngleFieldPage(self).start()
         panel = page.panel
-        self.assertEqual(sorted(p.name for p in panel.ppms_run_folder.iterdir()), ["run1.csv", "run1.log"])
+        self.assertEqual(sorted(p.name for p in panel.state.run_folder.iterdir()), ["run1.csv", "run1.log"])
         # plot_snapshots: the end's picture of the plots, before the log is
         # closed (user, 2026-11-13); this page has no screen, so the entry
         # says why none was saved.
