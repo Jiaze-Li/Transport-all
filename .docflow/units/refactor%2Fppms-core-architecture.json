@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T07:40:14.431Z",
+  "updatedAt": "2026-11-28T07:44:34.026Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix PPMS UI layout, Zurich property decorators, and test module imports",
+    "current": "Align PPMS state/runner compatibility and remaining test imports",
     "next": "",
     "history": [
       {
@@ -30,6 +30,10 @@
       {
         "at": "2026-11-28T15:39:53+08:00",
         "text": "fix(ppms): fix SafeVisaIdentityController args in state and CI test imports"
+      },
+      {
+        "at": "2026-11-28T15:44:20+08:00",
+        "text": "Fix PPMS UI layout, Zurich property decorators, and test module imports"
       }
     ],
     "commits": [
@@ -68,6 +72,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T15:39:53+08:00",
         "message": "Fix PPMS UI layout, Zurich property decorators, and test module imports"
+      },
+      {
+        "sha": "bba39b4ef050f8cb6e90a69d6c47b5242e58f05b",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T15:44:20+08:00",
+        "message": "Align PPMS state/runner compatibility and remaining test imports"
       }
     ],
     "pr": {
