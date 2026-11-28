@@ -312,9 +312,9 @@ class TwoPanelTests(unittest.TestCase):
             for suffix in ('x_v', 'y_v', 'theta_deg'):
                 point[f'zurich_demod{demod}_{suffix}'] = demod
         panel.state.scan_rows = [point]
-        panel._draw_nonlocal_series = Mock()
-        panel._redraw_ppms_transport_plot()
-        drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
+        with patch.object(panel_mod, 'draw_nonlocal_series') as draw_fn:
+            panel._redraw_ppms_transport_plot()
+        drawn = [c for c in draw_fn.call_args_list if c.args[1]]
         values = [next(iter(c.args[1].values()))[0][1] for c in drawn]
         self.assertEqual(values, [1, 1, 1, 2, 2, 2, 3, 3, 3])
         panel.zurich_harmonic.set('1+2')
@@ -660,17 +660,17 @@ class TwoPanelTests(unittest.TestCase):
         panel.ppms_plot_angle_range = (0., 360.)
         panel.state.scan_rows = [dict(measured_angle_deg=30, temperature_index=1,
             zurich_x_v=1e-6, zurich_y_v=-2e-6, zurich_theta_deg=-63, zurich_r_v=2.2e-6)]
-        panel._draw_nonlocal_series = Mock()
-        panel._redraw_ppms_transport_plot()
-        drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
-        self.assertEqual(len(drawn), 3)
-        self.assertEqual(list(drawn[0].args[1].values()), [[(30., 1e-6)]])
-        # The angle axis spans the scan's angles (user, 2026-11-15).
-        self.assertEqual([c.kwargs['angle_x_range'] for c in drawn], [(0., 360.)] * 3)
-        panel.ppms_plot_axis = 'field'
-        panel._draw_nonlocal_series.reset_mock()
-        panel._redraw_ppms_transport_plot()
-        self.assertEqual({c.kwargs['angle_x_range'] for c in panel._draw_nonlocal_series.call_args_list}, {None})
+        with patch.object(panel_mod, 'draw_nonlocal_series') as draw_fn:
+            panel._redraw_ppms_transport_plot()
+            drawn = [c for c in draw_fn.call_args_list if c.args[1]]
+            self.assertEqual(len(drawn), 3)
+            self.assertEqual(list(drawn[0].args[1].values()), [[(30., 1e-6)]])
+            # The angle axis spans the scan's angles (user, 2026-11-15).
+            self.assertEqual([c.kwargs['angle_x_range'] for c in drawn], [(0., 360.)] * 3)
+            panel.ppms_plot_axis = 'field'
+            draw_fn.reset_mock()
+            panel._redraw_ppms_transport_plot()
+            self.assertEqual({c.kwargs['angle_x_range'] for c in draw_fn.call_args_list}, {None})
         panel.ppms_plot_axis = 'angle'
         panel.ppms_harmonic_plot_frames = {key: Mock() for key in panel.ppms_harmonic_plot_frames}
         panel._display_zurich_sample(dict(X=1, Y=2, R=3, phase_deg=4,

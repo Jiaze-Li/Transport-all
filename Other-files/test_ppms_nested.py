@@ -157,6 +157,15 @@ class NestedTests(unittest.TestCase):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
         obj.ppms_transport_canvas = object()
+        obj.ppms_harmonic_canvases = {(1, "x"): object(), (1, "y"): object()}
+        obj.ppms_lockin_selection = {
+            "830_a": types.SimpleNamespace(get=lambda: True),
+            "zurich": types.SimpleNamespace(get=lambda: False),
+        }
+        obj.ppms_transport_harmonic_a_var = types.SimpleNamespace(get=lambda: 1)
+        obj.state.ppms_instrument_controllers = {
+            "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")
+        }
         obj.ppms_plot_axis = 'angle'
         obj.state.active_scan_mode = 'Angle+Temperature'
         obj.ppms_plot_addresses = {'830_a': 8}

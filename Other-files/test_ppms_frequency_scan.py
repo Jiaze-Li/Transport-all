@@ -988,7 +988,12 @@ class PlotTests(unittest.TestCase):
     def test_frequency_mode_plots_against_frequency(self):
         rows = self.rows((7.0, 11.0, 13.0), (1.0,))
         page = self.panel_page(rows, "Frequency")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         args, _options = page.calls[0]
         series, x_label = args[1], args[2]
         self.assertEqual(x_label, "Frequency (Hz)")
@@ -998,7 +1003,12 @@ class PlotTests(unittest.TestCase):
     def test_frequency_current_plots_one_curve_per_frequency(self):
         rows = self.rows((7.0, 11.0, 13.0), (0.5, 1.0))
         page = self.panel_page(rows, "Frequency+Current")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         args, options = page.calls[0]
         series, x_label = args[1], args[2]
         self.assertEqual(x_label, "Applied AC current (mA RMS)")

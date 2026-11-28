@@ -36,7 +36,7 @@ class ModeTests(unittest.TestCase):
         for mode in ("Temperature", "Field", "Angle", "Current"):
             for error in (None, PPMSScanCancelled("stopped as requested while waiting for lock-in reference")):
                 with patch.object(panel_mod.messagebox, "showerror") as popup:
-                    obj._report_ppms_scan_finished(mode, True, error)
+                    obj.on_scan_finished(mode, True, error)
                     popup.assert_not_called()
                 self.assertEqual(later, [])
                 self.assertEqual(obj.ppms_field_scan_status_var.set.call_args.args[0],
@@ -55,7 +55,7 @@ class ModeTests(unittest.TestCase):
         obj.ppms_field_scan_eta_var = Mock()
         obj.state.scan_outputs = {"6221": "zeroed"}
         with patch.object(panel_mod.messagebox, "showerror") as popup:
-            obj._report_ppms_scan_finished("Current", True, OSError("CSV write failed"))
+            obj.on_scan_finished("Current", True, OSError("CSV write failed"))
             popup.assert_called_once_with("PPMS Current scan", "CSV write failed\n\nAt the end: 6221 zeroed",
                                           parent=obj.root)
         self.assertEqual(obj.ppms_field_scan_status_var.set.call_args.args[0], "Failed: CSV write failed")

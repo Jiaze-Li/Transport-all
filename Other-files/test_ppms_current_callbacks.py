@@ -527,7 +527,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj.root = types.SimpleNamespace(after=lambda _ms, show: show())
         obj.ppms_sources_off()
         self.assertTrue(obj.state.scan_stop_event.is_set())
-        worker = obj.ppms_executor.submit.call_args.args[0]
+        worker = obj.state.ppms_executor.submit.call_args.args[0]
         with patch.object(panel_mod.messagebox, "showerror") as popup:
             try:
                 result = worker()

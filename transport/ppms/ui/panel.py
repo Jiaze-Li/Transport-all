@@ -1510,6 +1510,13 @@ class PPMSPanelView:
                 if enabled and qd and self.ppms_motor_confirm_var.get()
                 else "disabled"
             )
+        for widget, idle_state in getattr(self, "ppms_lockin_choice_widgets", ()):
+            widget.configure(
+                state="disabled" if scanning or busy else idle_state
+            )
+        self._update_ppms_sr830_tc_state()
+        if hasattr(self, "zurich_connect_button"):
+            self._set_zurich_busy(self.state.zurich_busy)
 
     def _update_ppms_scan_target_widgets(self, enabled: bool) -> None:
         mode = self.ppms_simple_mode.get()
@@ -1525,13 +1532,6 @@ class PPMSPanelView:
                 widget.configure(state=widget_state)
         if enabled and mode == "Frequency" and hasattr(self, "ppms_scan_step_entry"):
             self.ppms_scan_step_entry.configure(state="disabled")
-        for widget, idle_state in getattr(self, "ppms_lockin_choice_widgets", ()):
-            widget.configure(
-                state="disabled" if scanning or busy else idle_state
-            )
-        self._update_ppms_sr830_tc_state()
-        if hasattr(self, "zurich_connect_button"):
-            self._set_zurich_busy(self.state.zurich_busy)
 
     def _require_ppms_control_ready(self) -> None:
         if not self.state.ppms_environment_controller.connected:
