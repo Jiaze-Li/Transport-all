@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait as wait_futures
 from typing import Callable
 
 from transport.core.scan_lifecycle import ScanCloseHandoff
@@ -27,6 +27,63 @@ PPMS_DEFAULT_RESOURCES = {
 }
 
 
+# How long the deferred close waits for other in-flight hardware tasks.
+PPMS_CLOSE_DRAIN_TIMEOUT_S = 30.0
+
+
+class TrackedExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor that can drain every task except the caller's own.
+
+    The deferred close runs on a worker of this executor, so it cannot
+    ``shutdown(wait=True)`` (that would join itself).  It cancels queued tasks
+    and waits for the other running ones instead.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._tracked_lock = threading.Lock()
+        self._tracked: dict = {}
+
+    def submit(self, fn, /, *args, **kwargs):
+        holder: dict = {}
+
+        def run():
+            holder["thread"] = threading.get_ident()
+            return fn(*args, **kwargs)
+
+        future = super().submit(run)
+        with self._tracked_lock:
+            self._tracked[future] = holder
+        future.add_done_callback(self._forget)
+        return future
+
+    def _forget(self, future) -> None:
+        with self._tracked_lock:
+            self._tracked.pop(future, None)
+
+    def drain_others(self, timeout: float) -> list[str]:
+        """Cancel queued tasks, wait for running ones; return problems."""
+        me = threading.get_ident()
+        with self._tracked_lock:
+            items = list(self._tracked.items())
+        pending = []
+        for future, holder in items:
+            if holder.get("thread") == me:
+                continue
+            if future.cancel():
+                continue
+            pending.append(future)
+        if not pending:
+            return []
+        _done, not_done = wait_futures(pending, timeout=timeout)
+        if not_done:
+            return [
+                f"{len(not_done)} in-flight hardware task(s) still running "
+                f"after {timeout:g} s; disconnecting anyway"
+            ]
+        return []
+
+
 class PPMSAppState:
     """Focused resource and lifecycle registry (not a god object).
 
@@ -39,7 +96,7 @@ class PPMSAppState:
         if logger is None:
             logger = lambda _msg: None
         self.logger = logger
-        self.ppms_executor = ThreadPoolExecutor(
+        self.ppms_executor = TrackedExecutor(
             max_workers=5, thread_name_prefix="ppms"
         )
         self.zurich_executor = ThreadPoolExecutor(
@@ -149,6 +206,12 @@ class PPMSAppState:
 
         def cleanup(after_worker: bool) -> None:
             errors: list[str] = []
+            if after_worker:
+                # Deferred close: the scan worker is one of several workers;
+                # let the others (reads, motor, macro, connects) finish first.
+                errors.extend(
+                    self.ppms_executor.drain_others(PPMS_CLOSE_DRAIN_TIMEOUT_S)
+                )
             if (
                 scan_was_running
                 and not after_worker
