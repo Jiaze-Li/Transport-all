@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T03:12:54.841Z",
+  "updatedAt": "2026-11-28T03:14:49.069Z",
   "task": {
     "id": "refactor/ppms-foundation-modularization",
     "branch": "refactor/ppms-foundation-modularization",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-foundation-modularization",
     "started": "2026-11-28T10:59:05+08:00",
     "status": "In progress",
-    "current": "fix(ppms): restore MFLI server/numpy bindings and align test patch targets with split modules",
+    "current": "fix(tests): align remaining lease and validation patch targets with split modules",
     "next": "Review Draft PR #5 (Batch 1 foundation modularization) and authorize Ready for review",
     "history": [
       {
@@ -18,6 +18,10 @@
       {
         "at": "2026-11-28T11:12:29+08:00",
         "text": "refactor(ppms): enforce standalone source authority and extract controllers and scan planning"
+      },
+      {
+        "at": "2026-11-28T11:14:37+08:00",
+        "text": "fix(ppms): restore MFLI server/numpy bindings and align test patch targets with split modules"
       }
     ],
     "commits": [
@@ -38,6 +42,12 @@
         "branch": "refactor/ppms-foundation-modularization",
         "timestamp": "2026-11-28T11:12:29+08:00",
         "message": "fix(ppms): restore MFLI server/numpy bindings and align test patch targets with split modules"
+      },
+      {
+        "sha": "82296c9a77a0fe440eff715494f2e77ea6334da7",
+        "branch": "refactor/ppms-foundation-modularization",
+        "timestamp": "2026-11-28T11:14:37+08:00",
+        "message": "fix(tests): align remaining lease and validation patch targets with split modules"
       }
     ],
     "pr": {
