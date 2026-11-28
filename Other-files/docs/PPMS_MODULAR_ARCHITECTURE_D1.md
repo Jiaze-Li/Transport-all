@@ -316,12 +316,23 @@ Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **B
 
 ## 8. D2 implementation record — Batch 2 (PR #6)
 
-Baseline: `Transport-PPMS@96361394f55d5632ce00a97afde33f527a9996e7` (PR #5 merged). Status: **Implementation pending**.
+Baseline: `Transport-PPMS@96361394f55d5632ce00a97afde33f527a9996e7` (PR #5 merged). Status: **In progress**.
 
 Scope: remaining M2, M3, and residual M4 under the approved two-batch plan (§5). Complete the independent PPMS architecture, without changing established measurement behavior or introducing unnecessary abstractions.
 
-Record the actual dependency checkpoints and final evidence in this section:
-- Composition root, explicit resource/lifecycle ownership, engine/UI contracts, and remaining Motor/Macro separation.
-- Safety and finalization guarantees, including queued scans, active Macro scans, PR #3's Zurich handoff, and data persistence independent of the Tk window.
-- Removed obsolete code, tests, extraction tools, and compatibility aliases; evidence for retention/removal, and any exceptional remaining dependency.
-- Test migration, focused regressions, dependency checks, final HEAD and GitHub Actions results (including Windows EXE before merge, no release from PR branches), limitations and unresolved issues.
+### Dependency-Based Implementation Order
+1. **Remaining M2 (Zero-Tk Engine Modules under `transport/ppms/engine/`):**
+   - `engine/motor.py`: `PPMSMotorDebug`, `PPMSMotorService`, `PPMSMotorScanError`, `PPMSScanCancelled`.
+   - `engine/macro.py`: `MacroRunner` and `MacroEventSink` (independent `macro_stop_event` vs. `scan_stop_event`, zero Tk).
+   - `engine/runner.py`: `ScanRequest`, `ScanEventSink`, `PPMSScanRunner` (all 10 scan modes, harmonics, SR830/Zurich acquisition & autorange, 6221 output-off readback, interrupted field zeroing, Tk-independent `recorder.close()` and `ScanCloseHandoff`).
+2. **M3 (Single Authoritative Ownership & UI/Shell Composition):**
+   - `state.py`: `PPMSAppState` (single owner of `ppms_executor`, `zurich_executor`, stop events, `ScanCloseHandoff`, `closed`, controllers, and live shared scan/readback state).
+   - `ui/theme.py`, `ui/dialogs.py`, `ui/panel.py` (`PPMSPanelView`): Tk widgets, `StringVar`s, plot canvases, polling timers, Macro/Motor UI.
+   - `app_shell.py` (`AppShell`, `UiDispatcher`): Composition root, Tk root, Notebook `[PPMS, Log]`, `drain_ui_queue`, `request_close`.
+   - `app.py`: Thin entry/composition facade (`APP_VERSION`, `MAIN_WINDOW_TITLE`, `AppShell`, `main`, `run`).
+3. **M4 (Legacy Cleanup, Alias Removal, Tooling Retirement):**
+   - Remove `STFMRSR830Controller` and `NonLocalACController` aliases; rename class to `ZurichMFLIController` and prune unused Non-local 6221/2182A/SR830 methods/constants after caller verification.
+   - Retire frozen `tools/extract_app.py`, `tools/ppms_host.py`, `tools/ppms_package_glue.py`; update `pyproject.toml`, `package_self_test.py`, and `ppms_checks.py`.
+4. **Verification & Final Record:**
+   - Migrate test entrypoints/patch targets, prune obsolete dedicated Non-local tests, add deterministic regressions (single ownership, Tk-independent finalization, Macro/scan stop, close/completion races, AST dependency direction).
+   - Run full suites, layout/screenshot, wheel build/install, and Windows EXE workflow (release skipped) on GitHub Actions CI.

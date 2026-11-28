@@ -1,0 +1,217 @@
+"""Single authoritative resource and lifecycle owner for the PPMS application."""
+
+from __future__ import annotations
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable
+
+from transport.core.scan_lifecycle import ScanCloseHandoff
+from transport.ppms.controllers.environment import PPMSRemoteReadbackController
+from transport.ppms.controllers.sr830 import SR830Controller
+from transport.ppms.controllers.visa import SafeVisaIdentityController
+from transport.ppms.controllers.zurich import ZurichMFLIController
+from transport.ppms.engine.planning import (
+    PPMS_FIELD_COMMANDING_MODES,
+    PPMS_SR830_KEYS,
+    PPMS_SR830_LABELS,
+)
+from transport.ppms.protocol import validate_ppms_field_command
+
+PPMS_DEFAULT_RESOURCES = {
+    "6221": "GPIB0::30::INSTR",
+    "830_a": "GPIB0::8::INSTR",
+    "830_b": "GPIB0::9::INSTR",
+    "830_c": "GPIB0::10::INSTR",
+    "2400": "GPIB0::24::INSTR",
+}
+
+
+class PPMSAppState:
+    """Focused resource and lifecycle registry (not a god object).
+
+    Owns the single authoritative executors, stop events, ScanCloseHandoff,
+    instrument controllers, environment controller, Zurich controller, and
+    thread-safe live shared state.
+    """
+
+    def __init__(self, logger: Callable[[str], None]) -> None:
+        self.logger = logger
+        self.ppms_executor = ThreadPoolExecutor(
+            max_workers=5, thread_name_prefix="ppms"
+        )
+        self.zurich_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="ppms-zurich"
+        )
+        self.scan_stop_event = threading.Event()
+        self.macro_stop_event = threading.Event()
+        self.close_handoff = ScanCloseHandoff()
+
+        self.closed = False
+        self.zurich_closed = False
+
+        self.ppms_instrument_controllers: dict[str, SafeVisaIdentityController] = {
+            "6221": SafeVisaIdentityController(
+                "Keithley 6221",
+                ("KEITHLEY", "6221"),
+                logger,
+                output_off_commands=("SOUR:WAVE:ABOR", "OUTP OFF"),
+                owner_scope="PPMS",
+            ),
+            "830_a": SR830Controller(
+                PPMS_SR830_LABELS["830_a"], ("STANFORD", "SR830"), logger
+            ),
+            "830_b": SR830Controller(
+                PPMS_SR830_LABELS["830_b"], ("STANFORD", "SR830"), logger
+            ),
+            "830_c": SR830Controller(
+                PPMS_SR830_LABELS["830_c"], ("STANFORD", "SR830"), logger
+            ),
+            "2400": SafeVisaIdentityController(
+                "Keithley 2400",
+                ("KEITHLEY", "2400"),
+                logger,
+                output_off_commands=(":OUTP OFF",),
+                owner_scope="PPMS",
+            ),
+        }
+        for key in PPMS_SR830_KEYS:
+            self.ppms_instrument_controllers[key].owner_scope = "PPMS"
+
+        self.ppms_environment_controller = PPMSRemoteReadbackController(logger)
+        self.zurich_controller = ZurichMFLIController(logger)
+
+        # Live shared state
+        self.last_readback: dict[str, object] | None = None
+        self.environment_busy = False
+        self.scan_running = False
+        self.active_scan_mode = ""
+        self.zurich_busy = False
+        self.zurich_reading = False
+        self.zurich_has_md = True
+        self.zurich_expected_frequency = 317.3
+        self.zurich_scan_enabled = False
+        self.zurich_scan_configured = False
+        self.zurich_scan_harmonic = "1+2+3"
+        self.zurich_scan_reference = "Trigger In 1"
+        self.zurich_scan_tau = 1.0
+
+        self.zero_persist_pending = False
+        self.zero_persist_completed = False
+        self.scan_preserve_on_stop = False
+        self.scan_field_zero_accepted = False
+        self.scan_outputs: dict[str, str] | None = None
+        self.scan_field_note = ""
+        self.scan_stop_button = ""
+        self.scan_context: dict[str, object] = {}
+        self.scan_rows: list[dict[str, object]] = []
+        self.scan_total = 0
+        self.scan_started_at = 0.0
+        self.scan_settle_logged: float | None = None
+        self.scan_sr830_tc_code = 10
+        self.source_fresh = False
+
+        self.run_recorder = None
+        self.run_folder = None
+        self.live_csv_path = None
+        self.live_csv_fields = None
+
+        self.idle_autorange_enabled = False
+        self.k6221_zero_output = False
+        self.zurich_autorange_pending = False
+        self.last_current_trip = False
+        self.sr830_range_states: dict[str, object] = {}
+        self.sr830_time_constant_codes: dict[str, int] = {}
+        self.idle_range_ready_at: dict[str, float] = {}
+        self.sr830_connecting: set[str] = set()
+        self.persistent_watch: dict[str, object] | None = None
+        self.sample_trace = None
+
+    def safe_close(
+        self,
+        *,
+        log_warning: Callable[[str], None] | None = None,
+        field_rate_fn: Callable[[], float] | None = None,
+        field_approach_fn: Callable[[], int] | None = None,
+    ) -> None:
+        """Close hardware and executors once, respecting PR #3 ScanCloseHandoff."""
+        if self.closed:
+            return
+        self.closed = True
+        self.zurich_closed = True
+        scan_was_running = self.scan_running
+        self.scan_stop_event.set()
+        self.macro_stop_event.set()
+
+        recorder = self.run_recorder
+        if recorder is not None:
+            try:
+                recorder.event("stop_requested", button="the program closing")
+            except Exception:
+                pass
+
+        self.zurich_executor.shutdown(wait=False, cancel_futures=True)
+
+        def cleanup(after_worker: bool) -> None:
+            errors: list[str] = []
+            if (
+                scan_was_running
+                and not after_worker
+                and self.active_scan_mode in PPMS_FIELD_COMMANDING_MODES
+                and not self.scan_field_zero_accepted
+                and self.ppms_environment_controller.connected
+            ):
+                try:
+                    rate = field_rate_fn() if field_rate_fn is not None else 100.0
+                    _target, rate = validate_ppms_field_command(0.0, rate)
+                    approach = (
+                        field_approach_fn() if field_approach_fn is not None else 0
+                    )
+                    self.ppms_environment_controller.set_field(
+                        0.0, rate, approach, 1
+                    )
+                except BaseException as error:
+                    errors.append(
+                        f"PPMS: zeroing the field before close failed: {error}"
+                    )
+
+            for controller in self.ppms_instrument_controllers.values():
+                try:
+                    controller.disconnect()
+                except BaseException as error:
+                    errors.append(str(error))
+
+            try:
+                self.ppms_environment_controller.disconnect()
+            except BaseException as error:
+                errors.append(str(error))
+
+            try:
+                self.zurich_executor.shutdown(wait=True, cancel_futures=True)
+            except BaseException as error:
+                errors.append(str(error))
+
+            try:
+                self.zurich_controller.disconnect_mfli()
+            except BaseException as error:
+                errors.append(str(error))
+
+            if log_warning is not None:
+                for error in errors:
+                    try:
+                        log_warning(f"PPMS safe-close warning: {error}")
+                    except BaseException:
+                        pass
+
+        deferred = scan_was_running and self.close_handoff.defer(
+            lambda: cleanup(True)
+        )
+        self.ppms_executor.shutdown(wait=False, cancel_futures=not deferred)
+        if not deferred:
+            cleanup(False)
+
+
+__all__ = [
+    "PPMSAppState",
+    "PPMS_DEFAULT_RESOURCES",
+]
