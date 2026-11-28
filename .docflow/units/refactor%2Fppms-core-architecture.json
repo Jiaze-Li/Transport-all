@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T07:44:35.559Z",
+  "updatedAt": "2026-11-28T08:14:03.509Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Align PPMS state/runner compatibility and remaining test imports",
+    "current": "Fix remaining PPMS test imports, mock targets, and UI width guard",
     "next": "",
     "history": [
       {
@@ -34,6 +34,10 @@
       {
         "at": "2026-11-28T15:44:20+08:00",
         "text": "Fix PPMS UI layout, Zurich property decorators, and test module imports"
+      },
+      {
+        "at": "2026-11-28T16:13:51+08:00",
+        "text": "Align PPMS state/runner compatibility and remaining test imports"
       }
     ],
     "commits": [
@@ -78,6 +82,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T15:44:20+08:00",
         "message": "Align PPMS state/runner compatibility and remaining test imports"
+      },
+      {
+        "sha": "25fbd1d53017bb94d3787f2a1a8b28a970eb240e",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T16:13:51+08:00",
+        "message": "Fix remaining PPMS test imports, mock targets, and UI width guard"
       }
     ],
     "pr": {
