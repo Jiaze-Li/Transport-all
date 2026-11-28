@@ -55,7 +55,7 @@ This D1 proposal establishes **clear module boundaries, single ownership, and de
 5. **Cross-Program Instrument Leases:** `SafeVisaIdentityController` and `ZurichMFLIController` acquire and release OS-level leases (`CreateFileMappingW` on Windows, `fcntl.flock` on POSIX) around device sessions.
 6. **Data & Snapshot Compatibility:** Run folder `<parent>/<stem>/` (with `_01` collision suffix), `<stem>.csv` columns/units, `<stem>.log` JSONL events (`run_prepared`, `scan_started`, `harmonic_pass`, `outputs_zeroed`, `plot_snapshots`, `run_finished`), and `run1_plots_snapshot.png` remain unchanged.
 7. **Window-Independent Finalization & Safety Cleanup:** Data persistence (`ScanRunRecorder.close()`, live CSV flush/fsync) and hardware safety cleanup (6221 output-off readback, interrupted field zeroing, `ScanCloseHandoff.end()`) **must never depend on the Tk window (`root`) still existing**. Normal scan completion may trigger UI-thread PNG snapshot capture (`save_scan_plot_snapshots`) while `root` is alive, but `recorder.close()` and hardware cleanup must always complete deterministically on the worker/handoff path when `closing=True` or `root` is destroyed, never relying on `post_ui` callbacks during shutdown.
-8. **Distinct Scan vs. Macro Cancellation Semantics:** Preserve separate `ppms_field_scan_stop_event` (`L5880`) and `ppms_macro_stop` (`L7288`, `L7387`) events. Stop Macro cancels remaining macro lines while keeping already-sent temperature/field targets; Stop Scan aborts the active scan, zeros 6221, and preserves the field. During `request_close()`, `closing = True` and both stop events are signaled.
+8. **Distinct Scan vs. Macro Cancellation Semantics:** Preserve separate `ppms_field_scan_stop_event` (`L5880`) and `ppms_macro_stop` (`L7288`, `L7387`) events. Stop Macro cancels remaining macro lines and invokes Stop Scan for an active scan, while keeping already-sent temperature/field targets; Stop Scan aborts the active scan, zeros 6221, and preserves the field. During `request_close()`, `closing = True` and both stop events are signaled.
 
 ---
 
@@ -144,7 +144,7 @@ Shared pure modules (UNCHANGED, zero Tk, zero app imports):
 | `zurich_executor` (1 worker) | `PPMSPanel` | `PPMSAppState` | Dedicated single worker for MFLI connect/configure/poll; drained in `cleanup()` |
 | `file_executor`, `executor` | `CombinedControlApp` | `AppShell` | Shut down in `request_close` after `safe_close_hardware()` |
 | `ppms_field_scan_stop_event` | Both `CombinedControlApp` and `PPMSPanel` | `PPMSAppState.scan_stop_event` | Single scan `threading.Event`; set by Stop Scan or `request_close` |
-| `ppms_macro_stop` | `CombinedControlApp` (`L7288`) | `PPMSAppState.macro_stop_event` | Separate macro `threading.Event`; stops remaining macro lines only |
+| `ppms_macro_stop` | `CombinedControlApp` (`L7288`) | `PPMSAppState.macro_stop_event` | Separate macro `threading.Event`; stops remaining macro lines, and Stop Macro also cancels an active scan through the scan stop mechanism |
 | `ppms_close_handoff_state` | `CombinedControlApp.__dict__` | `PPMSAppState.close_handoff` | `ScanCloseHandoff` coordinating worker `begin()`/`end()` with `defer(cleanup)` |
 | `ppms_instrument_controllers` (`6221`, `830_a/b/c`, `2400`) | Created twice | `PPMSAppState.instruments` | Each `SafeVisaIdentityController` owns its `threading.RLock`/lock & lease |
 | `zurich_controller` | `PPMSPanel` | `PPMSAppState.zurich` | `ZurichMFLIController` owns `lock` and `LABONE::<dev>` lease |
@@ -229,7 +229,7 @@ class PPMSScanRunner:
    `MacroRunner` executes queued macro steps on `ppms_executor`, invoking `PPMSScanRunner` / `PPMSMotorService` / `environment` sequentially while respecting `macro_stop_event` (stops remaining lines, keeps sent targets), `scan_stop_event` (when inside a scan), and `closing`.
 3. **Stop vs. Close:**
    - **Stop Scan button:** Sets `AppState.scan_stop_event` (`preserve_on_stop = True`); worker exits loop cleanly, zeros 6221 (read back), preserves field and saved CSV/log.
-   - **Stop Macro button:** Sets `AppState.macro_stop_event`; stops remaining macro commands while keeping already-sent temperature/field targets.
+   - **Stop Macro button:** Sets `AppState.macro_stop_event` and invokes the scan stop mechanism when a scan is running, preserving the existing `_stop_ppms_macro()` behavior; stops remaining macro commands while keeping already-sent temperature/field targets.
    - **Window Close (`request_close`):** Confirms with user → sets `AppShell.closing = True` and signals both `scan_stop_event` and `macro_stop_event` → spawns `ppms-safe-shutdown` daemon → `safe_close_ppms` cancels `ppms_poll_after_id` & `zurich_after_id`, shuts down `zurich_executor(wait=False, cancel_futures=True)`, and calls `close_handoff.defer(cleanup)`. If a scan is active/queued, `cleanup(after_worker=True)` runs at `close_handoff.end()` after the worker finishes output/field zeroing and `recorder.close()` (independent of `root`), then waits for `zurich_executor.shutdown(wait=True, cancel_futures=True)` and disconnects 6221/SR830/PPMS env/Zurich MFLI.
 
 ---
@@ -256,7 +256,18 @@ class PPMSScanRunner:
 
 ## 5. Migration Feasibility and Verification (`M0–M4` High-Level D2 Constraints)
 
-Exact batch/task breakdown belongs to **D2** after D1 sign-off. Each stage below is a separate PR verified by GitHub Actions CI:
+Exact task breakdown belongs to **D2** after D1 sign-off. M0–M4 are technical workstreams and dependency milestones, **not** mandatory separate or strictly sequential PRs. M0 establishes source authority before structural edits. Independent parts of M1 and M2 may be interleaved; M3 depends on the interfaces and contracts it consumes, not completion of every M1/M2 item. M4 cleanup is performed alongside the changes that make it safe, with a final check that nothing temporary remains.
+
+The user agreed to consolidate implementation into two independently reviewable and reversible PRs (numbers provisional):
+
+| Batch | Scope | Exit gate |
+| --- | --- | --- |
+| **PR #5 — Foundation modularization** | D2 task/dependency plan + M0 + M1 + independently extractable M2 logic (e.g. pure planning). Remove obsolete code/shims as soon as evidence permits. | Authoritative standalone source; stable controller/planning contracts; behavior-preserving extraction; GitHub Actions regression checks green. |
+| **PR #6 — Core architecture** | Remaining M2 + M3 + residual M4: measurement engine/UI separation, resource ownership, Macro/Motor orchestration as applicable, removal of remaining temporary aliases and obsolete extraction infrastructure. | D1 target boundaries and safety/data contracts verified; no lingering temporary compatibility layer; final CI and packaging gates green. |
+
+D2 should identify the actual dependency graph and divide changes into coherent commits within these batches. If evidence reveals an independently risky change that cannot be reviewed or reverted safely with its batch, propose a narrower PR with rationale for human approval rather than forcing consolidation or silently proliferating PRs. All formal tests run on GitHub Actions; no local Mac tests without explicit authorization.
+
+The following milestone table defines the technical scope, regardless of PR grouping:
 
 | Stage | Scope | Risk | Compatibility / Removal Rule |
 | --- | --- | --- | --- |
@@ -275,4 +286,4 @@ Exact batch/task breakdown belongs to **D2** after D1 sign-off. Each stage below
 
 ## 6. Decision Status
 
-Updated to reflect human feedback on **Q1–Q3**, the three design principles (`PPMSAppState` registry-not-god-object, separate scan vs. macro stop events, window-independent finalization/close handoff), and `M0–M4` staging. Pending final user sign-off on PR #4. No production-code, test, workflow, or generator changes are authorized by this document.
+Updated to reflect human feedback on **Q1–Q3**, the three design principles (`PPMSAppState` registry-not-god-object, separate scan vs. macro stop events, window-independent finalization/close handoff), and `M0–M4` technical milestones consolidated into two implementation PRs as agreed by the user. Pending final user sign-off on PR #4. No production-code, test, workflow, or generator changes are authorized by this document.
