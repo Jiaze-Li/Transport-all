@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:58:46.813Z",
+  "updatedAt": "2026-11-28T10:02:02.375Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix final test harness assertions and closed-state stop_reason",
+    "current": "Fix remaining 5 PPMS test modules and Angle+Field target widget lock",
     "next": "",
     "history": [
       {
@@ -94,6 +94,10 @@
       {
         "at": "2026-11-28T17:58:27+08:00",
         "text": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s"
+      },
+      {
+        "at": "2026-11-28T18:01:48+08:00",
+        "text": "Fix final test harness assertions and closed-state stop_reason"
       }
     ],
     "commits": [
@@ -228,6 +232,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:58:27+08:00",
         "message": "Fix final test harness assertions and closed-state stop_reason"
+      },
+      {
+        "sha": "51c624def40759a08538ef77d27b84a6b20f0d5b",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T18:01:48+08:00",
+        "message": "Fix remaining 5 PPMS test modules and Angle+Field target widget lock"
       }
     ],
     "pr": {
