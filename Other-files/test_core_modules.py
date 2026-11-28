@@ -15,8 +15,13 @@ from transport.ppms.ui.theme import APP_VERSION
 
 class CoreImportsTests(unittest.TestCase):
     def test_legacy_scan_helpers_are_shared(self):
-        self.assertIs(scan_sequences.build_round_trip_values, scan_sequences.build_round_trip_values)
-        self.assertIs(scan_sequences.ppms_scan_axis, scan_sequences.ppms_scan_axis)
+        # One implementation: every consumer module exposes the same object.
+        from transport.ppms.engine import planning
+        for name in ("build_round_trip_values", "ppms_scan_axis"):
+            with self.subTest(name=name):
+                self.assertTrue(callable(getattr(scan_sequences, name)))
+                if hasattr(planning, name):
+                    self.assertIs(getattr(planning, name), getattr(scan_sequences, name))
 
     def test_scan_planning_unchanged(self):
         self.assertEqual(scan_sequences.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))

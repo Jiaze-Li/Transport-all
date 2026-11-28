@@ -115,18 +115,30 @@ class PrefixResolverTests(unittest.TestCase):
         return made
 
     def test_resolver_matches_the_single_value_accessor(self):
+        """Independent expectation per meter, compared with the resolver output."""
+        addresses = {"830_a": 8, "830_b": 9, "830_c": 10}
         for mode in ("1", "2", "3", "1+2", "1+2+3"):
             panel = self.Panel(mode)
             for order in (1, 2, 3):
                 for meter in ("830_a", "830_b", "830_c", "zurich"):
                     resolve = panel._ppms2_prefix_resolver(meter, order)
                     for row in self.rows():
-                        for channel in ("x", "y", "theta"):
-                            prefix = resolve(row)
-                            suffix = "theta_deg" if channel == "theta" else f"{channel}_v"
+                        prefix = resolve(row)
+                        with self.subTest(mode=mode, order=order, meter=meter):
+                            if meter != "zurich":
+                                address = addresses[meter]
+                                expected = (f"sr830_{address}_"
+                                            if row[f"sr830_{address}_harmonic"] == order else None)
+                                self.assertEqual(prefix, expected)
+                                continue
+                            demod = next((d for d in (1, 2, 3, 4)
+                                          if row.get(f"zurich_demod{d}_harmonic") == order
+                                          and row.get(f"zurich_demod{d}_input") == "0"), None)
+                            if demod is not None:
+                                self.assertEqual(prefix, f"zurich_demod{demod}_")
                             if prefix is not None:
-                                val = row.get(prefix + suffix)
-                                self.assertTrue(val is None or isinstance(val, (int, float)))
+                                for suffix in ("x_v", "y_v", "theta_deg"):
+                                    self.assertIn(prefix + suffix, row)
 
 
 if __name__ == "__main__":

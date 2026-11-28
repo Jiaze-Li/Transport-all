@@ -31,10 +31,11 @@ class AcquisitionDefaultTests(unittest.TestCase):
     def test_the_defaults(self):
         self.assertEqual(PPMS_TEMPERATURE_ACQUISITION_S, 5.0)
         self.assertEqual(PPMS_ACQUISITION_S, 1.0)
-        self.assertEqual(
-            PPMS_TEMPERATURE_ACQUISITION_S if "Temperature" == "Temperature" else PPMS_ACQUISITION_S,
-            5.0,
-        )
+        panel = page()
+        for mode in ("Field", "Angle", "Current"):
+            with self.subTest(mode=mode):
+                panel._apply_ppms_mode_acquisition_default(mode)
+                self.assertEqual(panel.ppms_acquisition_time_var.get(), "1")
 
     def test_switching_modes_follows_the_defaults(self):
         panel = page()

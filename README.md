@@ -74,7 +74,7 @@ per instrument address; it goes when the holder disconnects, closes or dies).
 | Part | What it holds |
 |---|---|
 | [`Transport_PPMS.py`](Transport_PPMS.py) | The entry script: starts `transport.ppms.app.main`. |
-| [`transport/ppms/app.py`](transport/ppms/app.py) | The application shell, UI panel, and scan orchestration. |
+| [`transport/ppms/app_shell.py`](transport/ppms/app_shell.py), [`state.py`](transport/ppms/state.py), [`ui/`](transport/ppms/ui) | The application shell, the single-owner application state, and the UI panel/theme/dialogs (`app.py` is a thin facade). |
 | [`transport/ppms/protocol.py`](transport/ppms/protocol.py) | PPMS limits and the checks of field and temperature commands. |
 | [`transport/ppms/controllers`](transport/ppms/controllers) | Instrument controllers (VISA/lease, SR830, Zurich MFLI, QDInstrument, MultiPyVu, remote environment). |
 | [`transport/ppms/engine`](transport/ppms/engine) | Hardware- and Tk-independent scan planning, macro parsing, and validation helpers. |
@@ -85,8 +85,7 @@ per instrument address; it goes when the holder disconnects, closes or dies).
 
 The `Transport-PPMS` branch (`transport/ppms`, `transport/common`, `transport/core`)
 is the sole authoritative source for this application. Edit the package modules
-directly; `tools/extract_app.py` is frozen and must not be used to overwrite
-`transport/ppms/app.py`.
+directly; the former `tools/extract_app.py` generator has been retired.
 
 ## Tests
 

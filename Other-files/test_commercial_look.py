@@ -17,7 +17,9 @@ from transport.ppms.ui.dialogs import ConnectionOverview
 
 app.ConnectionOverview = ConnectionOverview
 
-PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app_shell.py"
+PPMS_DIR = Path(__file__).resolve().parents[1] / "transport" / "ppms"
+# The look lives in the UI package; app_shell.py only composes it.
+PROGRAM_FILES = [PPMS_DIR / "app_shell.py", *sorted((PPMS_DIR / "ui").glob("*.py"))]
 HEX = re.compile(r"#[0-9a-f]{6}")
 
 
@@ -106,7 +108,7 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual(app.THEME_COLORS["plot_background"], "#ffffff")
 
     def test_no_red_or_plot_colour_outside_the_palette(self):
-        source = PROGRAM.read_text(encoding="utf-8")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in PROGRAM_FILES)
         for old in ("#d70018", "#a80012", "#b8c0c8", "#a51c19"):
             self.assertNotIn(old, source)
 
@@ -134,14 +136,17 @@ class ButtonRoleTests(unittest.TestCase):
                 self.assertEqual(app.button_role(text), role)
 
     def test_every_start_and_stop_button_of_the_program_gets_its_role(self):
-        tree = ast.parse(PROGRAM.read_text(encoding="utf-8"))
         texts = set()
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "Button"
-                    and ast.unparse(node.func.value) == "ttk"):
-                for keyword in node.keywords:
-                    if keyword.arg == "text" and isinstance(keyword.value, ast.Constant):
-                        texts.add(keyword.value.value)
+        for path in PROGRAM_FILES:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "Button"
+                        and ast.unparse(node.func.value) == "ttk"):
+                    for keyword in node.keywords:
+                        if keyword.arg == "text" and isinstance(keyword.value, ast.Constant):
+                            texts.add(keyword.value.value)
+        self.assertTrue(any(t.lower().startswith("start") for t in texts), "scan must find the Start buttons")
+        self.assertTrue(any(t.lower().startswith("stop") for t in texts), "scan must find the Stop buttons")
         for text in texts:
             words = re.findall(r"[a-z0-9]+", text.lower())
             if "recording" in words:
