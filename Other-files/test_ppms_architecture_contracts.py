@@ -16,6 +16,7 @@ import transport.ppms.ui.panel as panel_mod
 from transport.ppms import app as app_facade
 from transport.ppms import app_shell
 from transport.ppms import controllers as controllers_pkg
+from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.engine.macro import MacroRunner
 from transport.ppms.engine.runner import PPMSScanRunner, ScanRequest
 from transport.ppms.state import PPMSAppState
@@ -325,7 +326,7 @@ class QueuedScanAndInflightShutdownTests(unittest.TestCase):
             ctrl.resource_name = f"GPIB0::{addresses[key]}::INSTR"
             ctrl.disconnect = lambda k=key: events.append(f"disconnect:{k}")
         state.ppms_environment_controller = types.SimpleNamespace(
-            backend="QDInstrument",
+            backend=PPMS_QDINSTRUMENT_BACKEND,
             connected=False,
             disconnect=lambda: events.append("disconnect:env"),
         )
