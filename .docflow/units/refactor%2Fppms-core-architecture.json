@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T07:29:59.135Z",
+  "updatedAt": "2026-11-28T07:34:40.225Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "test(ppms): migrate test suite and add architecture contract tests",
+    "current": "fix(ppms): fix SafeVisaIdentityController args in state and CI test imports",
     "next": "",
     "history": [
       {
@@ -22,6 +22,10 @@
       {
         "at": "2026-11-28T15:29:33+08:00",
         "text": "refactor(ppms): remove legacy aliases, non-local Zurich methods, and retired tools"
+      },
+      {
+        "at": "2026-11-28T15:34:28+08:00",
+        "text": "test(ppms): migrate test suite and add architecture contract tests"
       }
     ],
     "commits": [
@@ -48,6 +52,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T15:29:33+08:00",
         "message": "test(ppms): migrate test suite and add architecture contract tests"
+      },
+      {
+        "sha": "82858bef1f238e6729bc66edba45f74e28ed67bc",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T15:34:28+08:00",
+        "message": "fix(ppms): fix SafeVisaIdentityController args in state and CI test imports"
       }
     ],
     "pr": {
