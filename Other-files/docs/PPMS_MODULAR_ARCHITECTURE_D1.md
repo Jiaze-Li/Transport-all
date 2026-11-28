@@ -1,6 +1,6 @@
 # D1 — PPMS Modular Architecture Design
 
-Status: **Pending design proposal and human decisions** (Draft PR #4; no production code or behavior changes).
+Status: **Converged architecture proposal (Draft PR #4 — awaiting final user sign-off on updated D1 document; no production code or behavior changes)**.
 
 Baseline: `Transport-PPMS@56d0584493253468e29e9b1163bf92e89d244e84` (PR #3 merged). Reference backup: `main@56908d88feb69597499b1c270bcf9a0f88b26972`.
 
@@ -14,22 +14,22 @@ Evidence: [A1/A2 audit](PPMS_EXTRACTION_ARCHITECTURE_AUDIT.md), [T1 regression b
 
 This D1 proposal establishes **clear module boundaries, single ownership, and dependency direction** without changing PPMS measurement semantics, UI interactions, instrument commands, safety invariants, or output formats:
 
-1. **Recommended Source Authority (Decision Q1 — requires your approval):** Freeze `tools/extract_app.py` regeneration and make `transport/ppms/*` the **authoritative source** on `Transport-PPMS`, leaving `main@56908d88` as a read-only backup/reference and `tools/*` as historical extraction provenance (until retired after D2). Continuing AST regeneration from `main` blocks structural refactoring (as already seen in PR #3 needing a fragile literal `REPLACE` patch in `tools/ppms_host.py`).
-2. **Replace Dual Inheritance/Delegation with Explicit Composition:** Eliminate `PPMSPanel(CombinedControlApp)` inheritance, `__getattr__` attribute forwarding, and duplicate `_initialize_ppms_state()` calls. Introduce a single `PPMSAppState` / `PPMSSession` owner composed by the Tk shell (`AppShell`) and `PPMSPanel`.
+1. **Source Authority (Q1 — User-agreed direction):** Freeze `tools/extract_app.py` regeneration at the start of D2 and make the `Transport-PPMS` branch (`transport/ppms`, `transport/common`, `transport/core`) the **sole authoritative source** for PPMS. `main@56908d88` remains a read-only backup/reference, and extraction scripts are retired once no dependencies remain (Git history preserves provenance).
+2. **Replace Dual Inheritance/Delegation with Explicit Composition:** Eliminate `PPMSPanel(CombinedControlApp)` inheritance, `__getattr__` attribute forwarding, and duplicate `_initialize_ppms_state()` calls. Introduce a focused `PPMSAppState` resource/lifecycle owner (not a new god object) composed by `AppShell` and `PPMSPanelView`.
 3. **Separate Instrument Controllers, Measurement Engine, and Tk UI:**
-   - Move VISA/SCPI (`SafeVisaIdentityController`, `SR830Controller`), Zurich MFLI (`ZurichMFLIController` + LabOne/legacy adapters), QDInstrument/Remote environment controllers, and motor control out of `app.py` into `transport/ppms/controllers/` (and shared `transport/common/` where appropriate).
-   - Isolate scan planning, execution, acquisition, and recording behind explicit typed contracts (`ScanRequest`, `ScanEventSink`, `ScanController`) with **zero `tkinter` imports** in measurement or controller modules.
-4. **Preserve Concurrency and Safety Invariants:** Keep `ppms_executor` (5 workers) and `zurich_executor` (1 worker) semantics intact, protect hardware I/O with per-controller locks, preserve `ScanCloseHandoff` (including PR #3's `zurich_executor` drain + `disconnect_mfli` ordering), output-off readback, field zeroing, and CSV/JSONL/PNG snapshot compatibility.
+   - Move VISA/SCPI (`SafeVisaIdentityController`, `SR830Controller`), Zurich MFLI (`ZurichMFLIController` + LabOne/legacy adapters), QDInstrument/Remote environment controllers, and motor control out of `app.py` into `transport/ppms/controllers/`.
+   - Isolate scan planning, execution, acquisition, Macro, and recording behind explicit typed contracts (`ScanRequest`, `ScanEventSink`, `PPMSScanRunner`, `MacroRunner`) with **zero `tkinter` imports** in measurement or controller modules.
+4. **Preserve Concurrency, Cancellation, and Window-Independent Safety Invariants:** Keep `ppms_executor` (5 workers) and `zurich_executor` (1 worker) semantics intact, preserve distinct `ppms_field_scan_stop_event` vs `ppms_macro_stop` cancellation semantics, and ensure data saving (`recorder.close()`) and safety cleanup never depend on the Tk window (`root`) still existing.
 
-### Decisions Requiring Your Approval vs. Delegated Engineering Details
+### Decisions Status (Q1–Q3) vs. Delegated Engineering Details
 
-| Category | Item | Owner |
+| Category | Item | Status / Owner |
 | --- | --- | --- |
-| **Needs human decision (Q1)** | **Source authority:** Make `transport/ppms/*` authoritative on `Transport-PPMS` vs. keep `tools/extract_app.py` regeneration from `main` | **User** |
-| **Needs human decision (Q2)** | **Legacy `NonLocalACController` dead-method policy:** Deprecate/remove the 27 unreferenced non-PPMS methods during D2 after test verification vs. quarantine/keep in a legacy shim | **User** |
-| **Needs human decision (Q3)** | **D2 test-harness compatibility:** Keep `CombinedControlApp` / `PPMSPanel` attribute compatibility shims during D2 vs. allow updating internal-only test hooks as modules split | **User** |
+| **Q1: Source authority** | `Transport-PPMS` (`transport/ppms`, `transport/common`, `transport/core`) becomes sole authoritative source; stop `tools/extract_app.py` at D2 start and retire once unused | **Agreed Option A (User)** |
+| **Q2: Legacy cleanup** | Remove Non-local legacy code based on **whether it fulfills an actual PPMS responsibility** (not method/line-count targets); unused features + dedicated historical tests may be removed together after dependency check | **Agreed Refined Option A (User)** |
+| **Q3: Test compatibility shims** | Temporary re-exports/aliases allowed only for mechanical extraction; migrate test entrypoints synchronously when responsibilities change without weakening behavioral assertions; every shim requires an explicit removal condition in M4 | **Modified Option A (User)** |
 | **Engineering details (D2)** | Exact file names under `transport/ppms/`, dataclass field names, internal helper decomposition, adapter signatures | AI (within D1 contracts) |
-| **Established facts (Audit/Source)** | 10 scan modes, PR #3 `ScanCloseHandoff` fix, `PPMSPanel` dual init, `NonLocalACController` caller counts, 51-module CI baseline | Verified from source |
+| **Established facts (Audit/Source)** | 10 scan modes, PR #3 `ScanCloseHandoff` fix, `PPMSPanel` dual init, `ppms_macro_stop` vs `ppms_field_scan_stop_event`, 51-module CI baseline | Verified from source |
 
 ---
 
@@ -54,6 +54,8 @@ This D1 proposal establishes **clear module boundaries, single ownership, and de
 4. **PR #3 `ScanCloseHandoff` Contract:** `PPMSPanel.safe_close_ppms` sets `zurich_closed = True`, cancels `zurich_after_id`, shuts down `zurich_executor(wait=False, cancel_futures=True)`, and delegates to `ScanCloseHandoff`. `cleanup(after_worker)` waits for `zurich_executor.shutdown(wait=True, cancel_futures=True)` and disconnects `zurich_controller.disconnect_mfli()` **only after** `ScanCloseHandoff.end()` when a scan is active or queued (`L10151–10193`, `L10906–10917`).
 5. **Cross-Program Instrument Leases:** `SafeVisaIdentityController` and `ZurichMFLIController` acquire and release OS-level leases (`CreateFileMappingW` on Windows, `fcntl.flock` on POSIX) around device sessions.
 6. **Data & Snapshot Compatibility:** Run folder `<parent>/<stem>/` (with `_01` collision suffix), `<stem>.csv` columns/units, `<stem>.log` JSONL events (`run_prepared`, `scan_started`, `harmonic_pass`, `outputs_zeroed`, `plot_snapshots`, `run_finished`), and `run1_plots_snapshot.png` remain unchanged.
+7. **Window-Independent Finalization & Safety Cleanup:** Data persistence (`ScanRunRecorder.close()`, live CSV flush/fsync) and hardware safety cleanup (6221 output-off readback, interrupted field zeroing, `ScanCloseHandoff.end()`) **must never depend on the Tk window (`root`) still existing**. Normal scan completion may trigger UI-thread PNG snapshot capture (`save_scan_plot_snapshots`) while `root` is alive, but `recorder.close()` and hardware cleanup must always complete deterministically on the worker/handoff path when `closing=True` or `root` is destroyed, never relying on `post_ui` callbacks during shutdown.
+8. **Distinct Scan vs. Macro Cancellation Semantics:** Preserve separate `ppms_field_scan_stop_event` (`L5880`) and `ppms_macro_stop` (`L7288`, `L7387`) events. Stop Macro cancels remaining macro lines while keeping already-sent temperature/field targets; Stop Scan aborts the active scan, zeros 6221, and preserves the field. During `request_close()`, `closing = True` and both stop events are signaled.
 
 ---
 
@@ -141,7 +143,8 @@ Shared pure modules (UNCHANGED, zero Tk, zero app imports):
 | `ppms_executor` (5 workers) | Created twice (`_initialize_ppms_state`) | `PPMSAppState` | Shared pool for scans, env polling, motor, connect; hardware safety via per-controller locks |
 | `zurich_executor` (1 worker) | `PPMSPanel` | `PPMSAppState` | Dedicated single worker for MFLI connect/configure/poll; drained in `cleanup()` |
 | `file_executor`, `executor` | `CombinedControlApp` | `AppShell` | Shut down in `request_close` after `safe_close_hardware()` |
-| `ppms_field_scan_stop_event` | Both `CombinedControlApp` and `PPMSPanel` | `PPMSAppState` | Single `threading.Event`; set by Stop button or `request_close` |
+| `ppms_field_scan_stop_event` | Both `CombinedControlApp` and `PPMSPanel` | `PPMSAppState.scan_stop_event` | Single scan `threading.Event`; set by Stop Scan or `request_close` |
+| `ppms_macro_stop` | `CombinedControlApp` (`L7288`) | `PPMSAppState.macro_stop_event` | Separate macro `threading.Event`; stops remaining macro lines only |
 | `ppms_close_handoff_state` | `CombinedControlApp.__dict__` | `PPMSAppState.close_handoff` | `ScanCloseHandoff` coordinating worker `begin()`/`end()` with `defer(cleanup)` |
 | `ppms_instrument_controllers` (`6221`, `830_a/b/c`, `2400`) | Created twice | `PPMSAppState.instruments` | Each `SafeVisaIdentityController` owns its `threading.RLock`/lock & lease |
 | `zurich_controller` | `PPMSPanel` | `PPMSAppState.zurich` | `ZurichMFLIController` owns `lock` and `LABONE::<dev>` lease |
@@ -150,7 +153,9 @@ Shared pure modules (UNCHANGED, zero Tk, zero app imports):
 | `closing` flag | `CombinedControlApp` | `AppShell` + `PPMSAppState.closed` | Read-only check passed to workers/UI callbacks |
 | Tk `StringVar`s, widgets, `after` IDs | `CombinedControlApp` + `PPMSPanel` | `PPMSPanelView` (`ui/panel.py`) | Mutated **only** on Tk main thread |
 
-> **Explicit note on concurrency:** Having `PPMSAppState` as the single state/lifecycle owner does **not** mean collapsing `ppms_executor` (5 workers) and `zurich_executor` (1 worker) into a single worker. Live PPMS polling, motor commands, and Zurich polling continue to run concurrently with each other, synchronized by per-controller locks and `ScanCloseHandoff`.
+> **Explicit notes on ownership and concurrency:**
+> 1. **Registry, not a god object:** `PPMSAppState` is a focused resource/lifecycle registry (executors, controllers, `ScanCloseHandoff`, `scan_stop_event`, `macro_stop_event`, `closed`), **not** a container for scan algorithms, UI state, or hardware protocols. Business logic stays in `PPMSScanRunner`, `MacroRunner`, `PPMSMotorService`, and the individual controllers.
+> 2. **Concurrency preserved:** Having `PPMSAppState` as the single lifecycle owner does **not** collapse `ppms_executor` (5 workers) and `zurich_executor` (1 worker) into a single worker. Live PPMS polling, motor commands, and Zurich polling continue to run concurrently, synchronized by per-controller locks and `ScanCloseHandoff`.
 
 ### 3.3 Instrument-Control Boundary & Legacy Classification
 
@@ -219,55 +224,47 @@ class PPMSScanRunner:
 
 #### Representative End-to-End Flows
 1. **Field / Nested Scan + Harmonics:**
-   `PPMSPanelView` reads `StringVar`s → `planning.build_scan_request(...)` validates via `protocol.py` & `validation.py` → `AppState.ppms_executor.submit(runner.run, request, sink)` inside `close_handoff.begin()` → `runner` iterates `harmonic_passes` (`common/harmonics.py`), executes nested temperature/angle/field/frequency loops, acquires via `SafeVisaIdentityController` / `SR830Controller` / `ZurichMFLIController` locks, writes durable CSV + JSONL via `ScanRunRecorder`, and pushes `ScanEventSink` callbacks to `UiDispatcher` → `finally`: `_zero_6221_with_readback()`, optional `zero_persist` wrap-up, `save_scan_plot_snapshots` (on UI thread before `run_finished`), `recorder.close()`, `close_handoff.end()`.
+   `PPMSPanelView` reads `StringVar`s → `planning.build_scan_request(...)` validates via `protocol.py` & `validation.py` → `AppState.ppms_executor.submit(runner.run, request, sink)` inside `close_handoff.begin()` → `runner` iterates `harmonic_passes` (`common/harmonics.py`), executes nested temperature/angle/field/frequency loops, acquires via `SafeVisaIdentityController` / `SR830Controller` / `ZurichMFLIController` locks, writes durable CSV + JSONL via `ScanRunRecorder`, and pushes `ScanEventSink` callbacks to `UiDispatcher` → `finally`: `_zero_6221_with_readback()`, optional `zero_persist` wrap-up, UI-thread `save_scan_plot_snapshots` (when `root` is alive) + deterministic `recorder.close()` (never relying on `post_ui` during shutdown), `close_handoff.end()`.
 2. **Macro:**
-   `MacroRunner` executes queued macro steps on `ppms_executor`, invoking `PPMSScanRunner` / `PPMSMotorService` / `environment` sequentially while respecting `stop_event` and `closing`.
+   `MacroRunner` executes queued macro steps on `ppms_executor`, invoking `PPMSScanRunner` / `PPMSMotorService` / `environment` sequentially while respecting `macro_stop_event` (stops remaining lines, keeps sent targets), `scan_stop_event` (when inside a scan), and `closing`.
 3. **Stop vs. Close:**
-   - **Stop button:** Sets `AppState.stop_event` (`preserve_on_stop = True`); worker exits loop cleanly, zeros 6221 (read back), preserves field and saved CSV/log.
-   - **Window Close (`request_close`):** Confirms with user → sets `AppShell.closing = True` and `AppState.stop_event` → spawns `ppms-safe-shutdown` daemon → `safe_close_ppms` cancels `ppms_poll_after_id` & `zurich_after_id`, shuts down `zurich_executor(wait=False, cancel_futures=True)`, and calls `close_handoff.defer(cleanup)`. If a scan is active/queued, `cleanup(after_worker=True)` runs at `close_handoff.end()` after worker finishes output/field zeroing and `recorder.close()`, then waits for `zurich_executor.shutdown(wait=True, cancel_futures=True)` and disconnects 6221/SR830/PPMS env/Zurich MFLI.
+   - **Stop Scan button:** Sets `AppState.scan_stop_event` (`preserve_on_stop = True`); worker exits loop cleanly, zeros 6221 (read back), preserves field and saved CSV/log.
+   - **Stop Macro button:** Sets `AppState.macro_stop_event`; stops remaining macro commands while keeping already-sent temperature/field targets.
+   - **Window Close (`request_close`):** Confirms with user → sets `AppShell.closing = True` and signals both `scan_stop_event` and `macro_stop_event` → spawns `ppms-safe-shutdown` daemon → `safe_close_ppms` cancels `ppms_poll_after_id` & `zurich_after_id`, shuts down `zurich_executor(wait=False, cancel_futures=True)`, and calls `close_handoff.defer(cleanup)`. If a scan is active/queued, `cleanup(after_worker=True)` runs at `close_handoff.end()` after the worker finishes output/field zeroing and `recorder.close()` (independent of `root`), then waits for `zurich_executor.shutdown(wait=True, cancel_futures=True)` and disconnects 6221/SR830/PPMS env/Zurich MFLI.
 
 ---
 
 ## 4. Decisions Requiring Human Approval
 
-### Decision Q1: Source Authority and Extraction Lifecycle (Blocking for D2)
+### Decision Q1: Source Authority and Extraction Lifecycle (Agreed Direction — Option A)
 - **Context:** `transport/ppms/app.py` is currently generated by `tools/extract_app.py` from `main:Transport_all.py` (which is not on `Transport-PPMS`). PR #3 already required a literal `REPLACE` patch in `tools/ppms_host.py`.
-- **Option A (Recommended):** Declare `transport/ppms/*` as the **authoritative source** on `Transport-PPMS`. Freeze `tools/extract_app.py` regeneration immediately; keep `main@56908d88` as historical backup/reference; keep `tools/extract_app.py`, `ppms_host.py`, `ppms_package_glue.py` as provenance during D2 and retire/archive them after D2 completes.
-  - *Pros:* Unblocks clean module extraction, composition, and controller separation without fighting AST reachability or `REPLACE` patches.
-  - *Cons:* One-way divergence from `main:Transport_all.py` (already intended by `main@56908d8` backup status). Other standalone branches (`Transport-FMR`, `Transport-MOKE`, `Transport-RT`) are unaffected unless they independently choose the same route.
-- **Option B:** Keep `tools/extract_app.py` regeneration active against `main`.
-  - *Pros:* Preserves mechanical re-extraction from `Transport_all.py`.
-  - *Cons:* Prohibits splitting `app.py`, fixing `PPMSPanel(CombinedControlApp)` dual init cleanly, or refactoring `NonLocalACController` without duplicating every change in `main` or `REPLACE` blocks.
+- **Agreed Route (Option A):** Declare the `Transport-PPMS` branch (`transport/ppms`, `transport/common`, `transport/core`) as the **sole authoritative source** for PPMS. Stop using `tools/extract_app.py` at the start of D2, and retire the extraction scripts once no dependencies remain (Git history preserves provenance). `main@56908d88` remains a read-only backup/reference, and other standalone branches (`Transport-FMR`, `Transport-MOKE`, `Transport-RT`) are unaffected.
+- **Alternative Rejected (Option B):** Continuing `tools/extract_app.py` regeneration from `main` blocks splitting `app.py` and fixing dual initialization cleanly.
 - **Rollback:** `Transport-PPMS@56d0584` and `main@56908d8` remain untouched in git history.
 
-### Decision Q2: Treatment of 27 Unreferenced Methods in `NonLocalACController`
-- **Option A (Recommended):** During D2, extract `ZurichMFLIController` with the 16 app-called + 19 test/internal-verified methods, and remove the remaining 27 non-PPMS methods (2182A nanovoltmeter, non-local 6221/SR830) **only after** static call-graph + full CI test verification confirms zero dynamic/test callers.
-- **Option B:** Retain all 63 methods in a legacy module (`_legacy_nonlocal_ac.py`) indefinitely.
-  - *Trade-off:* Option A removes dead non-PPMS code cleanly; Option B has zero deletion risk but keeps ~1,000 lines of unused Non-local code.
+### Decision Q2: Cleaning Up Non-Local Legacy Code (Agreed Direction — Refined Option A)
+- **Agreed Route (Refined Option A):** Judge retention/removal by **whether the code fulfills an actual PPMS program responsibility**, rather than targeting a fixed method or line count. During D2, extract `ZurichMFLIController` for PPMS's MFLI responsibilities; where legacy methods (e.g., Non-local 2182A nanovoltmeter or non-PPMS 6221/SR830 helpers) have no PPMS runtime responsibility and are exercised only by historical non-PPMS tests, remove both the unused production code and its dedicated historical tests together after dependency verification.
+- **Alternative Rejected (Option B):** Keeping unused Non-local code indefinitely in a legacy module merely to preserve historical tests.
 
-### Decision Q3: D2 Compatibility Shims for Existing Tests
-- **Option A (Recommended):** Keep thin re-exports/attributes on `CombinedControlApp` and `PPMSPanel` (and `STFMRSR830Controller = SR830Controller`) during intermediate D2 PRs so the 51 existing test modules continue passing unmodified; update internal-only test monkeypatches only in the final cleanup PR if needed.
-- **Option B:** Rewrite test imports/monkeypatches alongside every module extraction.
-  - *Trade-off:* Option A preserves stronger regression confidence across each intermediate PR.
+### Decision Q3: Compatibility Shims During D2 (Agreed Direction — Modified Option A)
+- **Agreed Route (Modified Option A):** Protect **measurement behavior and safety contracts**, not old internal class structure (`CombinedControlApp` attributes or `__getattr__` forwarding):
+  - Temporary re-exports/aliases (e.g., `STFMRSR830Controller = SR830Controller`) are permitted **only** during mechanical extraction stages.
+  - When object responsibilities change (e.g., M3 state/engine separation), migrate test entrypoints synchronously without weakening behavioral assertions.
+  - Every compatibility shim must declare an explicit removal condition (retired in M4) and must never become permanent architecture.
 
 ---
 
-## 5. Migration Feasibility and Verification (High-Level D2 Constraints)
+## 5. Migration Feasibility and Verification (`M0–M4` High-Level D2 Constraints)
 
-Exact batch/task breakdown belongs to **D2** after D1 approval. High-level dependency order and intermediate safe states:
+Exact batch/task breakdown belongs to **D2** after D1 sign-off. Each stage below is a separate PR verified by GitHub Actions CI:
 
-1. **Gate 0 (Prerequisite):** Human approval of D1 decisions (especially Q1 Source Authority). PR #3 (A2-3) is already merged.
-2. **Stage 1 — Mechanical Controller Extraction (Behavior-Preserving):**
-   - Extract `SafeVisaIdentityController`, `SR830Controller` (with `STFMRSR830Controller` alias), `PPMSQDInstrumentReadbackController`, `PPMSRemoteReadbackController`, and `ZurichMFLIController` (+ LabOne/legacy adapters) into `transport/ppms/controllers/`. Re-export from `app.py` for compatibility.
-   - *Risk:* Low (mechanical move + re-export). *Rollback:* Revert single PR.
-3. **Stage 2 — Pure Planning, Motor, and Macro Extraction:**
-   - Extract `engine/planning.py`, `engine/motor.py`, and `engine/macro.py` with zero `tkinter` imports; `app.py` delegates to them.
-   - *Risk:* Low–Medium (must preserve exact `validate_ppms_*` error messages and `ScanRequest` snapshot semantics).
-4. **Stage 3 — State Ownership & Composition (`PPMSAppState` + `PPMSScanRunner`):**
-   - Replace `PPMSPanel(CombinedControlApp)` inheritance, `__getattr__`, and dual `_initialize_ppms_state()` with explicit composition (`AppShell` + `PPMSAppState` + `PPMSPanelView`).
-   - *Risk:* Medium–High (touches close lifecycle, `ScanCloseHandoff`, `drain_ui_queue`, and monkeypatched test attributes). In particular, normal scan completion runs `save_scan_plot_snapshots` and `recorder.close()` via `post_ui` (`L9277–9281`), whereas `closing=True` closes `recorder` directly on the worker thread (`L9244`) before `ScanCloseHandoff.end()`; Stage 3 must preserve `recorder.close()` guarantees even if `root.destroy()` runs concurrently. Requires behavior-preserving adapters on `CombinedControlApp`/`PPMSPanel` during transition.
-5. **Stage 4 — Cleanup & Generator Retirement:**
-   - Remove temporary compatibility shims (if approved under Q3) and retire `tools/extract_app.py` / `ppms_host.py` / `ppms_package_glue.py` (if approved under Q1).
+| Stage | Scope | Risk | Compatibility / Removal Rule |
+| --- | --- | --- | --- |
+| **M0** | Establish independent source authority on `Transport-PPMS` (freeze `extract_app.py` regeneration) | Low | Prerequisite for M1–M4; `main@56908d8` untouched |
+| **M1** | Extract instrument controllers (`visa.py`, `sr830.py`, `zurich.py`, `qdinstrument.py`, `environment.py`) into `transport/ppms/controllers/` | Low–Medium | Temporary re-exports/aliases in `app.py` allowed; remove in M4 |
+| **M2** | Separate scan planning (`engine/planning.py`), `PPMSMotorService` (`engine/motor.py`), and `MacroRunner` (`engine/macro.py`) | Medium | Zero `tkinter` imports; preserve `ppms_macro_stop` and `validate_ppms_*` semantics |
+| **M3** | Separate `PPMSScanRunner` & UI (`AppShell` + `PPMSPanelView`); unify resource ownership in `PPMSAppState` | High | Migrate test entrypoints synchronously as responsibilities move; guarantee window-independent `recorder.close()` & PR #3 `ScanCloseHandoff` |
+| **M4** | Clean up temporary compatibility shims, unused Non-local code/tests (Q2), and retire `tools/` extraction scripts (Q1) | Low–Medium | All M1–M3 shims removed; `PPMSPanel(CombinedControlApp)` / `__getattr__` gone |
 
 ### Regression Gates (Every D2 PR)
 - **GitHub Actions CI (`ppms-tests.yml`):** Full 51-module suite on Linux (`xvfb-run`) and Windows (`python ci/run_suite.py`), `ppms_checks.py` layout & screenshot checks, wheel build/install, and Windows `.exe` `--package-self-test` when packaging/entrypoints change.
@@ -278,4 +275,4 @@ Exact batch/task breakdown belongs to **D2** after D1 approval. High-level depen
 
 ## 6. Decision Status
 
-Pending human review of **Q1–Q3** and architectural boundaries. No production-code, test, workflow, or generator changes are authorized by this document.
+Updated to reflect human feedback on **Q1–Q3**, the three design principles (`PPMSAppState` registry-not-god-object, separate scan vs. macro stop events, window-independent finalization/close handoff), and `M0–M4` staging. Pending final user sign-off on PR #4. No production-code, test, workflow, or generator changes are authorized by this document.
