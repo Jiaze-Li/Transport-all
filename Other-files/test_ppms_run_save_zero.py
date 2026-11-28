@@ -68,6 +68,7 @@ class Page:
         self.dialogs, self.later = [], []
         panel.root = types.SimpleNamespace(after=lambda _ms, show: (self.later.append(show), show()))
         panel.shell.root = panel.root
+        panel.shell.post_ui = lambda callback: panel.root.after(0, callback)
         self.panel, self.folder = panel, tempfile.TemporaryDirectory()
         test.addCleanup(self.folder.cleanup)
 
@@ -442,7 +443,8 @@ class FieldScanEndTests(unittest.TestCase):
         remote.set_field.side_effect = lambda *args: order.append(("field", args[3]))
         remote.read_environment.side_effect = [{'field_oe': 0., 'field_status': 'StableDriven'},
                                                {'field_oe': 0., 'field_status': 'StablePersistent'}]
-        runner.run(ScanRequest(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1, transport_settings={}))
+        runner.run(ScanRequest(mode="Field", sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1,
+                               transport_settings={}, total_points=0, estimated_seconds=1.0, sr830_tc_code=10))
         self.assertEqual(order, ["scan", "6221 zeroed", ("field", 1), ("field", 0)])
         self.assertTrue(state.zero_persist_completed)
 
@@ -577,7 +579,7 @@ class SettleWithoutTkTests(unittest.TestCase):
         state_obj = PPMSAppState()
         state_obj.scan_sr830_tc_code = STFMR_LOCKIN_SR830_TIME_CONSTANTS["3 s"]
         runner = PPMSScanRunner(state_obj, post_ui=lambda callback: None)
-        self.assertEqual(runner._point_settle(0.5, ("830_a",)), (3.0, 3.0))
+        self.assertEqual(runner._point_settle(0.5, ("830_a",), None), (3.0, 3.0))
 
 
 class SetIZurichTests(unittest.TestCase):
@@ -657,7 +659,7 @@ class MacroScanTests(unittest.TestCase):
             macro_stop_event=panel.state.macro_stop_event,
             is_closed=lambda: False,
             field_ready_fn=ppms_field_is_ready,
-            stop_scan_fn=Mock(),
+            stop_scan_fn=mock.Mock(),
             post_ui=panel.shell.post_ui,
         )
         runner.start(
@@ -679,13 +681,13 @@ class ProgramCloseTests(unittest.TestCase):
         panel = page.panel
 
         def on_wait(seconds):
-            if panel.state.scan_rows and not panel.shell.closing:
-                panel.shell.closing = True
+            if panel.state.scan_rows and not panel.state.closed:
+                panel.state.closed = True
                 recorder = panel.state.run_recorder
                 recorder.event("stop_requested", button="the program closing")
                 panel.state.scan_stop_event.set()
         page.rig.stop.on_wait = on_wait
-        page.panel.shell.closing = False
+        page.panel.state.closed = False
         page.start()
         events = page.events(next(Path(page.folder.name).iterdir()) / "run1.log")
         self.assertEqual(events[-1]["event"], "run_finished")

@@ -153,15 +153,15 @@ class ModeTests(unittest.TestCase):
         obj.zurich_timeconstant = Mock(get=lambda: "1")
         obj.state.ppms_executor = Mock()
         self.durations = []
-        obj._format_scan_duration = lambda seconds: (self.durations.append(seconds), f"{seconds:g} s")[1]
         order = []
         def answer(*args, **kwargs):
             order.append("confirm")
-            self.last_question = args[1] if len(args) > 1 else kwargs.get("message", "")
+            self.last_question = args[2] if len(args) > 2 else kwargs.get("message", "")
             return confirm
         import transport.ppms.ui.dialogs as dialogs_mod
 
-        with tempfile.TemporaryDirectory() as folder, patch.object(dialogs_mod.simpledialog, "askstring", return_value=filename), patch.object(panel_mod.messagebox, "askyesno", side_effect=answer), patch.object(panel_mod, "ask_scan_start", side_effect=answer), patch.object(panel_mod.filedialog, "askdirectory", side_effect=lambda **kw: (order.append("folder") or ("" if cancel_folder else folder))), patch.object(panel_mod.messagebox, "showerror") as error:
+        format_duration = panel_mod.format_scan_duration
+        with tempfile.TemporaryDirectory() as folder, patch.object(panel_mod, "format_scan_duration", lambda seconds: (self.durations.append(seconds), format_duration(seconds))[1]), patch.object(dialogs_mod.simpledialog, "askstring", return_value=filename), patch.object(panel_mod.messagebox, "askyesno", side_effect=answer), patch.object(panel_mod, "ask_scan_start", side_effect=answer), patch.object(panel_mod.filedialog, "askdirectory", side_effect=lambda **kw: (order.append("folder") or ("" if cancel_folder else folder))), patch.object(panel_mod.messagebox, "showerror") as error:
             if existing:
                 (Path(folder) / existing).write_text("original", encoding="utf-8")
             obj.start_ppms_field_scan()

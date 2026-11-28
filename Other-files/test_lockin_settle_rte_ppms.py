@@ -468,7 +468,7 @@ class PPMSStartTests(NoWindows):
             with self.subTest(**kwargs):
                 obj = self.scan_object(**kwargs)
                 ask = self.start(obj, yes=False)
-                message = ask.call_args.args[1]
+                message = ask.call_args.args[2]
                 self.assertIn(f"Measurement points: 5\nWait before each reading: {line}\n"
                               f"Estimated duration: about {estimate}\n", message)
                 self.assertEqual(ask.call_args.kwargs["icon"], "question")
@@ -479,7 +479,7 @@ class PPMSStartTests(NoWindows):
         # the second pass measures SR830-1 alone.
         obj = self.scan_object(harmonic_a="1+2", second=True)
         obj.state.sr830_time_constant_codes = {"830_a": 10, "830_b": 11}
-        message = self.start(obj, yes=False).call_args.args[1]
+        message = self.start(obj, yes=False).call_args.args[2]
         self.assertIn("Measurement points: 10\nWait before each reading: 3 s (1 x 3 s, the time constant "
                       "of SR830-2, the slowest lock-in measured; Settle s is 0.5 s); harmonic passes with "
                       "fewer lock-ins wait 1 s\n", message)
@@ -490,7 +490,7 @@ class PPMSStartTests(NoWindows):
         # Both passes measure SR830-1 and the Zurich: one wait, no such note.
         obj = self.scan_object(zurich_tau=0.1, harmonic_a="1+2")
         obj.state.sr830_time_constant_codes = {"830_a": 11}
-        message = self.start(obj, yes=False).call_args.args[1]
+        message = self.start(obj, yes=False).call_args.args[2]
         self.assertIn("Measurement points: 10\nWait before each reading: 3 s (1 x 3 s", message)
         self.assertNotIn("harmonic passes with fewer lock-ins", message)
 
@@ -570,7 +570,7 @@ class PPMSStartTests(NoWindows):
                 schedule_poll=mock.Mock(),
             ),
         )
-        self.assertIn("Wait before each reading: 3 s (1 x 3 s", ask.call_args.args[1])
+        self.assertIn("Wait before each reading: 3 s (1 x 3 s", ask.call_args.args[2])
         self.assertTrue(obj.state.scan_running)
         obj.state.ppms_executor.submit.assert_called_once()
         self.assertEqual(obj.ppms_field_scan_status_var.get().split(";")[0], "Field scan: 5 points, settle 3 s")

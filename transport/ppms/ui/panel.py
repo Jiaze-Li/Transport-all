@@ -3470,8 +3470,23 @@ class PPMSPanelView:
 
     # --- Scan Start / Stop / Save / Plot ---
 
+    @staticmethod
+    def _ppms_frequency_set_up_s(frequencies, pass_settles, acquisition_s) -> float:
+        total = 0.0
+        for index, (settle_s, _tc, _meter) in enumerate(pass_settles):
+            for frequency in frequencies:
+                total += float(acquisition_s) + max(
+                    0.0,
+                    NONLOCAL_FSCAN_SETTLE_PERIODS / float(frequency) - float(settle_s),
+                )
+                if index:
+                    total += PPMS_SET_UP_ALLOWANCE_S
+        return total
+
     def _apply_ppms_mode_acquisition_default(self, mode: str) -> None:
-        shown = self.ppms_acquisition_default_shown
+        shown = getattr(
+            self, "ppms_acquisition_default_shown", f"{PPMS_ACQUISITION_S:g}"
+        )
         seconds = (
             PPMS_TEMPERATURE_ACQUISITION_S
             if mode == "Temperature"

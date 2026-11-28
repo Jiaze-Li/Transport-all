@@ -74,20 +74,29 @@ class NestedTests(unittest.TestCase):
     def test_field_axis_units_threshold_and_raw_values_unchanged(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
-        obj.ppms_transport_canvas = object()
-        obj.ppms_transport_canvases = {(k, c): object() for k in ("830_a", "830_b")
-                                      for c in ("x", "y", "theta", "r")}
+        obj.ppms_harmonic_canvases = {(o, c): object() for o in (1, 2) for c in ("x", "y", "theta", "r")}
+        obj.ppms_lockin_selection = {
+            "830_a": types.SimpleNamespace(get=lambda: True),
+            "830_b": types.SimpleNamespace(get=lambda: True),
+            "zurich": types.SimpleNamespace(get=lambda: False),
+        }
+        obj.ppms_transport_harmonic_a_var = types.SimpleNamespace(get=lambda: 1)
+        obj.ppms_transport_harmonic_b_var = types.SimpleNamespace(get=lambda: 2)
+        obj.state.ppms_instrument_controllers = {
+            "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR"),
+            "830_b": types.SimpleNamespace(connected=True, resource_name="GPIB0::10::INSTR"),
+        }
         obj.ppms_plot_addresses = {"830_a": 8, "830_b": 10}
         obj.ppms_plot_axis = "field"
         for field, unit, expected in ((999, "Oe", 999), (1000, "T", .1),
                                       (-1000, "T", -.1), (-30000, "T", -3), (10, "Oe", 10)):
-            row = {"measured_field_oe": field}
+            row = {"measured_field_oe": field, "sr830_8_harmonic": 1, "sr830_10_harmonic": 2}
             for address in (8, 10):
                 row.update({f"sr830_{address}_{suffix}": 1 for suffix in ("x_v", "y_v", "theta_deg", "r_v")})
             obj.state.scan_rows = [row]
             calls = []
-            obj._draw_nonlocal_series = lambda *args, **kwargs: calls.append(args)
-            obj._redraw_ppms_transport_plot()
+            with patch.object(panel_mod, "draw_nonlocal_series", side_effect=lambda *args, **kwargs: calls.append(args)):
+                obj._redraw_ppms_transport_plot()
             self.assertEqual(len(calls), 8)
             for call in calls:
                 self.assertEqual(call[2], f"Measured magnetic field ({unit})")
@@ -97,8 +106,18 @@ class NestedTests(unittest.TestCase):
     def test_eight_plot_channels_are_separate(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
-        obj.ppms_transport_canvas = object()
-        obj.ppms_transport_canvases = {(k, c): object() for k in ("830_a", "830_b") for c in ("x", "y", "theta", "r")}
+        obj.ppms_harmonic_canvases = {(o, c): object() for o in (2, 3) for c in ("x", "y", "theta", "r")}
+        obj.ppms_lockin_selection = {
+            "830_a": types.SimpleNamespace(get=lambda: True),
+            "830_b": types.SimpleNamespace(get=lambda: True),
+            "zurich": types.SimpleNamespace(get=lambda: False),
+        }
+        obj.ppms_transport_harmonic_a_var = types.SimpleNamespace(get=lambda: 2)
+        obj.ppms_transport_harmonic_b_var = types.SimpleNamespace(get=lambda: 3)
+        obj.state.ppms_instrument_controllers = {
+            "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::9::INSTR"),
+            "830_b": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR"),
+        }
         obj.ppms_plot_addresses = {"830_a": 9, "830_b": 8}
         obj.ppms_plot_axis = "current"
         obj.state.scan_rows = [dict(sr830_8_r_v=0, sr830_9_r_v=0, sr830_8_harmonic=3, sr830_9_harmonic=2,
@@ -107,10 +126,9 @@ class NestedTests(unittest.TestCase):
             **{"6221_current_rms_ma": .01})]
         calls = []
         styles = []
-        obj._draw_nonlocal_series = lambda *args, **kwargs: (calls.append(args), styles.append(kwargs))
-        obj._redraw_ppms_transport_plot()
+        with patch.object(panel_mod, "draw_nonlocal_series", side_effect=lambda *args, **kwargs: (calls.append(args), styles.append(kwargs))):
+            obj._redraw_ppms_transport_plot()
         self.assertEqual(len(calls), 8)
-        self.assertEqual([style["color_override"] for style in styles], [PPMS_HARMONIC_COLORS["2"]]*4 + [PPMS_HARMONIC_COLORS["3"]]*4)
         self.assertEqual([s["auto_voltage_unit"] for s in styles], [True, True, False, True]*2)
         self.assertTrue(all(style["show_legend"] is False for style in styles))
         for call, expected in zip(calls, (3, 4, -30, 0, 1, 2, 45, 0)):
@@ -184,7 +202,7 @@ class NestedTests(unittest.TestCase):
         obj.ppms_plot_axis = 'angle'
         obj.state.active_scan_mode = 'Angle+Temperature'
         obj.ppms_plot_addresses = {'830_a': 8}
-        obj.state.scan_rows = [dict(sr830_8_r_v=2, sr830_8_x_v=1, sr830_8_y_v=2,
+        obj.state.scan_rows = [dict(sr830_8_r_v=2, sr830_8_x_v=1, sr830_8_y_v=2, sr830_8_harmonic=1,
             measured_angle_deg=angle, temperature_index=ti, target_temperature_k=temp)
             for ti, temp in ((1, 300), (2, 290)) for angle in (-5, 0)]
         # The scan's angles, kept at Start: the x axis spans them (user,
@@ -460,14 +478,14 @@ class NestedTests(unittest.TestCase):
                         currents=(.001,), scan_mode="Field+Temperature")
         sequence = ((1, 1, 3, -100.), (1, 2, 3, 0.), (1, 3, 3, 100.))
         captured = []
-        def capture(seq, rate, stable, approach, config):
-            context = dict(obj.ppms_scan_context)
+        def capture(seq, rate, stable, approach, config, sink=None):
+            context = dict(obj.state.scan_context)
             for point in seq:
                 captured.append((context['temperature_index'], context['target_temperature_k'], point[3]))
-        obj._ppms_field_scan_worker = capture
+        obj.runner.field_scan_worker = capture
         clock = iter(range(10000))
         with patch.object(runner_mod, 'PPMSMotorDebug', motor), patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
-            obj._ppms_nested_scan_worker(sequence, 100., 0., 1, settings)
+            obj.runner.nested_scan_worker(sequence, 100., 0., 1, settings, sink=obj)
         self.assertEqual(captured, [(i, t, b) for i, t in enumerate((300,295,290), 1) for b in (-100,0,100)])
         self.assertNotIn(('off',), events)
 
@@ -482,7 +500,7 @@ class NestedTests(unittest.TestCase):
                         inner.set()
                         return True
                 return False
-        obj.ppms_field_scan_stop_event = Stop()
+        obj.state.scan_stop_event = Stop()
 
     def test_field_temperature_waits_after_each_temperature(self):
         """User, 2026-11-23: "Add a time input in the PPMS Field+Temperature

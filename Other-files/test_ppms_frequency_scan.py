@@ -458,7 +458,7 @@ class ModeTableTests(unittest.TestCase):
 
     def test_acquire_s_is_1_s_for_both(self):
         page = PPMSPanelView.__new__(PPMSPanelView)
-        page.ppms_acquisition_default_shown = None
+        page.ppms_acquisition_default_shown = "5"
         page.ppms_acquisition_time_var = Var("5")
         for mode in PPMS_FREQUENCY_SCAN_MODES:
             page._apply_ppms_mode_acquisition_default(mode)
@@ -679,8 +679,9 @@ class StartTests(unittest.TestCase):
         ran = []
         runner.nested_scan_worker = lambda *args, **kwargs: ran.append(args[-1]["harmonic_pass"])
         passes = ({"harmonic_pass": 1}, {"harmonic_pass": 2})
-        runner.run(ScanRequest(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1,
-                               transport_settings={"harmonic_passes": passes}))
+        runner.run(ScanRequest(mode="Frequency", sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1,
+                               transport_settings={"harmonic_passes": passes}, total_points=0,
+                               estimated_seconds=1.0, sr830_tc_code=10))
         self.assertEqual(ran, [1, 2])
 
 
@@ -802,7 +803,7 @@ class SequenceTests(unittest.TestCase):
                 source.output = 1
         rig.rows_seen = []
         append = rig.page.runner._append_live_csv
-        rig.page.runner._append_live_csv = lambda row, sink=None: (append(row, sink=sink), rig.rows_seen.append(row))
+        rig.page.runner._append_live_csv = lambda row: (append(row), rig.rows_seen.append(row))
         source.on_write = stuck
         with self.assertRaisesRegex(RuntimeError, r"6221 output still ON \(OUTP\?=1\) before setting up 3 Hz"):
             rig.run()

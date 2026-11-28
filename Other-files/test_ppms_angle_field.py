@@ -103,7 +103,7 @@ class AngleFieldPage(Page):
     angles 26 and 27° on the main row, the outer fields 100 and 200 Oe, the
     magnet and rotator fakes, the field read at 1234 Oe, Persistent."""
 
-    def __init__(self, test, main_row=("26", "27", "1"), outer=("0", "200", "100")):
+    def __init__(self, test, main_row=("26", "27", "1"), outer=("100", "200", "100")):
         super().__init__(test, "Angle+Field", main_row)
         panel, log = self.panel, self.rig.log
         self.magnet = Magnet(log)
@@ -601,11 +601,11 @@ class EndingTests(unittest.TestCase):
         panel = page.panel
 
         def on_wait(seconds):
-            if panel.state.scan_rows and not panel.shell.closing:
-                panel.shell.closing = True
+            if panel.state.scan_rows and not panel.state.closed:
+                panel.state.closed = True
                 panel.state.scan_stop_event.set()
         page.rig.stop.on_wait = on_wait
-        panel.shell.closing = False
+        panel.state.closed = False
         page.start()
         self.assertEqual(page.field_commands().count((0.0, 1)), 1)
         self.assertEqual(page.rig.source.output, 0)
