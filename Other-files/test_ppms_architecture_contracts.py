@@ -73,6 +73,7 @@ class TkIndependentFinalizationTests(unittest.TestCase):
                     return_value={"6221": "zeroed"}
                 )
                 runner.nested_scan_worker = mock.Mock()
+                state.close_handoff.begin()
                 state.close_handoff.defer(cleaned.set)
 
                 request = ScanRequest(
@@ -86,7 +87,10 @@ class TkIndependentFinalizationTests(unittest.TestCase):
                     estimated_seconds=1.0,
                     sr830_tc_code=10,
                 )
-                runner.run(request, sink=None)
+                try:
+                    runner.run(request, sink=None)
+                finally:
+                    state.close_handoff.end()
 
                 self.assertTrue(recorder.closed)
                 self.assertTrue(cleaned.is_set())

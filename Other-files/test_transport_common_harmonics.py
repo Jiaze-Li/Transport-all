@@ -37,7 +37,7 @@ class DummyVar:
         self._value = value
 
 
-import transport.ppms.core.planning as planning
+import transport.ppms.engine.planning as planning
 
 class ReferenceOriginalImplementation:
     """Reference implementation capturing the exact original logic prior to refactoring."""

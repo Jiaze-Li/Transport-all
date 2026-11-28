@@ -21,7 +21,7 @@ import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.controllers.sr830 import NONLOCAL_SR830_FULL_SCALE_V, STFMR_LOCKIN_SR830_TIME_CONSTANTS
-from transport.ppms.core.planning import parse_ppms_macro
+from transport.ppms.engine.planning import parse_ppms_macro
 from transport.ppms.engine.errors import PPMS_FIELD_NOT_ZEROED_TEXT, PPMSFieldScanError
 from transport.ppms.engine.macro import MacroRunner
 from transport.ppms.engine.runner import PPMSScanRunner, ScanRequest, ppms_field_is_ready

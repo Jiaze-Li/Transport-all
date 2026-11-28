@@ -24,7 +24,8 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
 from transport.ppms.app import APP_VERSION
-import transport.ppms.core.run_recorder as run_recorder
+import transport.core.scan_lifecycle as scan_lifecycle
+import transport.core.scan_recording as run_recorder
 import transport.ppms.ui.dialogs as app
 
 BOM = "﻿".encode("utf-8")
@@ -407,8 +408,7 @@ class BeginScanRunTests(Folder):
 class ScanEndTests(unittest.TestCase):
 
     def test_any_page_s_outputs(self):
-        from transport.ppms.core.run_recorder import scan_end_outputs_text
-        text = scan_end_outputs_text
+        text = scan_lifecycle.scan_end_outputs_text
         self.assertEqual(text({"6221": "zeroed"}), "6221 zeroed")
         self.assertEqual(text({"6221": "zero FAILED: x"}), "6221 zero FAILED: check it")
         self.assertEqual(text({"6221": "not connected"}), "6221 not connected")
@@ -438,15 +438,14 @@ class ScanEndTests(unittest.TestCase):
                     raise error
                 return outcome
             return label, zero
-        from transport.ppms.core.run_recorder import scan_end_outputs_text, zero_scan_outputs
-        results = zero_scan_outputs((step("6221", error=RuntimeError("the 6221 output did not read back OFF")),
+        results = scan_lifecycle.zero_scan_outputs((step("6221", error=RuntimeError("the 6221 output did not read back OFF")),
                                      step("KEPCO", outcome="not connected"), step("2400", outcome=0.0),
                                      step("magnet", error=OSError("VISA timeout"))))
         self.assertEqual(order, ["6221", "KEPCO", "2400", "magnet"])
         self.assertEqual(results, {"6221": "zero FAILED: the 6221 output did not read back OFF",
                                    "KEPCO": "not connected", "2400": "zeroed", "magnet": "zero FAILED: VISA timeout"})
         self.assertEqual(list(results), ["6221", "KEPCO", "2400", "magnet"])
-        self.assertEqual(scan_end_outputs_text(results),
+        self.assertEqual(scan_lifecycle.scan_end_outputs_text(results),
                          "6221 zero FAILED; KEPCO not connected; 2400 zeroed; magnet zero FAILED: check them")
 
 

@@ -19,7 +19,7 @@ import transport.ppms.engine.motor as motor_mod
 import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
-from transport.ppms.core.planning import (
+from transport.ppms.engine.planning import (
     PPMS_FIELD_COMMANDING_MODES,
     PPMS_FREQUENCY_SCAN_MODES,
     PPMS_SCAN_MODES,

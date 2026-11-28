@@ -974,16 +974,11 @@ class ZurichMFLIController:
     @property
     def connected(self) -> bool:
         return self.mfli_connected
-    @property
-    @property
-    @property
-    @property
+
     @property
     def mfli_connected(self) -> bool:
         return self.mfli_daq is not None or self.mfli_bridge is not None
-    @property
-    @staticmethod
-    @staticmethod
+
     def _close_manager_if_unused(self) -> None:
         if self.source is not None or self.lockins or self.nanovoltmeter is not None or (self.resource_manager is None):
             return

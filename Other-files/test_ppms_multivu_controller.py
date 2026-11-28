@@ -50,7 +50,9 @@ class TestMultiVuControllerBasics(unittest.TestCase):
 
     def test_module_exports_and_backward_compatibility(self):
         """Verify PPMSMultiVuReadbackController is exported identically across all access paths."""
-        self.assertIs(app.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
+        from transport.ppms.controllers import multivu as multivu_mod
+
+        self.assertIs(multivu_mod.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
         self.assertIs(ppms_pkg.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
         self.assertIs(controllers_pkg.PPMSMultiVuReadbackController, PPMSMultiVuReadbackController)
         self.assertIn("PPMSMultiVuReadbackController", ppms_pkg.__all__)

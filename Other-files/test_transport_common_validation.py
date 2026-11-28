@@ -32,7 +32,7 @@ from transport.common import (
     DEFAULT_SR830_MIN_HARMONIC,
     validate_transport_scan_settings,
 )
-import transport.ppms.core.planning as app
+import transport.ppms.engine.planning as app
 
 
 class ReferenceOriginalValidation:

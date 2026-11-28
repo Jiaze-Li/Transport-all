@@ -13,7 +13,9 @@ import unittest
 from unittest import mock
 
 from lab_screen import LAB_WIDE, build_lab_app, lab_window
-from test_ppms_motor_debug import app
+import transport.ppms.app_shell as app
+import transport.ppms.controllers.zurich as zurich_ctrl
+import transport.ppms.ui.panel as panel_mod
 
 SUPER = [("192.168.68.250", 8004)]
 USB = [("127.0.0.1", 8004), ("192.168.69.78", 8004)]
@@ -46,9 +48,9 @@ class ZurichChoiceTests(unittest.TestCase):
             raise OSError("refused (test)")
 
         for patcher in (
-            mock.patch.object(app.messagebox, "showerror", lambda *a, **k: self.errors.append(a[1])),
-            mock.patch.object(app.messagebox, "showwarning", lambda *a, **k: self.errors.append(a[1])),
-            mock.patch.object(app.socket, "create_connection", refuse),
+            mock.patch.object(panel_mod.messagebox, "showerror", lambda *a, **k: self.errors.append(a[1])),
+            mock.patch.object(panel_mod.messagebox, "showwarning", lambda *a, **k: self.errors.append(a[1])),
+            mock.patch.object(zurich_ctrl.socket, "create_connection", refuse),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)

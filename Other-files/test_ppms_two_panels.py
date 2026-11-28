@@ -14,9 +14,8 @@ import transport.ppms.ui.panel as panel_mod
 from transport.ppms.app_shell import AppShell
 from transport.ppms.controllers.environment import PPMS_DEFAULT_HOST
 from transport.ppms.controllers.zurich import NONLOCAL_SAMPLE_HZ, ZurichMFLIController
-from transport.ppms.core.validation import validate_ppms_transport_scan_settings
+from transport.ppms.engine.planning import PPMS_SR830_LABELS, validate_ppms_transport_scan_settings
 from transport.ppms.engine.errors import PPMSScanCancelled
-from transport.ppms.engine.planning import PPMS_SR830_LABELS
 from transport.ppms.engine.runner import PPMSScanRunner
 from transport.ppms.state import PPMSAppState
 from transport.ppms.ui.panel import PPMSPanelView

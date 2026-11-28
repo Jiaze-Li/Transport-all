@@ -983,7 +983,7 @@ class PPMSPanelView:
         ttk.Label(scan, textvariable=unit).grid(
             row=1, column=6, columnspan=3, sticky="w", padx=(2, 0)
         )
-        actions = ttk.Frame(scan)
+        actions = self.ppms_field_scan_start_button.master
         actions.grid(row=2, column=0, columnspan=9, sticky="w", pady=(3, 0))
         for col, (widget, width) in enumerate(
             (
@@ -992,7 +992,7 @@ class PPMSPanelView:
                 (self.ppms_field_scan_save_button, 10),
             )
         ):
-            widget.configure(in_=actions, width=width)
+            widget.configure(width=width)
             widget.grid(row=0, column=col, padx=(0, 4))
         self.ppms_field_scan_progress.grid(
             row=3, column=0, columnspan=2, sticky="ew", padx=(0, 6), pady=(3, 0)

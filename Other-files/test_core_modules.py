@@ -40,16 +40,14 @@ class CoreImportsTests(unittest.TestCase):
         self.assertTrue(actual["timestamp"].startswith("2026-10-18T12:34:56.789"))
 
     def test_file_name_rule_shared(self):
-        self.assertEqual(app.scan_file_stem(" B1.csv "), "B1")
         self.assertEqual(scan_recording.scan_file_stem(" B1.csv "), "B1")
         for invalid in ("CON.txt", "a/b", "x."):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                app.scan_file_stem(invalid)
+                scan_recording.scan_file_stem(invalid)
 
     def test_scan_close_handoff_is_shared(self):
-        self.assertIs(app.ScanCloseHandoff, scan_lifecycle.ScanCloseHandoff)
         done = []
-        handoff = app.ScanCloseHandoff()
+        handoff = scan_lifecycle.ScanCloseHandoff()
         handoff.begin()
         self.assertTrue(handoff.defer(lambda: done.append("closed")))
         self.assertEqual(done, [])
@@ -65,11 +63,11 @@ class CoreImportsTests(unittest.TestCase):
         def safe():
             calls.append("second")
             return "not connected"
-        result = app.zero_scan_outputs([("A", fail), ("B", safe)])
+        result = scan_lifecycle.zero_scan_outputs([("A", fail), ("B", safe)])
         self.assertEqual(calls, ["first", "second"])
         self.assertIn("zero FAILED", result["A"])
         self.assertEqual(result["B"], "not connected")
-        self.assertIn("check it", app.scan_end_outputs_text(result, outputs=("A", "B")))
+        self.assertIn("check it", scan_lifecycle.scan_end_outputs_text(result, outputs=("A", "B")))
 
 
 class RecordingCompatibilityTests(unittest.TestCase):

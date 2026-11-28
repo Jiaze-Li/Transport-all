@@ -20,12 +20,12 @@ class _LabScreen:
 
 
 def build_lab_app(app_module, root):
-    """CombinedControlApp on ``root`` as it opens on the lab PC."""
+    """AppShell on ``root`` as it opens on the lab PC."""
     root.tk.call("tk", "scaling", 1.333)  # 96 DPI
     original = app_module.calculate_window_layout
     app_module.calculate_window_layout = lambda _root: original(_LabScreen())
     try:
-        return app_module.CombinedControlApp(root)
+        return app_module.AppShell(root)
     finally:
         app_module.calculate_window_layout = original
 

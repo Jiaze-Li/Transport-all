@@ -270,22 +270,29 @@ class LampTests(unittest.TestCase):
 
 class OverviewTests(unittest.TestCase):
     def test_text(self):
+        from transport.ppms.ui import dialogs
+
         pages = {"SHHV": ["on", "off", "off"], "PPMS": ["off"], "FMR": []}
-        self.assertEqual(app.connection_overview_text(pages), ("1/4", "1 of 4 instruments connected", "on"))
-        self.assertEqual(app.connection_overview_text({"SHHV": ["off"]})[2], "off")
-        self.assertEqual(app.connection_overview_text({"SHHV": ["on", "fault"]}),
+        self.assertEqual(dialogs.connection_overview_text(pages), ("1/4", "1 of 4 instruments connected", "on"))
+        self.assertEqual(dialogs.connection_overview_text({"SHHV": ["off"]})[2], "off")
+        self.assertEqual(dialogs.connection_overview_text({"SHHV": ["on", "fault"]}),
                          ("2/2", "2 of 2 instruments connected", "fault"))
-        self.assertEqual(app.connection_overview_text({}), ("0/0", "0 of 0 instruments connected", "off"))
+        self.assertEqual(dialogs.connection_overview_text({}), ("0/0", "0 of 0 instruments connected", "off"))
 
     def test_tooltip_lines_skip_pages_without_instruments(self):
+        from transport.ppms.ui import dialogs
+
         pages = {"SHHV": ["on", "off"], "FMR": [], "PPMS": ["fault"]}
-        self.assertEqual(app.connection_overview_lines(pages),
+        self.assertEqual(dialogs.connection_overview_lines(pages),
                          ["SHHV: 1 of 2 connected", "PPMS: 1 of 1 connected (fault)"])
 
     def test_no_status_bar(self):
         # The overview costs no height: placed in the tab row, never gridded
         # or packed into the window (user, 2026-10-18).
-        source = PROGRAM.read_text(encoding="utf-8")
+        from pathlib import Path
+        from transport.ppms.ui import dialogs
+
+        source = Path(dialogs.__file__).read_text(encoding="utf-8")
         body = source[source.index("class ConnectionOverview"):source.index("    def _show_tooltip")]
         self.assertNotIn("self.frame.grid(", body)
         self.assertNotIn("self.frame.pack(", body)

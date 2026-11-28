@@ -12,7 +12,6 @@ from unittest.mock import Mock, patch
 import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
-from transport.ppms.core.csv_writer import append_ppms_live_csv
 from transport.ppms.engine.errors import PPMSScanCancelled
 from transport.ppms.engine.runner import PPMSScanRunner
 from transport.ppms.state import PPMSAppState
@@ -258,13 +257,17 @@ class ModeTests(unittest.TestCase):
             self.assertEqual([p[1] for p in sequence], list(range(1, len(expected)+1)))
 
     def test_live_csv_appends_rows_with_one_header(self):
+        state = PPMSAppState()
+        runner = PPMSScanRunner(state, post_ui=lambda cb: None)
         with tempfile.TemporaryDirectory() as folder:
             csv_path = Path(folder) / "scan.csv"
-            fields = append_ppms_live_csv(csv_path, None, dict(field=1, x=2))
-            fields = append_ppms_live_csv(csv_path, fields, dict(field=3, x=4))
+            state.live_csv_path = csv_path
+            state.live_csv_fields = None
+            runner._append_live_csv(dict(field=1, x=2))
+            runner._append_live_csv(dict(field=3, x=4))
             before = csv_path.read_bytes()
             with self.assertRaisesRegex(RuntimeError, "channels changed"):
-                append_ppms_live_csv(csv_path, fields, dict(field=5, y=6))
+                runner._append_live_csv(dict(field=5, y=6))
             self.assertEqual(csv_path.read_bytes(), before)
             with csv_path.open(encoding="utf-8-sig") as handle:
                 self.assertEqual(list(csv.DictReader(handle)), [dict(field="1", x="2"), dict(field="3", x="4")])

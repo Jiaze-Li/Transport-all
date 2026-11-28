@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.app_shell import AppShell
-from transport.ppms.core.planning import parse_ppms_macro, ppms_field_approach_code, ppms_temperature_approach_code
+from transport.ppms.engine.planning import parse_ppms_macro, ppms_field_approach_code, ppms_temperature_approach_code
 from transport.ppms.engine.macro import MacroRunner
 from transport.ppms.engine.runner import ppms_field_is_ready
 from transport.ppms.state import PPMSAppState
