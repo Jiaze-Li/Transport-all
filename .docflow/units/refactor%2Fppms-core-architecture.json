@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:00:14.090Z",
+  "updatedAt": "2026-11-28T09:03:41.240Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks",
+    "current": "Update remaining PPMS test harness mocks and on_scan_finished calls",
     "next": "",
     "history": [
       {
@@ -62,6 +62,10 @@
       {
         "at": "2026-11-28T16:59:57+08:00",
         "text": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks"
+      },
+      {
+        "at": "2026-11-28T17:03:27+08:00",
+        "text": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks"
       }
     ],
     "commits": [
@@ -148,6 +152,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T16:59:57+08:00",
         "message": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks"
+      },
+      {
+        "sha": "2104f91567f724897412c3db0213fbc1511df1e2",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:03:27+08:00",
+        "message": "Update remaining PPMS test harness mocks and on_scan_finished calls"
       }
     ],
     "pr": {
