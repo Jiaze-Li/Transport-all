@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T05:57:04.852Z",
+  "updatedAt": "2026-11-28T05:57:26.108Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -19,7 +19,14 @@
         "message": "docs(ppms): open D2 core architecture implementation record"
       }
     ],
-    "pr": null,
+    "pr": {
+      "number": 6,
+      "state": "open",
+      "title": "refactor(ppms): core architecture, lifecycle ownership and legacy cleanup",
+      "url": "https://github.com/Jiaze-Li/Transport-all/pull/6",
+      "merged": false,
+      "updatedAt": "2026-11-28T05:57:13Z"
+    },
     "completed": null,
     "outcome": null
   }
