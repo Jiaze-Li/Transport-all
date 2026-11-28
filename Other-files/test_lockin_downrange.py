@@ -17,13 +17,16 @@ Here: the ST-FMR and Non-local SR830 rules and the Zurich's, each against a
 stand-in instrument.  The PPMS / SHHV rule is in test_review_fixes,
 test_ppms_sr830_tc and test_rte_panel.
 """
+import time
 import inspect
 import unittest
 from unittest import mock
 
-from test_ppms_motor_debug import app
+import transport.ppms.controllers.sr830 as sr830_ctrl
+import transport.ppms.controllers.zurich as zurich_ctrl
+import transport.ppms.engine.runner as runner_mod
 
-SCALES = app.NONLOCAL_SR830_FULL_SCALE_V
+SCALES = sr830_ctrl.NONLOCAL_SR830_FULL_SCALE_V
 
 
 class SR830:
@@ -57,7 +60,7 @@ class Rule(unittest.TestCase):
     returns the action text ("" when the range is kept)."""
 
     def setUp(self):
-        patcher = mock.patch.object(app.time, "sleep")
+        patcher = mock.patch.object(time, "sleep")
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -75,9 +78,9 @@ class SR830RuleTests:
     """The same checks for the ST-FMR and the Non-local SR830 rule."""
 
     def test_the_rule_is_one_percent_of_the_range(self):
-        self.assertEqual(app.LOCKIN_DOWNRANGE_FRACTION, 0.01)
-        self.assertEqual(app.PPMS_SR830_DOWNRANGE_FRACTION, app.LOCKIN_DOWNRANGE_FRACTION)
-        self.assertEqual(app.LOCKIN_UPRANGE_FRACTION, 0.85)
+        self.assertEqual(sr830_ctrl.LOCKIN_DOWNRANGE_FRACTION, 0.01)
+        self.assertEqual(runner_mod.PPMS_SR830_DOWNRANGE_FRACTION, sr830_ctrl.LOCKIN_DOWNRANGE_FRACTION)
+        self.assertEqual(sr830_ctrl.LOCKIN_UPRANGE_FRACTION, 0.85)
 
     def test_a_reading_above_one_percent_keeps_the_range(self):
         # 5 % and 1.2 % of the range stepped it down while the rule was 15 %.
@@ -327,7 +330,7 @@ class ZurichTests(unittest.TestCase):
         self.assertEqual(gaps, sorted(gaps), "each turn later than the one before")
         self.assertGreaterEqual(gaps[-1], 4 * gaps[0])
         # The released rule: a change every three or four readings, for good.
-        self.assertLessEqual(controller.mfli_low_readings_needed, app.MFLI_DOWNRANGE_READINGS_LIMIT)
+        self.assertLessEqual(controller.mfli_low_readings_needed, zurich_ctrl.MFLI_DOWNRANGE_READINGS_LIMIT)
 
     def test_an_overload_is_still_answered_on_a_range_the_firmware_kept(self):
         controller, firmware = self.make(0.001, 0.001, 0.01, 0.01)

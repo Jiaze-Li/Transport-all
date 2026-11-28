@@ -113,7 +113,7 @@ class ZurichChoiceTests(unittest.TestCase):
                 panel.connect_ppms2_zurich()
                 self.pump(lambda: not panel.state.zurich_busy and self.probed)
                 self.assertEqual(self.probed, servers)
-                self.assertFalse(panel.zurich_controller.mfli_connected)
+                self.assertFalse(panel.state.zurich_controller.mfli_connected)
                 self.assertEqual(str(panel.zurich_entries[0].cget("state")), "readonly",
                                  "after a failure the list is choosable again, not typable")
 

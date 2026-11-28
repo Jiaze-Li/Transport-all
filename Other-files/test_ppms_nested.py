@@ -8,11 +8,11 @@ import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.engine.planning import ppms_scan_axis
 from transport.ppms.engine.errors import PPMSFieldScanError, PPMSLockinRangeError, PPMSMotorScanError
-from transport.ppms.engine.runner import PPMS_FIRST_POINT_MAX_WINDOWS, PPMSScanRunner
+from transport.ppms.engine.runner import PPMS_FIRST_POINT_MAX_WINDOWS, PPMSScanRunner, format_voltage_range
 from transport.ppms.protocol import ppms_scan_temperature_segments
 from transport.ppms.state import PPMSAppState
 from transport.ppms.ui.panel import PPMSPanelView
-from transport.ppms.ui.theme import PPMS_HARMONIC_COLORS, format_sr830_voltage_text
+from transport.ppms.ui.theme import PPMS_HARMONIC_COLORS
 
 
 class NestedTests(unittest.TestCase):
@@ -584,8 +584,9 @@ class NestedTests(unittest.TestCase):
             self.assertNotIn(('zero',), events)
 
     def test_voltage_units(self):
-        self.assertIn('µV', format_sr830_voltage_text(1e-6))
-        self.assertIn('mV', format_sr830_voltage_text(-.01))
+        self.assertIn('uV', format_voltage_range(1e-6))
+        self.assertIn('mV', format_voltage_range(.01))
+        self.assertEqual(format_voltage_range(-.01), '--')
 
     def test_first_point_repeats_windows_until_two_agree(self):
         state = PPMSAppState()

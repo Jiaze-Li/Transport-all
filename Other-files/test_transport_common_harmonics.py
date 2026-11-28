@@ -205,9 +205,11 @@ class TestTransportCommonHarmonics(unittest.TestCase):
         self.assertIsInstance(parse_harmonic_mode("custom_list", mode_orders=custom_mapping), list)
         self.assertEqual(parse_harmonic_mode("custom_str", mode_orders=custom_mapping), "123")
 
-        # Via panel method and planning monkeypatching
+        # Via panel method and panel monkeypatching
+        import transport.ppms.ui.panel as panel_mod
+
         panel = DummyPanel({"830_a": "custom_mode"})
-        with mock.patch.object(planning, "PPMS_HARMONIC_MODE_ORDERS", {"custom_mode": [2, 3]}):
+        with mock.patch.object(panel_mod, "PPMS_HARMONIC_MODE_ORDERS", {"custom_mode": [2, 3]}):
             orders = panel._ppms_harmonic_orders("830_a")
             self.assertEqual(orders, [2, 3])
             self.assertIsInstance(orders, list)

@@ -430,11 +430,13 @@ class PPMSStartTests(NoWindows):
         return obj
 
     def start(self, obj, yes, run=None):
+        import transport.ppms.ui.dialogs as dialogs_mod
+
         ask = mock.Mock(return_value=yes)
         with tempfile.TemporaryDirectory() as folder, \
                 mock.patch.object(panel_mod.messagebox, "askyesno", ask), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
-                mock.patch.object(panel_mod.simpledialog, "askstring", return_value=""):
+                mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""):
             (run or obj.start_ppms_field_scan)()
         self.error.assert_not_called()
         return ask

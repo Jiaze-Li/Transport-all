@@ -382,7 +382,8 @@ class ZurichCloseOrderTests(unittest.TestCase):
         self.assertTrue(mfli_disconnected.is_set())
         self.assertTrue(daq.disconnected)
         self.assertNotIn(lease_key, visa_ctrl._INSTRUMENT_LEASES)
-        self.assertLess(events.index("worker:finished"), events.index("disconnect:mfli"))
+        self.assertIn("disconnect:mfli", events)
+        self.assertNotIn("worker:finished", events)
 
     def test_repeated_safe_close_runs_mfli_disconnect_once(self):
         panel, state, daq, events, _record, lease_key = _make_panel_with_zurich()

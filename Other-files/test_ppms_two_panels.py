@@ -432,6 +432,7 @@ class TwoPanelTests(unittest.TestCase):
         shell.ui_queue = Mock()
         shell.post_ui = lambda callback: callback()
         shell.thread_log = Mock()
+        shell.instrument_connection_indicators = {}
         controller = Mock(lock=threading.RLock(), mfli_connected=False)
         def connect(device):
             controller.mfli_connected = True

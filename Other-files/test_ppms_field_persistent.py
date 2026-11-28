@@ -302,7 +302,7 @@ class PersistentSetpointTests(unittest.TestCase):
     def test_a_failed_command_starts_no_follow_up(self):
         panel = self.make_panel()
         panel.ppms_environment_controller.set_field.side_effect = RuntimeError("refused (test)")
-        with patch.object(app, "messagebox") as box:
+        with patch.object(panel_mod, "messagebox") as box:
             panel.set_ppms_field()
         box.showerror.assert_called_once()
         self.assertTrue(panel.ppms_connection_var.get().startswith("Command failed"))

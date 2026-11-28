@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from transport.core.scan_lifecycle import scan_end_outputs_text, zero_scan_outputs
+from transport.ppms.controllers.zurich import ZurichMFLIController
 from transport.core.scan_sequences import ppms_scan_axis
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.controllers.qdinstrument import (

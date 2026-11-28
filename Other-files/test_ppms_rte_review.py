@@ -170,7 +170,7 @@ class RTESR830AddressesCanBeTyped(unittest.TestCase):
     def state(self, widget_class, key, connected=False, busy=False):
         panel = PPMSPanelView.__new__(PPMSPanelView)
         panel.state = PPMSAppState()
-        panel._set_connection_indicator = Mock()
+        panel.shell = types.SimpleNamespace(_set_connection_indicator=Mock())
         panel.state.scan_running = busy
         panel.ppms_device_connect_buttons = {key: Mock()}
         panel.ppms_device_disconnect_buttons = {key: Mock()}

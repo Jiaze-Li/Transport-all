@@ -1185,7 +1185,7 @@ class PPMSPanelView:
 
         def place(_event=None) -> None:
             try:
-                available = content.winfo_width()
+                available = content.winfo_width() or 0
                 if available <= 1:
                     return
                 one, inset = harm_width(), self.shell._pair_inset(control)
