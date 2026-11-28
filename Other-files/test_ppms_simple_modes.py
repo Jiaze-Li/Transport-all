@@ -104,6 +104,8 @@ class ModeTests(unittest.TestCase):
         obj.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
         obj.state.ppms_instrument_controllers = {k: types.SimpleNamespace(connected=True, resource_name=f"GPIB0::{address}::INSTR")
             for k, address in (("6221", 30), ("830_a", 8), ("830_b", 9))}
+        obj.ppms_lockin_selection = {key: Mock(get=lambda key=key: False)
+                                    for key in ('830_a', '830_b', 'zurich')}
         if selected is not None:
             obj.ppms_lockin_selection = {key: Mock(get=lambda key=key: key in selected)
                                         for key in ('830_a', '830_b', 'zurich')}

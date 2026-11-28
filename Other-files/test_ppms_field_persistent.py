@@ -301,7 +301,7 @@ class PersistentSetpointTests(unittest.TestCase):
 
     def test_a_failed_command_starts_no_follow_up(self):
         panel = self.make_panel()
-        panel.ppms_environment_controller.set_field.side_effect = RuntimeError("refused (test)")
+        panel.state.ppms_environment_controller.set_field.side_effect = RuntimeError("refused (test)")
         with patch.object(panel_mod, "messagebox") as box:
             panel.set_ppms_field()
         box.showerror.assert_called_once()
@@ -314,7 +314,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_field_mode_var.set("Driven")
         panel.ppms_field_target_var.set("3000")
         self.press(panel, panel.set_ppms_field, (100, "Charging"))
-        panel.ppms_environment_controller.set_field.assert_called_with(3000., 100., 1, 1)
+        panel.state.ppms_environment_controller.set_field.assert_called_with(3000., 100., 1, 1)
         self.assertIsNone(panel.ppms_persistent_watch)
         self.assertEqual(panel.ppms_connection_var.get(), "Command completed; live readback in progress")
         self.assertEqual(self.feed(panel, 5000, "StablePersistent", 90),
@@ -324,7 +324,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
         panel.ppms_control_safety_var = Var(True)
-        panel.ppms_environment_controller.disconnect = Mock()
+        panel.state.ppms_environment_controller.disconnect = Mock()
         panel.disconnect_ppms_environment()
         self.assertIsNone(panel.ppms_persistent_watch)
 

@@ -446,12 +446,12 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
         self.assertEqual(source.instrument.output, 1)
         self.assertEqual(lockin_a.instrument.harmonic, 1)
         self.assertIsNone(lockin_b.instrument)
-        sample = harness._read_ppms_transport_sample(13.7, ("830_a",))
+        sample = runner.read_transport_sample(13.7, ("830_a",))
         self.assertTrue(math.isclose(sample["sr830_10_r_v"], 10e-6))
         self.assertTrue(sample["sr830_10_reference_valid"])
         self.assertNotIn("sr830_8_r_v", sample)
         self.assertNotIn("sr830_9_r_v", sample)
-        harness._stop_ppms_transport_source()
+        runner._stop_transport_source()
         self.assertEqual(source.instrument.output, 0)
 
 

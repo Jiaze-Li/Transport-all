@@ -442,6 +442,7 @@ class TwoPanelTests(unittest.TestCase):
             panel.ppms_instruments_frame = Mock()
             panel.ppms_settings_panel = Mock()
             panel.ppms_plot_frame = Mock()
+            panel.ppms_transport_plot_frames = {}
         controller.connect_mfli.side_effect = connect
         controller.disconnect_mfli.side_effect = disconnect
         controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: controller.read_mfli(frequency)

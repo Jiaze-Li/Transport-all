@@ -1706,7 +1706,7 @@ class ZurichMFLIController:
                     prefix+'harmonic': channel['harmonic'], prefix+'input': channel['adcselect'],
                     prefix+'enabled': channel['enabled'], prefix+'status': 'enabled'})
             return fields
-    @staticmethod
+
     def _run_mfli_autorange(self, reason: str) -> str:
         if not self.mfli_connected:
             raise RuntimeError("Zurich MFLI is not connected")

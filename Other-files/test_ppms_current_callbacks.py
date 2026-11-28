@@ -435,10 +435,12 @@ class CurrentCallbacks(unittest.TestCase):
     def make_app(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
-        obj.shell = types.SimpleNamespace(root=None, closing=False, post_ui=lambda callback: callback(), thread_log=Mock())
+        obj.shell = types.SimpleNamespace(root=None, closing=False, post_ui=lambda callback: callback(), thread_log=Mock(), _set_connection_indicator=Mock())
         obj.root = None
         obj.state.environment_busy = False
         obj.ppms_connection_var = Mock()
+        obj.ppms_sr830_range_vars = {}
+        obj.ppms_sr830_status_vars = {}
         obj._require_ppms_control_ready = Mock()
         obj._set_ppms_environment_ui = Mock()
         obj._apply_ppms_environment_readback = Mock()

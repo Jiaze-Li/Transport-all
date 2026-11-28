@@ -248,7 +248,7 @@ class NestedTests(unittest.TestCase):
 
     def run_worker(self, obj, motor, settings):
         clock = iter(range(10000))
-        with patch.object(motor_mod, 'PPMSMotorDebug', motor), patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
+        with patch.object(runner_mod, 'PPMSMotorDebug', motor), patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
             obj.runner.nested_scan_worker([(1,1,1,0.)], 100., 0., 1, settings, sink=obj)
 
     def test_current_scan_applies_each_current(self):

@@ -440,7 +440,7 @@ class ChangeTests(NoWindows):
         self.assertFalse(panel.state.environment_busy)
         self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "readonly")
         self.assertEqual(panel.ppms_sr830_time_constant_applied, "100 ms")
-        self.assertIn("OFLT 8", panel.thread_log.call_args.args[0])
+        self.assertIn("OFLT 8", panel.shell.thread_log.call_args.args[0])
         # Ranging restarts: the counts made with the old time constant are
         # dropped, and idle autorange waits 5 new time constants (0.5 s here).
         self.assertEqual((state.low_range_count, state.range_cooldown, state.low_range_peak), (0, 0, 0.0))
@@ -791,7 +791,7 @@ class ScanStartTimeConstantTests(NoWindows):
             sr830.state["OFLT"] = front_panel_code
         sr830.writes.clear()
         sr830.queries.clear()
-        panel.thread_log.reset_mock()
+        panel.shell.thread_log.reset_mock()
         source = Fake6221()
         panel.state.ppms_instrument_controllers["6221"] = slot("Keithley 6221", source, "GPIB0::12::INSTR")
         panel.runner.write_6221_checked = source.write
@@ -818,13 +818,13 @@ class ScanStartTimeConstantTests(NoWindows):
         self.assertLess(sr830.queries.index("RSLP?"), sr830.queries.index("OFLT?"))
         self.assertLess(sr830.queries.index("OFLT?"), sr830.queries.index("FREQ?"), "before the 6221 starts")
         self.assertEqual(panel.state.sr830_time_constant_codes["830_a"], 10)
-        panel.thread_log.assert_not_called()
+        panel.shell.thread_log.assert_not_called()
 
     def test_a_front_panel_change_is_recorded_and_logged(self):
         panel = self.connected()
         self.configure(panel, front_panel_code=11)
         self.assertEqual(panel.state.sr830_time_constant_codes["830_a"], 11, "3 s, as the SR830 reads")
-        message = panel.thread_log.call_args.args[0]
+        message = panel.shell.thread_log.call_args.args[0]
         self.assertIn("SR830-1", message)
         self.assertIn("3 s (OFLT 11), not the 1 s last set", message)
 
