@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T08:21:49.472Z",
+  "updatedAt": "2026-11-28T08:30:11.108Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix Zurich autorange method decorator and remaining test harness mocks",
+    "current": "Update remaining PPMS test helpers and runner default sink",
     "next": "",
     "history": [
       {
@@ -42,6 +42,10 @@
       {
         "at": "2026-11-28T16:21:32+08:00",
         "text": "Fix remaining PPMS test imports, mock targets, and UI width guard"
+      },
+      {
+        "at": "2026-11-28T16:29:59+08:00",
+        "text": "Fix Zurich autorange method decorator and remaining test harness mocks"
       }
     ],
     "commits": [
@@ -98,6 +102,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T16:21:32+08:00",
         "message": "Fix Zurich autorange method decorator and remaining test harness mocks"
+      },
+      {
+        "sha": "58e5e7ce8c246395a0cfbc51fed47e55d973e958",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T16:29:59+08:00",
+        "message": "Update remaining PPMS test helpers and runner default sink"
       }
     ],
     "pr": {
