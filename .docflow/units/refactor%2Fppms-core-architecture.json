@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T13:34:34.125Z",
+  "updatedAt": "2026-11-28T13:34:39.293Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -356,7 +356,7 @@
       "title": "refactor(ppms): core architecture, lifecycle ownership and legacy cleanup",
       "url": "https://github.com/Jiaze-Li/Transport-all/pull/6",
       "merged": false,
-      "updatedAt": "2026-11-28T13:09:20Z"
+      "updatedAt": "2026-11-28T13:34:26Z"
     },
     "completed": null,
     "outcome": null
