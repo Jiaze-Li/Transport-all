@@ -316,23 +316,30 @@ Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **B
 
 ## 8. D2 implementation record — Batch 2 (PR #6)
 
-Baseline: `Transport-PPMS@96361394f55d5632ce00a97afde33f527a9996e7` (PR #5 merged). Status: **In progress**.
+Baseline: `Transport-PPMS@96361394f55d5632ce00a97afde33f527a9996e7` (PR #5 merged). Status: **Batch 2 complete in Draft PR #6 (code/packaging verified at `1c21a7d`)**.
 
 Scope: remaining M2, M3, and residual M4 under the approved two-batch plan (§5). Complete the independent PPMS architecture, without changing established measurement behavior or introducing unnecessary abstractions.
 
-### Dependency-Based Implementation Order
+### Dependency-Based Implementation Order & Final Module Map
 1. **Remaining M2 (Zero-Tk Engine Modules under `transport/ppms/engine/`):**
-   - `engine/motor.py`: `PPMSMotorDebug`, `PPMSMotorService`, `PPMSMotorScanError`, `PPMSScanCancelled`.
+   - `engine/errors.py`: `PPMSMotorScanError`, `PPMSScanCancelled`, `PPMSFieldScanError`, `PPMSLockinRangeError`, `PPMS_FIELD_NOT_ZEROED_TEXT`.
+   - `engine/motor.py`: `PPMSMotorDebug`, `PPMSMotorService` (index-switch recovery, verified angle moves, zero Tk).
    - `engine/macro.py`: `MacroRunner` and `MacroEventSink` (independent `macro_stop_event` vs. `scan_stop_event`, zero Tk).
    - `engine/runner.py`: `ScanRequest`, `ScanEventSink`, `PPMSScanRunner` (all 10 scan modes, harmonics, SR830/Zurich acquisition & autorange, 6221 output-off readback, interrupted field zeroing, Tk-independent `recorder.close()` and `ScanCloseHandoff`).
 2. **M3 (Single Authoritative Ownership & UI/Shell Composition):**
-   - `state.py`: `PPMSAppState` (single owner of `ppms_executor`, `zurich_executor`, stop events, `ScanCloseHandoff`, `closed`, controllers, and live shared scan/readback state).
-   - `ui/theme.py`, `ui/dialogs.py`, `ui/panel.py` (`PPMSPanelView`): Tk widgets, `StringVar`s, plot canvases, polling timers, Macro/Motor UI.
+   - `state.py`: `PPMSAppState` and `ScanCloseHandoff` (single owner of `ppms_executor`, `zurich_executor`, stop events, close handoff, `closed`, controllers, and live shared scan/readback state).
+   - `ui/theme.py`: `APP_VERSION`, `MAIN_WINDOW_TITLE`, theme/font helpers, `draw_nonlocal_series`, `calculate_window_layout`, `geometry_string`, `configure_button_roles`, `create_lamp`, `set_lamp`.
+   - `ui/dialogs.py`: `ConnectionOverview`, `ask_scan_start`, `use_english_tk_dialogs`.
+   - `ui/panel.py` (`PPMSPanelView`): Tk widgets, `StringVar`s, plot canvases, polling timers, Macro/Motor UI, `ScanEventSink`/`MacroEventSink` implementation.
    - `app_shell.py` (`AppShell`, `UiDispatcher`): Composition root, Tk root, Notebook `[PPMS, Log]`, `drain_ui_queue`, `request_close`.
    - `app.py`: Thin entry/composition facade (`APP_VERSION`, `MAIN_WINDOW_TITLE`, `AppShell`, `main`, `run`).
 3. **M4 (Legacy Cleanup, Alias Removal, Tooling Retirement):**
-   - Remove `STFMRSR830Controller` and `NonLocalACController` aliases; rename class to `ZurichMFLIController` and prune unused Non-local 6221/2182A/SR830 methods/constants after caller verification.
-   - Retire frozen `tools/extract_app.py`, `tools/ppms_host.py`, `tools/ppms_package_glue.py`; update `pyproject.toml`, `package_self_test.py`, and `ppms_checks.py`.
-4. **Verification & Final Record:**
-   - Migrate test entrypoints/patch targets, prune obsolete dedicated Non-local tests, add deterministic regressions (single ownership, Tk-independent finalization, Macro/scan stop, close/completion races, AST dependency direction).
-   - Run full suites, layout/screenshot, wheel build/install, and Windows EXE workflow (release skipped) on GitHub Actions CI.
+   - Removed `STFMRSR830Controller` and `NonLocalACController` aliases; renamed to `ZurichMFLIController` and pruned unused Non-local 6221/2182A/SR830 methods/constants.
+   - Retired frozen `tools/extract_app.py`, `tools/ppms_host.py`, `tools/ppms_package_glue.py`; updated `pyproject.toml`, `Other-files/packaging/Transport_PPMS.spec`, `Other-files/packaging/package_self_test.py`, `.github/workflows/ppms-windows-exe.yml`, and `Other-files/ci/ppms_checks.py`.
+4. **Lifecycle & Finalization Contracts:**
+   - **Dependency direction:** `transport/core/*`, `transport/common/*`, `transport/ppms/protocol.py`, `transport/ppms/controllers/*`, `transport/ppms/engine/*`, and `transport/ppms/state.py` contain zero `tkinter` imports and zero imports of `app_shell` or `ui`.
+   - **Tk-independent finalization:** `PPMSScanRunner.run()` zeroes 6221 outputs, performs interrupted field zeroing when applicable, writes `run_finished`, and closes `run_recorder` on the worker thread before notifying `ScanEventSink.on_scan_finished(...)` via `UiDispatcher`.
+   - **Close / completion handoff:** `ScanCloseHandoff` coordinates `AppShell.request_close` with active worker execution so `PPMSAppState.safe_close()` waits cleanly without deadlocking on `drain_ui_queue` or losing `run_recorder.close()`.
+5. **Verification & CI Evidence (GitHub Actions):**
+   - `ppms-tests.yml` (Linux + Windows, 51 test modules including `test_ppms_architecture.py`, layout checks & screenshots, wheel build/install): Run [`46134247919`](https://github.com/Jiaze-Li/Transport-all/actions/runs/46134247919) at `1c21a7d4fd8082b21566bb1f68543ed17f8ebe02` — **success** on both Linux and Windows.
+   - `ppms-windows-exe.yml` (PyInstaller one-file + one-folder build, `--package-self-test`, startup window check; `release` job skipped): Run [`46134243850`](https://github.com/Jiaze-Li/Transport-all/actions/runs/46134243850) at `1c21a7d4fd8082b21566bb1f68543ed17f8ebe02` — **success**.
