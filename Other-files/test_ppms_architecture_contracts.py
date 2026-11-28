@@ -196,9 +196,17 @@ class MacroVsScanCancellationTests(unittest.TestCase):
                 state.scan_running = True
 
             panel.start_ppms_field_scan = fake_start_scan
+            class ImmediateExecutor:
+                def submit(self, fn, *args, **kwargs):
+                    fn(*args, **kwargs)
+                    fut = mock.Mock()
+                    fut.result.return_value = None
+                    fut.add_done_callback = lambda cb: cb(fut)
+                    return fut
+
             panel.macro_runner = MacroRunner(
                 environment_controller=mock.Mock(),
-                executor=mock.Mock(),
+                executor=ImmediateExecutor(),
                 macro_stop_event=state.macro_stop_event,
                 is_closed=lambda: state.closed,
                 field_ready_fn=lambda *_a, **_kw: True,
@@ -310,10 +318,11 @@ class QueuedScanAndInflightShutdownTests(unittest.TestCase):
 
         events = []
         disconnected = threading.Event()
+        addresses = {"6221": 30, "830_a": 8, "830_b": 9, "830_c": 10, "2400": 24}
         for key in ("6221", "830_a", "830_b", "830_c", "2400"):
             ctrl = state.ppms_instrument_controllers[key]
             ctrl.instrument = mock.Mock() if key in ("6221", "830_a") else None
-            ctrl.resource_name = f"GPIB0::{key}::INSTR"
+            ctrl.resource_name = f"GPIB0::{addresses[key]}::INSTR"
             ctrl.disconnect = lambda k=key: events.append(f"disconnect:{k}")
         state.ppms_environment_controller = types.SimpleNamespace(
             backend="QDInstrument",
