@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T13:10:02.452Z",
+  "updatedAt": "2026-11-28T13:34:34.125Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README",
+    "current": "fix(ppms): drain other in-flight hardware tasks before the deferred close disconnects",
     "next": "Bot review budget for PR #6 is nearly spent (PR too large to finish a full bot pass); decide whether to split the PR or accept it after CI and manual review",
     "history": [
       {
@@ -138,6 +138,10 @@
       {
         "at": "2026-11-28T21:09:17+08:00",
         "text": "test(ppms): assert queued-scan zeroing precedes disconnect on close"
+      },
+      {
+        "at": "2026-11-28T21:34:22+08:00",
+        "text": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README"
       }
     ],
     "commits": [
@@ -338,6 +342,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T21:09:17+08:00",
         "message": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README"
+      },
+      {
+        "sha": "368dc6380b55d11984d1c846196697107bc4d6fe",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T21:34:22+08:00",
+        "message": "fix(ppms): drain other in-flight hardware tasks before the deferred close disconnects"
       }
     ],
     "pr": {
