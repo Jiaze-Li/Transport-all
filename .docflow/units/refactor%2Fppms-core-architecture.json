@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T11:55:01.026Z",
+  "updatedAt": "2026-11-28T13:09:29.167Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "test(ppms): assert queued-scan zeroing precedes disconnect on close",
+    "current": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README",
     "next": "Review queued-scan, macro handoff, and inflight-shutdown fixes in Draft PR #6 for acceptance",
     "history": [
       {
@@ -134,6 +134,10 @@
       {
         "at": "2026-11-28T19:51:29+08:00",
         "text": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test"
+      },
+      {
+        "at": "2026-11-28T21:09:17+08:00",
+        "text": "test(ppms): assert queued-scan zeroing precedes disconnect on close"
       }
     ],
     "commits": [
@@ -328,6 +332,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T19:51:29+08:00",
         "message": "test(ppms): assert queued-scan zeroing precedes disconnect on close"
+      },
+      {
+        "sha": "e30c06b692585ade54ed72d4ab6531d75a74a450",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T21:09:17+08:00",
+        "message": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README"
       }
     ],
     "pr": {
