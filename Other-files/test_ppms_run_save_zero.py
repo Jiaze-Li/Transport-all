@@ -69,6 +69,7 @@ class Page:
         panel.root = types.SimpleNamespace(after=lambda _ms, show: (self.later.append(show), show()))
         panel.shell.root = panel.root
         panel.shell.post_ui = lambda callback: panel.root.after(0, callback)
+        panel.runner.post_ui = panel.shell.post_ui
         self.panel, self.folder = panel, tempfile.TemporaryDirectory()
         test.addCleanup(self.folder.cleanup)
 
@@ -649,6 +650,7 @@ class MacroScanTests(unittest.TestCase):
         panel.root = panel.shell.root
         panel.thread_log = panel.shell.thread_log
         panel.ppms_macro_status, panel.ppms_macro_editor = mock.Mock(), mock.Mock()
+        panel.ppms_macro_edit_buttons = []
         panel.state.ppms_environment_controller = mock.Mock()
         from test_ppms_two_panels import ImmediateExecutor
         panel.state.ppms_executor = ImmediateExecutor()

@@ -264,7 +264,7 @@ class PPMSWorkerTests(NoWindows):
     def run_scan(self, obj, sequence, settings):
         from transport.ppms.engine.runner import ScanRequest
         if "harmonic_passes" not in settings:
-            settings = dict(settings, harmonic_passes=(dict(settings),))
+            settings = dict(settings, harmonic_passes=obj._ppms_harmonic_passes(settings))
         request = ScanRequest(
             mode=settings.get("scan_mode", "Field"),
             sequence=sequence,

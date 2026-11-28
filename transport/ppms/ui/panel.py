@@ -1524,6 +1524,7 @@ class PPMSPanelView:
             "Field+Temperature": {"Field", "Temperature"},
             "Angle+Temperature": {"Angle", "Temperature"},
             "Current+Temperature": {"Current", "Temperature"},
+            "Angle+Field": {"Angle", "Field"},
             "Frequency+Current": {"Frequency", "Current"},
         }.get(mode, {mode})
         for parameter, widgets in self.ppms_scan_target_widgets.items():

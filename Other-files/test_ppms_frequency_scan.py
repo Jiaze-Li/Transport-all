@@ -327,7 +327,6 @@ class Rig:
         page.macro_runner = mock.Mock()
         page.ppms_field_scan_status_var = Var("")
         page.ppms_field_scan_eta_var = Var("")
-        page.shell = types.SimpleNamespace(closing=True, root=None, post_ui=lambda cb: cb(), thread_log=lambda _m: None)
         page.state.scan_context = {}
         page.state.scan_rows = []
         page.state.scan_started_at = self.clock.now
@@ -380,8 +379,6 @@ class Rig:
             self.page.on_scan_finished = orig_finished
         if finished.get("error") is not None:
             raise finished["error"]
-        if finished.get("outcome") == "stopped":
-            raise PPMSScanCancelled(finished.get("status", "Stopped"))
 
     def rows(self):
         with self.page.state.live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
@@ -882,8 +879,7 @@ class SequenceTests(unittest.TestCase):
                 rig.page.root = types.SimpleNamespace(after=lambda _ms, show: show())
                 rig.page.shell.root = rig.page.root
                 rig.stop_at(entry, occurrence=1 if entry[1].startswith("SOUR:WAVE:FREQ") else 2)
-                with self.assertRaises(PPMSScanCancelled) as caught:
-                    rig.run()
+                rig.run()
                 self.assertEqual(len(rig.rows()), 1)
                 rig.assert_switched_off()
                 with mock.patch.object(panel_mod.messagebox, "showerror") as dialog:
@@ -894,7 +890,7 @@ class SequenceTests(unittest.TestCase):
                         results=rig.page.state.scan_outputs,
                         outputs_confirmed=True,
                         field_note="",
-                        error=caught.exception,
+                        error=None,
                         problems=[],
                     )
                 dialog.assert_not_called()

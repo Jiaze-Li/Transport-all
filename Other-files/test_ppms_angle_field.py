@@ -159,7 +159,7 @@ class ModeRegistrationTests(unittest.TestCase):
         self.assertEqual(set(defaults), set(PPMS_SCAN_MODES))
         self.assertEqual(defaults["Angle+Field"], defaults["Angle"])
         self.assertEqual(defaults["Angle+Field"], ("0", "360", "5", "°"))
-        page.ppms_acquisition_default_shown = None
+        page.ppms_acquisition_default_shown = "5"
         page.ppms_acquisition_time_var = Var("5")
         page._apply_ppms_mode_acquisition_default("Angle+Field")
         self.assertEqual(page.ppms_acquisition_time_var.get(), "1")

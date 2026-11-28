@@ -151,7 +151,7 @@ class NestedTests(unittest.TestCase):
         obj.ppms_plot_angle_range = None
         obj.ppms_plot_addresses = {'830_a': 8}
         obj.state.scan_rows = [dict(sr830_8_r_v=1, sr830_8_x_v=2,
-            sr830_8_y_v=3, measured_field_oe=10, temperature_k=300+i,
+            sr830_8_y_v=3, sr830_8_harmonic=1, measured_field_oe=10, temperature_k=300+i,
             measured_angle_deg=20+i, angle_index=1, temperature_index=i+1)
             for i in range(2)]
         captured = []
@@ -546,7 +546,7 @@ class NestedTests(unittest.TestCase):
 
     def test_stop_prevents_next_plane_and_cleans(self):
         obj, motor, settings, events = self.harness()
-        obj._ppms_field_scan_worker = lambda *args: obj.ppms_field_scan_stop_event.set()
+        obj.runner.field_scan_worker = lambda *args, **kwargs: obj.state.scan_stop_event.set()
         self.run_worker(obj, motor, settings)
         # An angle/temperature scan keeps the magnet's setpoint and mode
         # ("I off" or Stop; user, 2026-10-09), and the source goes off.
