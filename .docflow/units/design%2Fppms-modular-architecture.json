@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:23:11.690Z",
+  "updatedAt": "2026-11-28T02:30:35.678Z",
   "task": {
     "id": "design/ppms-modular-architecture",
     "branch": "design/ppms-modular-architecture",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T10:22:37+08:00",
     "status": "In progress",
     "current": "docs(ppms): scaffold D1 modular architecture design",
-    "next": "",
+    "next": "Review D1 modular architecture design in PR #4 and decide Q1-Q3",
     "history": [],
     "commits": [
       {
