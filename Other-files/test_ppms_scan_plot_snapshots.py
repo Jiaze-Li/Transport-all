@@ -150,8 +150,7 @@ class RoutineTests(unittest.TestCase):
         self.a.thread_log = mock.Mock(side_effect=RuntimeError("log failed"))
         self.assertEqual(self.a.save_scan_plot_snapshots(self.recorder, (("plot", object()),), redraw=failing), "")
         self.assertEqual(self.grabs.names(), ["run_plot_snapshot.png"], "saved as shown")
-        bare = bare_app()
-        self.assertEqual(bare.save_scan_plot_snapshots(self.recorder, (("plot", object()),)), "")
+        self.assertEqual(ui_theme.save_scan_plot_snapshots(None, self.recorder, (("plot", object()),), closing=False, log_fn=lambda _m: None), "")
         self.assertEqual(self.a.save_scan_plot_snapshots(self.recorder, None), "")
 
 

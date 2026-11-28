@@ -974,6 +974,7 @@ class PlotTests(unittest.TestCase):
         page.state.scan_rows = rows
         page.state.active_scan_mode = mode
         page.ppms_plot_axis = PPMS_SCAN_PLOT_AXES[mode]
+        page.ppms_plot_angle_range = None
         return page
 
     @staticmethod

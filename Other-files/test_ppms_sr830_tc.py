@@ -872,7 +872,8 @@ class StartSettleTests(NoWindows):
         panel.ppms_lockin_selection["830_b"].set(False)
         panel.state.last_readback = dict(temperature_k=300, field_oe=100)
         ask = mock.Mock(return_value=False)   # the user answers No
-        with mock.patch.object(panel_mod.messagebox, "askyesno", ask):
+        with mock.patch.object(panel_mod.messagebox, "askyesno", ask), \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=False):
             panel.start_ppms_field_scan()
         self.error.assert_not_called()
         message = ask.call_args.args[1]

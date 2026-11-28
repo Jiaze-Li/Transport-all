@@ -77,6 +77,9 @@ class PersistentSetpointTests(unittest.TestCase):
         patcher = patch.object(panel_mod.time, "monotonic", self.clock)
         patcher.start()
         self.addCleanup(patcher.stop)
+        msg_patcher = patch.object(panel_mod, "messagebox")
+        msg_patcher.start()
+        self.addCleanup(msg_patcher.stop)
         return panel
 
     def press(self, panel, button, before):

@@ -80,9 +80,10 @@ class WaitsAtTheNewDefaults(NoWindows):
         def sleep(seconds):
             clock[0] += seconds
 
-        module = two_panels.app
-        with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                mock.patch.object(module.time, "sleep", sleep):
+        import time as std_time
+
+        with mock.patch.object(std_time, "monotonic", lambda: clock[0]), \
+                mock.patch.object(std_time, "sleep", sleep):
             result = panel._read_ppms2_zurich_ranged(317.3, scanning=True)
         self.assertEqual(result["X"], 1e-6)
         self.assertAlmostEqual(clock[0], 10.0, places=6)
@@ -136,9 +137,9 @@ class DefaultSetupsAtTheNewTc(NoWindows):
                 controller.mfli_config = {"timeconstant_s": tc_s}
                 controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: {
                     "auto_range": "RANGE 0.01->0.1 V", "X": 999}
-                panel.ppms_idle_autorange_enabled = True
-                panel.ppms_6221_zero_output = False
-                panel.ppms_field_scan_running = False
+                panel.state.idle_autorange_enabled = True
+                panel.state.k6221_zero_output = False
+                panel.state.scan_running = False
 
                 def sleep(seconds):
                     clock[0] += seconds

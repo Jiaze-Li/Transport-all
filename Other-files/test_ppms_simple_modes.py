@@ -9,6 +9,8 @@ import textwrap
 import types
 import unittest
 from unittest.mock import Mock, patch
+
+import transport.ppms.engine.motor as motor_mod
 import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND

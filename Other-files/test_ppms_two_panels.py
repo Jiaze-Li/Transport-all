@@ -141,7 +141,6 @@ class TwoPanelTests(unittest.TestCase):
                 'X voltage',
                 'waiting',
                 show_legend=False,
-                draw_grid=Mock(),
             )
             rect = canvas.create_rectangle.call_args.args
             self.assertEqual(rect[3], height - 44)
@@ -179,21 +178,19 @@ class TwoPanelTests(unittest.TestCase):
             _, panel, _ = self.make_panel()
             for var in panel.ppms_lockin_selection.values():
                 var.set(False)
-            self.assertEqual(panel._ppms2_ordered_plot_rows(), [])
+            self.assertEqual(panel._ppms2_measured_orders(), {1: [], 2: [], 3: []})
             panel.zurich_harmonic.set('1+2+3')
             for key in sequence:
                 panel.ppms_lockin_selection[key].set(True)
-                panel._ppms2_ordered_plot_rows()
-            expected = [(k, suffix) for k in sequence for suffix in (('', '_2', '_3') if k == 'zurich' else ('',))]
-            self.assertEqual(panel._ppms2_ordered_plot_rows(), expected)
-            first = sequence[0]
-            panel.ppms_lockin_selection[first].set(False)
-            panel._ppms2_ordered_plot_rows()
-            panel.ppms_lockin_selection[first].set(True)
-            panel._ppms2_ordered_plot_rows()
-            self.assertEqual(panel.ppms_selection_order, list(sequence[1:]) + [first])
+            orders = panel._ppms2_measured_orders()
+            self.assertEqual(set(orders[1]), {'830_a', '830_b', 'zurich'})
+            self.assertEqual(orders[2], ['zurich'])
+            self.assertEqual(orders[3], ['zurich'])
             panel.zurich_harmonic.set('1')
-            self.assertEqual([k for k, suffix in panel._ppms2_ordered_plot_rows()], list(sequence[1:]) + [first])
+            orders = panel._ppms2_measured_orders()
+            self.assertEqual(set(orders[1]), {'830_a', '830_b', 'zurich'})
+            self.assertEqual(orders[2], [])
+            self.assertEqual(orders[3], [])
 
     def test_temperature_shades_follow_values_not_acquisition_order(self):
         panel = PPMSPanelView.__new__(PPMSPanelView)
@@ -450,6 +447,7 @@ class TwoPanelTests(unittest.TestCase):
             panel.ppms_settings_panel = Mock()
             panel.ppms_plot_frame = Mock()
             panel.ppms_transport_plot_frames = {}
+            panel.ppms_harmonic_canvases = {}
         controller.connect_mfli.side_effect = connect
         controller.disconnect_mfli.side_effect = disconnect
         controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: controller.read_mfli(frequency)

@@ -34,20 +34,20 @@ class CurrentCallbacks(unittest.TestCase):
             for hb in (1, 2, 3):
                 obj = self.make_app()
                 obj.ppms_transport_status_var = Mock()
-                obj.ppms_instrument_controllers = {
+                obj.state.ppms_instrument_controllers = {
                     key: Mock(connected=True, lock=threading.RLock(), resource_name=f'GPIB0::{address}::INSTR')
                     for key, address in (('6221', 30), ('830_a', 8), ('830_b', 10))}
                 settings = validate_ppms_transport_scan_settings(1., 317.3, 50., ha, hb, ('830_a', '830_b'))
                 source_writes, lockin_writes = [], []
                 harmonics = {'830_a': 1, '830_b': 2}
-                obj._ppms_write_6221_checked = source_writes.append
+                obj.runner.write_6221_checked = source_writes.append
                 def write(key, command):
                     lockin_writes.append((key, command))
                     if command in ('ILIN 0', 'SYNC 0'):
                         return
                     self.assertTrue(command.startswith('HARM '))
                     harmonics[key] = int(command.split()[1])
-                obj._ppms_write_sr830_checked = write
+                obj.runner.write_sr830_checked = write
                 def query(key, command, count):
                     if command == 'HARM?':
                         return (harmonics[key],)
@@ -59,30 +59,30 @@ class CurrentCallbacks(unittest.TestCase):
                              'SOUR:WAVE:FREQ?': 317.3, 'FMOD?': 0, 'RSLP?': 1,
                              'OUTP?': 1, 'FREQ?': 317.3, 'LIAS?': 0, 'OUTP:LTE?': 0,
                              'OFLT?': 10}[command],)
-                obj._ppms_query_numbers = query
-                obj._configure_ppms_transport_scan(settings)
+                obj.runner.query_numbers = query
+                obj.runner.configure_transport_scan(settings)
                 self.assertEqual(harmonics, {'830_a': ha, '830_b': hb})
                 self.assertEqual(len(lockin_writes), 4 + int(ha != 1) + int(hb != 2))
                 lockin_writes.clear()
-                obj._configure_ppms_transport_scan(settings)
+                obj.runner.configure_transport_scan(settings)
                 self.assertEqual(lockin_writes, [
                     ('830_a', 'ILIN 0'), ('830_a', 'SYNC 0'),
                     ('830_b', 'ILIN 0'), ('830_b', 'SYNC 0')])
-                obj._ppms_query_numbers = lambda k, c, n: (0,) if c == 'HARM?' else query(k, c, n)
+                obj.runner.query_numbers = lambda k, c, n: (0,) if c == 'HARM?' else query(k, c, n)
                 source_writes.clear()
                 with self.assertRaisesRegex(RuntimeError, 'configuration readback mismatch'):
-                    obj._configure_ppms_transport_scan(settings)
+                    obj.runner.configure_transport_scan(settings)
                 self.assertNotIn('SOUR:WAVE:INIT', source_writes)
 
     def test_current_sweep_writes_each_actual_peak_and_rejects_stale_readback(self):
         obj = self.make_app()
         obj.ppms_transport_status_var = Mock()
-        obj.ppms_instrument_controllers = {
+        obj.state.ppms_instrument_controllers = {
             key: Mock(connected=True, lock=threading.RLock(), resource_name='GPIB0::8::INSTR')
             for key in ('6221', '830_a')}
         settings = validate_ppms_transport_scan_settings(1., 317.3, 50., 1, 2, ('830_a',))
         writes = []
-        obj._ppms_write_6221_checked = lambda command: writes.append(command)
+        obj.runner.write_6221_checked = lambda command: writes.append(command)
         def query(key, command, count):
             if command == 'SOUR:WAVE:AMPL?':
                 return (float(next(c.split()[-1] for c in reversed(writes) if c.startswith('SOUR:WAVE:AMPL '))),)
@@ -90,15 +90,15 @@ class CurrentCallbacks(unittest.TestCase):
                      'HARM?': 1, 'FMOD?': 0, 'RSLP?': 1, 'OUTP?': 1,
                      'FREQ?': 317.3, 'LIAS?': 0, '*ESR?': 0, 'OUTP:LTE?': 0,
                      'OFLT?': 10}[command],)   # OFLT?: read at every scan start (user, 2026-10-14)
-        obj._ppms_query_numbers = query
+        obj.runner.query_numbers = query
         for current in (1., 2., 5.):
             # Deliberately retain the old 1 mA peak in the input dictionary.
-            obj._configure_ppms_transport_scan(dict(settings, current_rms_ma=current))
+            obj.runner.configure_transport_scan(dict(settings, current_rms_ma=current))
             self.assertAlmostEqual(query('6221', 'SOUR:WAVE:AMPL?', 1)[0], current*1e-3*2**.5)
-        obj._ppms_query_numbers = lambda k, c, n: (settings['peak_a'],) if c == 'SOUR:WAVE:AMPL?' else query(k, c, n)
+        obj.runner.query_numbers = lambda k, c, n: (settings['peak_a'],) if c == 'SOUR:WAVE:AMPL?' else query(k, c, n)
         writes.clear()
         with self.assertRaisesRegex(RuntimeError, 'amplitude readback mismatch'):
-            obj._configure_ppms_transport_scan(dict(settings, current_rms_ma=5.))
+            obj.runner.configure_transport_scan(dict(settings, current_rms_ma=5.))
         self.assertNotIn('SOUR:WAVE:INIT', writes)
 
     def test_scanned_target_controls_disabled_by_mode(self):
@@ -138,7 +138,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj.state.ppms_instrument_controllers = {
             key: Mock(lock=threading.RLock()) for key in ('830_a', '830_b')}
         obj.runner.query_numbers = Mock(return_value=(13,))
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         scale = NONLOCAL_SR830_FULL_SCALE_V[13]
         for key in ('830_a', '830_b'):
             # Without an overload the range never widens; at/above 10 % it never narrows either.
@@ -153,7 +153,7 @@ class CurrentCallbacks(unittest.TestCase):
         controller.instrument.query.return_value = '12'
         obj.state.ppms_instrument_controllers = {'830_a': controller}
         obj.runner.query_numbers = Mock(side_effect=[(13,), (13,), (13,), (10,), (12,), (12,), (12,), (12,)])
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         # Under 1 % of the range (user, 2026-11-16; the rule was 10 %).
         small = .009 * NONLOCAL_SR830_FULL_SCALE_V[13]
         self.assertEqual(obj.runner._autorange_sr830('830_a', small, 0), 0.)
@@ -171,7 +171,7 @@ class CurrentCallbacks(unittest.TestCase):
         controller = Mock(lock=threading.RLock())
         obj.state.ppms_instrument_controllers = {'830_a': controller}
         obj.runner.query_numbers = Mock(return_value=(13,))
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         small = 1e-9
         for _ in range(5):
             obj.runner._autorange_sr830('830_a', small, 8)                    # reference unlocked
@@ -184,7 +184,7 @@ class CurrentCallbacks(unittest.TestCase):
         controller = Mock(lock=threading.RLock())
         obj.state.ppms_instrument_controllers = {'830_a': controller}
         obj.runner.query_numbers = Mock(return_value=(13,))
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         scale = NONLOCAL_SR830_FULL_SCALE_V[13]
         for magnitude in (.005 * scale, .005 * scale, .3 * scale, .005 * scale, .005 * scale):
             self.assertEqual(obj.runner._autorange_sr830('830_a', magnitude, 0), 0.)
@@ -198,7 +198,7 @@ class CurrentCallbacks(unittest.TestCase):
         controller = Mock(lock=threading.RLock())
         obj.state.ppms_instrument_controllers = {'830_a': controller}
         obj.runner.query_numbers = Mock(return_value=(13,))
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         scale = NONLOCAL_SR830_FULL_SCALE_V[13]
         for fraction in (.09, .02, .011):
             for _ in range(10):
@@ -216,7 +216,7 @@ class CurrentCallbacks(unittest.TestCase):
                     (13,), (10,),   # SENS?, OFLT?: overloaded -> one code up
                     (14,), (10,),   # still overloaded -> one more
                     (15,)])         # clear: no change
-                obj._set_connection_indicator = Mock()
+                obj.shell._set_connection_indicator = Mock()
                 self.assertEqual(obj.runner._autorange_sr830(key, 0., 4), 5.)
                 self.assertEqual(obj.runner._autorange_sr830(key, 0., 4), 5.)
                 self.assertEqual(obj.runner._autorange_sr830(key, 1e-5, 0), 0.)
@@ -255,7 +255,7 @@ class CurrentCallbacks(unittest.TestCase):
         for connected, fault, color in ((True, True, "#e53935"),
                                         (True, False, "#20b15a"),
                                         (False, False, "#9aa0a6")):
-            obj._set_connection_indicator("ppms_ref_830_a", connected, fault=fault)
+            obj.shell._set_connection_indicator("ppms_ref_830_a", connected, fault=fault)
             self.assertEqual(canvas.itemconfigure.call_args.kwargs["fill"], color)
 
     def test_scan_sampling_autoranges_in_both_directions(self):
@@ -281,7 +281,7 @@ class CurrentCallbacks(unittest.TestCase):
         controller.instrument.query.return_value = '14'
         obj.state.ppms_instrument_controllers = {'830_a': controller}
         obj.runner.query_numbers = Mock(side_effect=[(13,), (10,)])
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         obj.ppms_sr830_range_vars = {'830_a': Mock()}
         obj.runner._autorange_sr830('830_a', 0., 4, sink=obj)          # overload: 50 uV -> 100 uV
         self.assertEqual(obj.ppms_sr830_range_vars['830_a'].set.call_args.args[0], 'Autorange 100 uV')
@@ -295,20 +295,20 @@ class CurrentCallbacks(unittest.TestCase):
         instrument.query.return_value = "14"
         obj.state.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(instrument=instrument, lock=threading.RLock(), label="SR830-1")}
         obj.runner.query_numbers = Mock(side_effect=[(13,), (10,)])
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         obj.ppms_sr830_status_vars = {"830_a": Mock()}
         self.assertEqual(obj.runner._autorange_sr830("830_a", 1., 1, sink=obj), 5.)
         instrument.write.assert_called_once_with("SENS 14")
         instrument.query.assert_called_once_with("SENS?")
         self.assertIn("OVERLOAD", obj.ppms_sr830_status_vars["830_a"].set.call_args.args[0])
-        obj._set_connection_indicator.assert_called_with("ppms_ref_830_a", False, fault=True)
+        obj.shell._set_connection_indicator.assert_called_with("ppms_ref_830_a", False, fault=True)
 
     def test_overload_at_maximum_range_raises(self):
         obj = self.make_app()
         instrument = Mock()
         obj.state.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(instrument=instrument, lock=threading.RLock(), label="SR830-1")}
         obj.runner.query_numbers = Mock(side_effect=[(26,)])
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         obj.ppms_sr830_status_vars = {"830_a": Mock()}
         with self.assertRaisesRegex(PPMSLockinRangeError, "maximum sensitivity"):
             obj.runner._autorange_sr830("830_a", 1., 4, sink=obj)
@@ -320,7 +320,7 @@ class CurrentCallbacks(unittest.TestCase):
         instrument.query.return_value = "14"
         obj.state.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(instrument=instrument, lock=threading.RLock(), label="SR830-1")}
         obj.runner.query_numbers = Mock(side_effect=[(13,), (10,)])
-        obj._set_connection_indicator = Mock()
+        obj.shell._set_connection_indicator = Mock()
         obj.ppms_sr830_status_vars = {"830_a": Mock()}
         self.assertEqual(obj.runner._autorange_sr830("830_a", 20e-6, 1, enabled=False, sink=obj), 5.)
         instrument.write.assert_called_once_with("SENS 14")
@@ -346,9 +346,9 @@ class CurrentCallbacks(unittest.TestCase):
         obj.state.scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
         good = dict(sr830_8_x_v=1., sr830_8_y_v=0., sr830_8_frequency_hz=317.3, sr830_8_reference_valid=True, sr830_8_overload=False)
         bad = dict(good, sr830_8_x_v=100., sr830_8_overload=True)
-        obj._read_ppms_transport_sample = Mock(side_effect=[bad, good, bad, good])
+        obj.runner.read_transport_sample = Mock(side_effect=[bad, good, bad, good])
         with patch.object(runner_mod.time, 'monotonic', side_effect=[0., .2, .4, .6, 1.2, 1.2]):
-            result = obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
+            result = obj.runner.average_transport_sample(317.3, ("830_a",), 1.)
         self.assertEqual(result["sr830_8_x_v"], 1.)
         self.assertEqual(result["sample_count"], 2)
         self.assertEqual(result["overloaded_sample_count"], 2)
@@ -356,11 +356,11 @@ class CurrentCallbacks(unittest.TestCase):
     def test_range_switch_discards_old_samples(self):
         obj = self.make_app()
         obj.state.scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
-        obj._read_ppms_transport_sample = Mock(side_effect=[
+        obj.runner.read_transport_sample = Mock(side_effect=[
             {"range_settle_s": 5., "sr830_8_x_v": 999., "sr830_8_y_v": 999.},
             {"range_settle_s": 0., "sr830_8_x_v": 2., "sr830_8_y_v": 4.}])
         with patch.object(runner_mod.time, "monotonic", side_effect=[0., 0., 5., 7., 7.]):
-            result = obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
+            result = obj.runner.average_transport_sample(317.3, ("830_a",), 1.)
         self.assertEqual(result["sample_count"], 1)
         self.assertEqual(result["sr830_8_x_v"], 2.)
         obj.state.scan_stop_event.wait.assert_called_once_with(5.)
@@ -375,9 +375,9 @@ class CurrentCallbacks(unittest.TestCase):
                 sample.update({f"sr830_{address}_x_v": value, f"sr830_{address}_y_v": value*2,
                                f"sr830_{address}_frequency_hz": 317.3, f"sr830_{address}_reference_valid": True})
             samples.append(sample)
-        obj._read_ppms_transport_sample = Mock(side_effect=samples)
+        obj.runner.read_transport_sample = Mock(side_effect=samples)
         with patch.object(runner_mod.time, "monotonic", side_effect=(0., .4, 1.2, 1.2)):
-            result = obj._average_ppms_transport_sample(317.3, ("830_a", "830_b"), 1.)
+            result = obj.runner.average_transport_sample(317.3, ("830_a", "830_b"), 1.)
         self.assertEqual(result["sample_count"], 2)
         for address in (8, 10):
             self.assertEqual(result[f"sr830_{address}_x_v"], 2.)
@@ -387,14 +387,14 @@ class CurrentCallbacks(unittest.TestCase):
     def test_window_cancel_or_bad_reference_does_not_return_partial_point(self):
         obj = self.make_app()
         obj.state.scan_stop_event.set()
-        obj._read_ppms_transport_sample = Mock()
+        obj.runner.read_transport_sample = Mock()
         with self.assertRaises(PPMSScanCancelled):
-            obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
-        obj._read_ppms_transport_sample.assert_not_called()
+            obj.runner.average_transport_sample(317.3, ("830_a",), 1.)
+        obj.runner.read_transport_sample.assert_not_called()
         obj.state.scan_stop_event.clear()
-        obj._read_ppms_transport_sample.return_value = {"sr830_8_reference_valid": False}
+        obj.runner.read_transport_sample.return_value = {"sr830_8_reference_valid": False}
         with self.assertRaisesRegex(RuntimeError, "reference unlocked"):
-            obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
+            obj.runner.average_transport_sample(317.3, ("830_a",), 1.)
 
     def test_pressure_and_helium_queries_are_read_only(self):
         obj = self.make_app()
@@ -510,13 +510,13 @@ class CurrentCallbacks(unittest.TestCase):
 
     def shutdown(self, state):
         obj = self.make_app()
-        obj.ppms_instrument_controllers = {}
+        obj.state.ppms_instrument_controllers = {}
         for key in ("6221", "2400"):
             controller = Mock()
             controller.lock = threading.RLock()
             controller.instrument = Mock() if key == "6221" else None
-            obj.ppms_instrument_controllers[key] = controller
-        obj._ppms_query_numbers = Mock(return_value=(state,))
+            obj.state.ppms_instrument_controllers[key] = controller
+        obj.runner.query_numbers = Mock(return_value=(state,))
         # The error dialog opens from root.after (review, 2026-10-18).
         obj.root = types.SimpleNamespace(after=lambda _ms, show: show())
         obj.ppms_sources_off()
@@ -530,7 +530,7 @@ class CurrentCallbacks(unittest.TestCase):
             else:
                 self.future.set_result(result)
             self.assertEqual(popup.call_count, int(state != 0))
-        obj.ppms_instrument_controllers["6221"].safe_output_off.assert_called_once()
+        obj.state.ppms_instrument_controllers["6221"].safe_output_off.assert_called_once()
         return obj
 
     def test_shutdown_confirms_only_connected_source(self):
@@ -545,53 +545,53 @@ class CurrentCallbacks(unittest.TestCase):
         obj = self.make_app()
         source = Mock()
         source.lock = threading.RLock()
-        obj.ppms_instrument_controllers = {"6221": source}
+        obj.state.ppms_instrument_controllers = {"6221": source}
         obj.state.scan_stop_event.set()
         with self.assertRaises(PPMSScanCancelled):
-            obj._ppms_write_6221_checked("SOUR:WAVE:INIT")
+            obj.runner.write_6221_checked("SOUR:WAVE:INIT")
         source.instrument.write.assert_not_called()
 
     def test_zero_current_skips_sr830_range_writes(self):
         obj = self.make_app()
         controller = Mock(lock=threading.RLock())
         controller.instrument.query.return_value = '11'
-        obj.ppms_instrument_controllers = {'830_a': controller}
-        obj._ppms_query_numbers = Mock(return_value=(10,))
-        obj._set_connection_indicator = Mock()
+        obj.state.ppms_instrument_controllers = {'830_a': controller}
+        obj.runner.query_numbers = Mock(return_value=(10,))
+        obj.shell._set_connection_indicator = Mock()
         # Without an overload nothing is written while the excitation is off ...
-        self.assertEqual(obj._ppms_autorange_sr830('830_a', 0., 0, enabled=False), 0.)
+        self.assertEqual(obj.runner._autorange_sr830('830_a', 0., 0, enabled=False), 0.)
         controller.instrument.write.assert_not_called()
         # ... but an overload still ranges up one code.
-        self.assertEqual(obj._ppms_autorange_sr830('830_a', 0., 7, enabled=False), 5.)
+        self.assertEqual(obj.runner._autorange_sr830('830_a', 0., 7, enabled=False), 5.)
         controller.instrument.write.assert_called_once_with('SENS 11')
 
     def test_live_current_readback_states(self):
         obj = self.make_app()
         source = Mock()
         source.lock = threading.RLock()
-        obj.ppms_instrument_controllers = {"6221": source}
+        obj.state.ppms_instrument_controllers = {"6221": source}
         source.instrument = None
         self.assertEqual(obj._read_ppms_current_display(), "Not connected")
         source.instrument = Mock()
-        obj._ppms_query_numbers = Mock(return_value=(0,))
+        obj.runner.query_numbers = Mock(return_value=(0,))
         self.assertEqual(obj._read_ppms_current_display(), "OFF / 0 mA")
-        self.assertTrue(obj.ppms_6221_zero_output)
-        obj._ppms_query_numbers.assert_called_once_with("6221", "OUTP?", 1)
-        obj._ppms_query_numbers.side_effect = [(1,), (0.001414213562373095,), (317.3,), (8,)]
+        self.assertTrue(obj.state.k6221_zero_output)
+        obj.runner.query_numbers.assert_called_once_with("6221", "OUTP?", 1)
+        obj.runner.query_numbers.side_effect = [(1,), (0.001414213562373095,), (317.3,), (8,)]
         text = obj._read_ppms_current_display()
         self.assertIn("ON / sine setpoint 1 mA RMS / 317.3 Hz", text)
-        self.assertFalse(obj.ppms_6221_zero_output)
-        obj._ppms_query_numbers.side_effect = [(1,), (0.,), (317.3,), (0,)]
+        self.assertFalse(obj.state.k6221_zero_output)
+        obj.runner.query_numbers.side_effect = [(1,), (0.,), (317.3,), (0,)]
         obj._read_ppms_current_display()
-        self.assertTrue(obj.ppms_6221_zero_output)
+        self.assertTrue(obj.state.k6221_zero_output)
         self.assertIn("Compliance", text)
         self.assertTrue(text.startswith("⚠ Compliance hit"))
-        obj._ppms_query_numbers.side_effect = [(1,), (0.001414213562373095,), (317.3,), (0,)]
+        obj.runner.query_numbers.side_effect = [(1,), (0.001414213562373095,), (317.3,), (0,)]
         self.assertNotIn("Compliance hit", obj._read_ppms_current_display())
-        obj.ppms_last_current_trip = True
-        obj._ppms_query_numbers.side_effect = [(0,)]
+        obj.state.last_current_trip = True
+        obj.runner.query_numbers.side_effect = [(0,)]
         self.assertEqual(obj._read_ppms_current_display(), "OFF / 0 mA; compliance hit in the last scan")
-        obj._ppms_query_numbers.side_effect = TimeoutError("timeout")
+        obj.runner.query_numbers.side_effect = TimeoutError("timeout")
         self.assertTrue(obj._read_ppms_current_display().startswith("Unknown"))
 
 
