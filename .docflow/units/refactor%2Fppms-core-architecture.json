@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T08:57:28.764Z",
+  "updatedAt": "2026-11-28T09:00:09.382Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks",
+    "current": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks",
     "next": "",
     "history": [
       {
@@ -58,6 +58,10 @@
       {
         "at": "2026-11-28T16:57:12+08:00",
         "text": "Align remaining PPMS test attributes with state and runner"
+      },
+      {
+        "at": "2026-11-28T16:59:57+08:00",
+        "text": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks"
       }
     ],
     "commits": [
@@ -138,6 +142,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T16:57:12+08:00",
         "message": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks"
+      },
+      {
+        "sha": "547325dde5cc5ac93db0a170aa8411292e0d4f7a",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T16:59:57+08:00",
+        "message": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks"
       }
     ],
     "pr": {
