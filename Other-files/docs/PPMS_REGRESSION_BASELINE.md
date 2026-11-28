@@ -106,3 +106,24 @@ Base: `Transport-PPMS@c0c26345c9a55fa8ef576f1a3952b8190d3c3c8f`; original full-a
 - **GitHub Actions CI (`Jiaze-Li/Transport-all`, PR #2)**:
   - `829f29f2294245308ee7c26d0f88fd4b3adeba80`: `PPMS tests` ([run 46011810730](https://github.com/Jiaze-Li/Transport-all/actions/runs/46011810730)) — **success** (`linux` + `windows` full 51-module suite, `ppms_checks.py`, wheel build/install).
   - Final PR #2 checks: [PR #2 checks](https://github.com/Jiaze-Li/Transport-all/pull/2/checks) (triggered on push of this commit).
+
+## A2-3 targeted fix (follow-up to T1)
+
+Status: **Implemented in PR #3; awaiting GitHub Actions CI verification on pushed HEAD** (T1 evidence above preserved as pre-fix baseline).
+
+### Root cause and minimal fix
+- **Production changes (`transport/ppms/app.py`, `tools/ppms_host.py`)**:
+  - `PPMSPanel.safe_close_ppms` (`transport/ppms/app.py`) no longer submits `zurich_controller.disconnect_mfli` to `zurich_executor` before `super().safe_close_ppms()`. Instead, it sets `zurich_closed = True`, cancels `zurich_after_id`, shuts down `zurich_executor` (`wait=False, cancel_futures=True`) to stop new/queued Zurich work, and delegates to `super().safe_close_ppms()`.
+  - `CombinedControlApp.safe_close_ppms` (`transport/ppms/app.py`, synced to `tools/ppms_host.py`) waits for any in-flight `zurich_executor` task (`zurich_executor.shutdown(wait=True, cancel_futures=True)`) and then disconnects `zurich_controller.disconnect_mfli()` inside `cleanup(after_worker)` alongside `ppms_instrument_controllers` and `ppms_environment_controller`, each isolated in its own `try ... except BaseException` block. This prevents an already-started connect/configure task on `zurich_executor` from completing after `cleanup()` and leaving a live MFLI connection or `LABONE::<device>` lease behind.
+  - Because `start_ppms_field_scan` calls `_ppms_close_handoff().begin()` before `ppms_executor.submit(...)`, both active scans and queued (submitted-but-not-yet-started) scans across the 5 `ppms_executor` workers defer `cleanup(True)` until `ScanCloseHandoff.end()`, keeping `mfli_daq` and `LABONE::<device>` intact until `_ppms_scan_with_final_field` completes output zeroing, any required field zeroing, and run finalization. Idle close runs `cleanup(False)` immediately.
+- **Generated-source workflow**:
+  - `CombinedControlApp.safe_close_ppms` is mirrored in `tools/ppms_host.py`, and the `PPMSPanel.safe_close_ppms` update is represented via `REPLACE` in `tools/ppms_host.py` so `tools/extract_app.py` reproduces the full fix without modifying `main` or extending the generator.
+
+### Regression tests (`Other-files/test_ppms_zurich_close_order.py`)
+- Removed `@unittest.expectedFailure` from `test_mfli_disconnect_waits_for_scan_close_handoff` and replaced the pre-fix early-disconnect characterization in `test_active_scan_close_defers_mfli_disconnect_and_lease_until_handoff` with assertions verifying `worker_errors == []`, `LABONE::DEV4414` and `mfli_daq` remain held during the scan, and `worker:finished` precedes `disconnect:mfli`, `disconnect:6221`, and `disconnect:ppms_env`.
+- Strengthened `test_scan_cancellation_and_exception_still_run_handoff_cleanup` to assert `disconnect:mfli` ordering and lease release, and added focused tests for queued scan close with 5 saturated `ppms_executor` workers, repeated `safe_close_ppms()` calls, isolated instrument cleanup failures, and an in-flight `zurich_executor` connect task racing with `safe_close_ppms()`.
+
+### Remaining limitations & D1 readiness
+- Offline mock/fake verification only (no physical instruments or vendor/lab network connections).
+- Formal suite runs on GitHub Actions (`linux` + `windows`); no local Mac test execution.
+- Once GitHub Actions `PPMS tests` is green on final HEAD and PR #3 is accepted, A2-3 is resolved and D1 modularization is unblocked.
