@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T08:14:06.904Z",
+  "updatedAt": "2026-11-28T08:21:47.086Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix remaining PPMS test imports, mock targets, and UI width guard",
+    "current": "Fix Zurich autorange method decorator and remaining test harness mocks",
     "next": "",
     "history": [
       {
@@ -38,6 +38,10 @@
       {
         "at": "2026-11-28T16:13:51+08:00",
         "text": "Align PPMS state/runner compatibility and remaining test imports"
+      },
+      {
+        "at": "2026-11-28T16:21:32+08:00",
+        "text": "Fix remaining PPMS test imports, mock targets, and UI width guard"
       }
     ],
     "commits": [
@@ -88,6 +92,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T16:13:51+08:00",
         "message": "Fix remaining PPMS test imports, mock targets, and UI width guard"
+      },
+      {
+        "sha": "8afb1feb9286f16126d4a6691988c31591cc5608",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T16:21:32+08:00",
+        "message": "Fix Zurich autorange method decorator and remaining test harness mocks"
       }
     ],
     "pr": {
