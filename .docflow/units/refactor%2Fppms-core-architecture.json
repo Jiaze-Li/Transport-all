@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T10:14:57.462Z",
+  "updatedAt": "2026-11-28T10:18:43.296Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow",
+    "current": "Document Batch 2 (PR #6) module map, lifecycle contracts, and CI evidence",
     "next": "",
     "history": [
       {
@@ -110,6 +110,10 @@
       {
         "at": "2026-11-28T18:14:38+08:00",
         "text": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)"
+      },
+      {
+        "at": "2026-11-28T18:18:30+08:00",
+        "text": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow"
       }
     ],
     "commits": [
@@ -268,6 +272,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T18:14:38+08:00",
         "message": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow"
+      },
+      {
+        "sha": "65968fc5f817f771043f8ea78d404444bb9540d8",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T18:18:30+08:00",
+        "message": "Document Batch 2 (PR #6) module map, lifecycle contracts, and CI evidence"
       }
     ],
     "pr": {
