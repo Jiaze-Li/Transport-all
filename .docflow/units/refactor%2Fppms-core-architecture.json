@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T05:57:26.108Z",
+  "updatedAt": "2026-11-28T07:29:56.377Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,15 +8,46 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "docs(ppms): open D2 core architecture implementation record",
+    "current": "test(ppms): migrate test suite and add architecture contract tests",
     "next": "",
-    "history": [],
+    "history": [
+      {
+        "at": "2026-11-28T15:29:23+08:00",
+        "text": "docs(ppms): open D2 core architecture implementation record"
+      },
+      {
+        "at": "2026-11-28T15:29:28+08:00",
+        "text": "refactor(ppms): extract Tk-independent engine and split state, UI, and shell"
+      },
+      {
+        "at": "2026-11-28T15:29:33+08:00",
+        "text": "refactor(ppms): remove legacy aliases, non-local Zurich methods, and retired tools"
+      }
+    ],
     "commits": [
       {
         "sha": "83b1027d9aa464ca7645661f9656d13867fb4ef2",
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T13:56:46+08:00",
         "message": "docs(ppms): open D2 core architecture implementation record"
+      },
+      {
+        "sha": "6058dc9afc930f6ac9fdf8a60717081b98aaf04e",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T15:29:23+08:00",
+        "message": "refactor(ppms): extract Tk-independent engine and split state, UI, and shell"
+      },
+      {
+        "sha": "4891d6c35bb3916a33bbf612023db37632bf9602",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T15:29:28+08:00",
+        "message": "refactor(ppms): remove legacy aliases, non-local Zurich methods, and retired tools"
+      },
+      {
+        "sha": "dbbf2ae2d2a736376068cfee6b10eb380fd10cc0",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T15:29:33+08:00",
+        "message": "test(ppms): migrate test suite and add architecture contract tests"
       }
     ],
     "pr": {
