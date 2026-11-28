@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:30:47.639Z",
+  "updatedAt": "2026-11-28T02:37:18.785Z",
   "task": {
     "id": "design/ppms-modular-architecture",
     "branch": "design/ppms-modular-architecture",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T10:22:37+08:00",
     "status": "In progress",
     "current": "docs(ppms): complete D1 modular architecture design proposal",
-    "next": "Review D1 modular architecture design in PR #4 and decide Q1-Q3",
+    "next": "Review converged D1 architecture in PR #4 and authorize Ready or M0 start",
     "history": [
       {
         "at": "2026-11-28T10:30:31+08:00",
