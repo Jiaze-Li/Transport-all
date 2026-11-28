@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T13:34:39.293Z",
+  "updatedAt": "2026-11-28T13:58:19.556Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "fix(ppms): drain other in-flight hardware tasks before the deferred close disconnects",
+    "current": "fix(ppms): track in-flight tasks on the state instead of subclassing the executor",
     "next": "Bot review budget for PR #6 is nearly spent (PR too large to finish a full bot pass); decide whether to split the PR or accept it after CI and manual review",
     "history": [
       {
@@ -142,6 +142,10 @@
       {
         "at": "2026-11-28T21:34:22+08:00",
         "text": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README"
+      },
+      {
+        "at": "2026-11-28T21:58:00+08:00",
+        "text": "fix(ppms): drain other in-flight hardware tasks before the deferred close disconnects"
       }
     ],
     "commits": [
@@ -348,6 +352,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T21:34:22+08:00",
         "message": "fix(ppms): drain other in-flight hardware tasks before the deferred close disconnects"
+      },
+      {
+        "sha": "fe371a82ca3e72819c53ef9df31f76e4f23f45bc",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T21:58:00+08:00",
+        "message": "fix(ppms): track in-flight tasks on the state instead of subclassing the executor"
       }
     ],
     "pr": {
