@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T11:47:48.690Z",
+  "updatedAt": "2026-11-28T11:49:44.724Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "test(ppms): fix GPIB address and immediate executor in contract tests",
+    "current": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test",
     "next": "Review and accept Draft PR #6 after CI verification",
     "history": [
       {
@@ -126,6 +126,10 @@
       {
         "at": "2026-11-28T19:47:33+08:00",
         "text": "test(ppms): align contract and display-xy test mocks with cleaned modules"
+      },
+      {
+        "at": "2026-11-28T19:49:30+08:00",
+        "text": "test(ppms): fix GPIB address and immediate executor in contract tests"
       }
     ],
     "commits": [
@@ -308,6 +312,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T19:47:33+08:00",
         "message": "test(ppms): fix GPIB address and immediate executor in contract tests"
+      },
+      {
+        "sha": "f161391fca746c49046e1886ee9d1b7dbe1dbf90",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T19:49:30+08:00",
+        "message": "test(ppms): use PPMS_QDINSTRUMENT_BACKEND constant in queued-scan contract test"
       }
     ],
     "pr": {
