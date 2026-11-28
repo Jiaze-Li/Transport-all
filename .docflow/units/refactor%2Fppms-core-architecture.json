@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T08:53:44.246Z",
+  "updatedAt": "2026-11-28T08:57:25.444Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Align remaining PPMS test attributes with state and runner",
+    "current": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks",
     "next": "",
     "history": [
       {
@@ -54,6 +54,10 @@
       {
         "at": "2026-11-28T16:53:28+08:00",
         "text": "Finish migrating PPMS test harness mocks and state references"
+      },
+      {
+        "at": "2026-11-28T16:57:12+08:00",
+        "text": "Align remaining PPMS test attributes with state and runner"
       }
     ],
     "commits": [
@@ -128,6 +132,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T16:53:28+08:00",
         "message": "Align remaining PPMS test attributes with state and runner"
+      },
+      {
+        "sha": "9e4cd181aa8d0b09653ae76685ca98d12105baa1",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T16:57:12+08:00",
+        "message": "Restore scan target widget helper, pass fallback SR830 TC, and fix remaining test mocks"
       }
     ],
     "pr": {
