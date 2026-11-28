@@ -160,7 +160,7 @@ class NestedTests(unittest.TestCase):
             "draw_nonlocal_series",
             side_effect=lambda *args, **kwargs: captured.append(args),
         ):
-            for axis, expected, count in (("field", 10, 2), ("temperature", 300, 2), ("angle", 20, 2)):
+            for axis, expected, count in (("field", 10, 2), ("temperature", 300, 1), ("angle", 20, 2)):
                 obj.ppms_plot_axis = axis
                 obj._redraw_ppms_transport_plot()
                 series = captured[-1][1]

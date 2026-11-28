@@ -413,7 +413,7 @@ class Rig:
         self.test.assertEqual(self.source.output, 0)
         self.test.assertEqual(self.page.ppms_transport_status_var.get(),
                               "Transport acquisition: 6221 output OFF (read back)")
-        self.test.assertEqual(self.page.ppms_scan_outputs, {"6221": "zeroed"})
+        self.test.assertEqual(self.page.state.scan_outputs, {"6221": "zeroed"})
         self.test.assertIn(("log", "PPMS scan end: 6221 zeroed"), self.log)
 
 
