@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:10:33.716Z",
+  "updatedAt": "2026-11-28T09:17:42.332Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Finish migrating remaining PPMS test harness attributes and assertions",
+    "current": "Update MacroRunner, ScanRequest, and remaining PPMS test harness mocks",
     "next": "",
     "history": [
       {
@@ -70,6 +70,10 @@
       {
         "at": "2026-11-28T17:10:17+08:00",
         "text": "Update remaining PPMS test harness mocks and on_scan_finished calls"
+      },
+      {
+        "at": "2026-11-28T17:17:27+08:00",
+        "text": "Finish migrating remaining PPMS test harness attributes and assertions"
       }
     ],
     "commits": [
@@ -168,6 +172,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:10:17+08:00",
         "message": "Finish migrating remaining PPMS test harness attributes and assertions"
+      },
+      {
+        "sha": "7dd82dd41cfca8ee7e0c963b18ab7eed82c70353",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:17:27+08:00",
+        "message": "Update MacroRunner, ScanRequest, and remaining PPMS test harness mocks"
       }
     ],
     "pr": {
