@@ -31,46 +31,47 @@ PPMS_DEFAULT_RESOURCES = {
 PPMS_CLOSE_DRAIN_TIMEOUT_S = 30.0
 
 
-class TrackedExecutor(ThreadPoolExecutor):
-    """ThreadPoolExecutor that can drain every task except the caller's own.
+class InflightTasks:
+    """Tracks the futures submitted through one executor.
 
-    The deferred close runs on a worker of this executor, so it cannot
+    The deferred close runs on a worker of that executor, so it cannot
     ``shutdown(wait=True)`` (that would join itself).  It cancels queued tasks
-    and waits for the other running ones instead.
+    and waits for the other running ones instead.  Tracking is installed on
+    the executor instance, so a replaced or patched executor class still works.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._tracked_lock = threading.Lock()
+    def __init__(self, executor) -> None:
+        self._lock = threading.Lock()
         self._tracked: dict = {}
+        original = executor.submit
 
-    def submit(self, fn, /, *args, **kwargs):
-        holder: dict = {}
+        def submit(fn, /, *args, **kwargs):
+            holder: dict = {}
 
-        def run():
-            holder["thread"] = threading.get_ident()
-            return fn(*args, **kwargs)
+            def run():
+                holder["thread"] = threading.get_ident()
+                return fn(*args, **kwargs)
 
-        future = super().submit(run)
-        with self._tracked_lock:
-            self._tracked[future] = holder
-        future.add_done_callback(self._forget)
-        return future
+            future = original(run)
+            with self._lock:
+                self._tracked[future] = holder
+            future.add_done_callback(self._forget)
+            return future
+
+        executor.submit = submit
 
     def _forget(self, future) -> None:
-        with self._tracked_lock:
+        with self._lock:
             self._tracked.pop(future, None)
 
     def drain_others(self, timeout: float) -> list[str]:
         """Cancel queued tasks, wait for running ones; return problems."""
         me = threading.get_ident()
-        with self._tracked_lock:
+        with self._lock:
             items = list(self._tracked.items())
         pending = []
         for future, holder in items:
-            if holder.get("thread") == me:
-                continue
-            if future.cancel():
+            if holder.get("thread") == me or future.cancel():
                 continue
             pending.append(future)
         if not pending:
@@ -96,9 +97,10 @@ class PPMSAppState:
         if logger is None:
             logger = lambda _msg: None
         self.logger = logger
-        self.ppms_executor = TrackedExecutor(
+        self.ppms_executor = ThreadPoolExecutor(
             max_workers=5, thread_name_prefix="ppms"
         )
+        self.ppms_inflight = InflightTasks(self.ppms_executor)
         self.zurich_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="ppms-zurich"
         )
@@ -210,7 +212,7 @@ class PPMSAppState:
                 # Deferred close: the scan worker is one of several workers;
                 # let the others (reads, motor, macro, connects) finish first.
                 errors.extend(
-                    self.ppms_executor.drain_others(PPMS_CLOSE_DRAIN_TIMEOUT_S)
+                    self.ppms_inflight.drain_others(PPMS_CLOSE_DRAIN_TIMEOUT_S)
                 )
             if (
                 scan_was_running
