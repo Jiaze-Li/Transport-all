@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:43:03.237Z",
+  "updatedAt": "2026-11-28T09:55:44.247Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix remaining 7 PPMS test harnesses (ppms_zero_persist_button, mock targets, connected flag)",
+    "current": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s",
     "next": "",
     "history": [
       {
@@ -86,6 +86,10 @@
       {
         "at": "2026-11-28T17:42:46+08:00",
         "text": "Guard optional safety_var and finish migrating remaining 7 test files"
+      },
+      {
+        "at": "2026-11-28T17:55:32+08:00",
+        "text": "Fix remaining 7 PPMS test harnesses (ppms_zero_persist_button, mock targets, connected flag)"
       }
     ],
     "commits": [
@@ -208,6 +212,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:42:46+08:00",
         "message": "Fix remaining 7 PPMS test harnesses (ppms_zero_persist_button, mock targets, connected flag)"
+      },
+      {
+        "sha": "4d3f379391e9a110ff09cb2f580104f229d3d89f",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:55:32+08:00",
+        "message": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s"
       }
     ],
     "pr": {
