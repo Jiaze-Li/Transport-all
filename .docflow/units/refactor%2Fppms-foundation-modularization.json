@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:59:14.166Z",
+  "updatedAt": "2026-11-28T02:59:36.615Z",
   "task": {
     "id": "refactor/ppms-foundation-modularization",
     "branch": "refactor/ppms-foundation-modularization",
@@ -19,7 +19,14 @@
         "message": "docs(ppms): open approved D2 foundation implementation record"
       }
     ],
-    "pr": null,
+    "pr": {
+      "number": 5,
+      "state": "open",
+      "title": "refactor(ppms): foundation modularization (D2 + M0 + M1 + independent M2)",
+      "url": "https://github.com/Jiaze-Li/Transport-all/pull/5",
+      "merged": false,
+      "updatedAt": "2026-11-28T02:59:25Z"
+    },
     "completed": null,
     "outcome": null
   }
