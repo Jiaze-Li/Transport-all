@@ -129,6 +129,9 @@ class MacroRunner:
                 return
 
             def poll_scan() -> None:
+                if self.is_closed() or self.macro_stop_event.is_set():
+                    self._finish("Macro stopped; settings already sent are kept.")
+                    return
                 if self._is_scan_running_cb and self._is_scan_running_cb():
                     if self._schedule_poll is not None:
                         self._schedule_poll(100, poll_scan)

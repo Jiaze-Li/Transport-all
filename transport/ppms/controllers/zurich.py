@@ -40,14 +40,9 @@ from transport.ppms.controllers.sr830 import (
     LOCKIN_UPRANGE_FRACTION,
     NONLOCAL_LOCKIN_FILTER_ORDER,
     NONLOCAL_LOCKIN_TIME_CONSTANT_S,
-    NONLOCAL_SR830_FULL_SCALE_V,
-    SR830_DISPLAY_XY_COMMANDS,
-    SR830_TIME_CONSTANTS_S,
-    show_sr830_x_and_y,
 )
 from transport.ppms.controllers.visa import (
     acquire_instrument_lease,
-    acquire_shared_visa_manager,
     release_instrument_lease,
     release_shared_visa_manager,
 )

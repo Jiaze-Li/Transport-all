@@ -50,7 +50,6 @@ class PPMSAppState:
         self.close_handoff = ScanCloseHandoff()
 
         self.closed = False
-        self.zurich_closed = False
 
         self.ppms_instrument_controllers: dict[str, SafeVisaIdentityController] = {
             "6221": SafeVisaIdentityController(
@@ -135,7 +134,6 @@ class PPMSAppState:
         if self.closed:
             return
         self.closed = True
-        self.zurich_closed = True
         scan_was_running = self.scan_running
         self.scan_stop_event.set()
         self.macro_stop_event.set()
@@ -200,10 +198,8 @@ class PPMSAppState:
                     except BaseException:
                         pass
 
-        deferred = scan_was_running and self.close_handoff.defer(
-            lambda: cleanup(True)
-        )
-        self.ppms_executor.shutdown(wait=False, cancel_futures=not deferred)
+        deferred = self.close_handoff.defer(lambda: cleanup(True))
+        self.ppms_executor.shutdown(wait=not deferred, cancel_futures=not deferred)
         if not deferred:
             cleanup(False)
 

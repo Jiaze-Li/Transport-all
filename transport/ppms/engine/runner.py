@@ -49,7 +49,6 @@ from transport.ppms.engine.planning import (
     PPMS_PLOT_AXIS_COLUMNS,
     PPMS_SCAN_PLOT_AXES,
     PPMS_SR830_HARMONIC_SETTING_KEYS,
-    PPMS_SR830_KEYS,
     PPMS_SR830_LABELS,
     ppms_lockin_settle_s,
     ppms_lockin_settle_text,
@@ -903,7 +902,6 @@ class PPMSScanRunner:
         for attempt in range(4):
             if (
                 self.state.closed
-                or self.state.zurich_closed
                 or (scanning and self.state.scan_stop_event.is_set())
             ):
                 raise PPMSScanCancelled("Zurich autorange wait cancelled")
@@ -937,7 +935,6 @@ class PPMSScanRunner:
             while time.monotonic() < deadline:
                 if (
                     self.state.closed
-                    or self.state.zurich_closed
                     or (scanning and self.state.scan_stop_event.is_set())
                 ):
                     raise PPMSScanCancelled("Zurich autorange wait cancelled")
@@ -1176,7 +1173,7 @@ class PPMSScanRunner:
         deadline = time.monotonic() + float(timeout_s)
         in_a_row = 0
         while True:
-            if stop.is_set() or self.state.closed or self.state.zurich_closed:
+            if stop.is_set() or self.state.closed:
                 raise PPMSScanCancelled(
                     "Stopped as requested while waiting for the Zurich reference"
                 )

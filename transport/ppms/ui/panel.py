@@ -13,7 +13,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 
-from transport.core.scan_lifecycle import scan_end_outputs_text
 from transport.core.scan_sequences import ppms_scan_axis
 from transport.ppms.controllers.environment import (
     PPMS_DEFAULT_BACKEND,
@@ -48,7 +47,6 @@ from transport.ppms.engine.macro import MacroRunner
 from transport.ppms.engine.motor import PPMSMotorDebug, PPMSMotorService
 from transport.ppms.engine.planning import (
     LOCKIN_SETTLE_TAUS,
-    PPMS_FIELD_COMMANDING_MODES,
     PPMS_HARMONIC_CHOICES,
     PPMS_HARMONIC_LABELS,
     PPMS_HARMONIC_MODE_ORDERS,
@@ -80,13 +78,12 @@ from transport.ppms.engine.runner import (
     PPMS_TEMPERATURE_ACQUISITION_S,
     PPMS_TEMPERATURE_DELAY_S,
     PPMS_TRANSPORT_COMPLIANCE_V,
-    PPMS_TRANSPORT_CURRENT_RMS_MA,
     PPMS_TRANSPORT_FREQUENCY_HZ,
-    PPMS_TRANSPORT_HARMONIC,
     PPMS_ZURICH_TIME_CONSTANT_S,
     PPMSScanRunner,
     ScanRequest,
     format_scan_duration,
+    format_sr830_full_scale,
     format_voltage_range,
     ppms_field_is_ready,
     ppms_sr830_address,
@@ -108,7 +105,6 @@ from transport.ppms.ui.dialogs import (
 )
 from transport.ppms.ui.theme import (
     PAIR_FLIP_LIMIT,
-    PPMS_HARMONIC_COLORS,
     PPMS_METER_COLORS,
     PPMS_PLOT_ROW_MIN_HEIGHT_PX,
     THEME_COLORS,
@@ -178,6 +174,7 @@ class PPMSPanelView:
         self.ppms_macro_editor = None
         self.ppms_macro_status = None
         self.ppms_macro_edit_buttons: list[ttk.Button] = []
+        self._macro_scan_pending = False
         self.ppms_macro_text = (
             "REM Example: run one transport scan with the main-window settings\n"
             "SCAN\n"
@@ -2092,7 +2089,7 @@ class PPMSPanelView:
                 commands,
                 self,
                 start_scan=self._macro_start_scan,
-                is_scan_running=lambda: self.state.scan_running,
+                is_scan_running=lambda: self.state.scan_running or self._macro_scan_pending,
                 schedule_poll=self.root.after,
             )
 
@@ -2129,6 +2126,7 @@ class PPMSPanelView:
 
     def _macro_start_scan(self) -> bool:
         self.start_ppms_field_scan()
+        self._macro_scan_pending = self.state.scan_running
         return self.state.scan_running
 
     def on_macro_status(self, text: str) -> None:
@@ -3235,7 +3233,7 @@ class PPMSPanelView:
 
     def _apply_ppms2_zurich_harmonic(self) -> None:
         if (
-            self.state.zurich_closed
+            self.state.closed
             or self.shell.closing
             or self.state.scan_running
         ):
@@ -3250,7 +3248,7 @@ class PPMSPanelView:
     def connect_ppms2_zurich(self, *, apply_only: bool = False) -> None:
         if (
             self.state.zurich_busy
-            or self.state.zurich_closed
+            or self.state.closed
             or self.state.scan_running
         ):
             return
@@ -3331,7 +3329,7 @@ class PPMSPanelView:
             return
 
         def finished():
-            if self.state.zurich_closed or self.shell.closing:
+            if self.state.closed or self.shell.closing:
                 return
             try:
                 future.result()
@@ -3381,7 +3379,7 @@ class PPMSPanelView:
     def disconnect_ppms2_zurich(self) -> None:
         if (
             self.state.zurich_busy
-            or self.state.zurich_closed
+            or self.state.closed
             or self.state.scan_running
         ):
             return
@@ -3391,7 +3389,7 @@ class PPMSPanelView:
         )
 
         def finished():
-            if self.state.zurich_closed or self.shell.closing:
+            if self.state.closed or self.shell.closing:
                 return
             try:
                 future.result()
@@ -3426,7 +3424,7 @@ class PPMSPanelView:
         )
 
     def _poll_ppms2_zurich(self) -> None:
-        if self.state.zurich_closed or self.shell.closing:
+        if self.state.closed or self.shell.closing:
             return
         if (
             not self.state.zurich_busy
@@ -3451,7 +3449,7 @@ class PPMSPanelView:
             future = self.state.zurich_executor.submit(read)
 
             def finished():
-                if self.state.zurich_closed or self.shell.closing:
+                if self.state.closed or self.shell.closing:
                     return
                 try:
                     sample = future.result()
@@ -4297,7 +4295,6 @@ class PPMSPanelView:
                 "PPMS scan not started", str(error), parent=self.root
             )
             return
-        self.state.close_handoff.end()
 
     def stop_ppms_field_scan(self) -> None:
         if not self.state.scan_running:
@@ -4398,16 +4395,7 @@ class PPMSPanelView:
     ) -> None:
         if self.shell.closing:
             return
-        range_text = "Autorange " + (
-            format_voltage_range(
-                None
-                if range_index is None or not 0 <= range_index < 27
-                else __import__(
-                    "transport.ppms.controllers.sr830",
-                    fromlist=["NONLOCAL_SR830_FULL_SCALE_V"],
-                ).NONLOCAL_SR830_FULL_SCALE_V[range_index]
-            )
-        )
+        range_text = "Autorange " + format_sr830_full_scale(range_index)
         if key in self.ppms_sr830_range_vars:
             self.ppms_sr830_range_vars[key].set(range_text)
         if key in self.ppms_sr830_status_vars:
@@ -4419,11 +4407,11 @@ class PPMSPanelView:
         )
 
     def on_zurich_sample(self, sample: dict[str, object]) -> None:
-        if not self.shell.closing and not self.state.zurich_closed:
+        if not self.shell.closing and not self.state.closed:
             self._display_zurich_sample(sample)
 
     def on_zurich_autorange(self, action_text: str) -> None:
-        if not self.shell.closing and not self.state.zurich_closed:
+        if not self.shell.closing and not self.state.closed:
             self.zurich_status.set(
                 f"Autorange; waiting to settle: {action_text}"
             )
@@ -4542,6 +4530,7 @@ class PPMSPanelView:
         problems: list[str],
     ) -> None:
         self.macro_runner.scan_result = outcome == "completed" and outputs_confirmed
+        self._macro_scan_pending = False
         self._update_ppms_control_ui()
         self.ppms_field_scan_status_var.set(status)
         self.ppms_field_scan_eta_var.set(
