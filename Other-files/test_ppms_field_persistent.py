@@ -14,11 +14,11 @@ from unittest.mock import Mock, patch
 
 import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
-from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
+from transport.ppms.controllers.environment import PPMS_MULTIPYVU_BACKEND, PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.engine.errors import PPMSMotorScanError
 from transport.ppms.engine.runner import PPMSScanRunner, ppms_field_is_ready
 from transport.ppms.state import PPMSAppState
-from transport.ppms.ui.panel import PPMSPanelView
+from transport.ppms.ui.panel import PPMSPanelView, PPMS_PERSISTENT_CONFIRM_S, PPMS_PERSISTENT_MARGIN_S
 
 GOING = "Going to +5000 Oe, then Persistent…"
 CONFIRMED = "Field +5000 Oe reached; Persistent confirmed"
@@ -160,8 +160,8 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (5000, "StablePersistent"))
         self.assertEqual(self.feed(panel, 5000, "StablePersistent", 1), GOING)
-        self.assertEqual(self.feed(panel, 5000, "StablePersistent", app.PPMS_PERSISTENT_CONFIRM_S - 0.5), GOING)
-        self.assertEqual(self.feed(panel, 5000, "StablePersistent", app.PPMS_PERSISTENT_CONFIRM_S), CONFIRMED)
+        self.assertEqual(self.feed(panel, 5000, "StablePersistent", PPMS_PERSISTENT_CONFIRM_S - 0.5), GOING)
+        self.assertEqual(self.feed(panel, 5000, "StablePersistent", PPMS_PERSISTENT_CONFIRM_S), CONFIRMED)
         # Timed by when the reading was begun, not when it arrived: one begun
         # 1 s after the command and delayed by a slow lock-in proves nothing.
         panel = self.make_panel()
@@ -191,7 +191,7 @@ class PersistentSetpointTests(unittest.TestCase):
     def test_gives_up_after_the_ramp_time_plus_the_margin(self):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
-        limit = 5000 / 100 + app.PPMS_PERSISTENT_MARGIN_S
+        limit = 5000 / 100 + PPMS_PERSISTENT_MARGIN_S
         self.assertEqual(self.feed(panel, 5000, "StableDriven", limit - 1), GOING)
         self.assertEqual(self.feed(panel, 5000, "StableDriven", limit),
                          "StableDriven at +5000 Oe, not Persistent at +5000 Oe in time; check MultiVu, not resent")
@@ -296,7 +296,7 @@ class PersistentSetpointTests(unittest.TestCase):
 
     def test_multipyvu_sends_persistent_without_the_follow_up(self):
         panel = self.make_panel()
-        panel.ppms_environment_controller.backend = app.PPMS_MULTIPYVU_BACKEND
+        panel.state.ppms_environment_controller.backend = PPMS_MULTIPYVU_BACKEND
         self.press(panel, panel.set_ppms_field, (0, "Stable"))
         panel.ppms_environment_controller.set_field.assert_called_once_with(5000., 100., 1, 0)
         self.assertEqual(panel.ppms_connection_var.get(),

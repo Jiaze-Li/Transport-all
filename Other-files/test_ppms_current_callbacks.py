@@ -445,6 +445,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj.root = None
         obj.state.environment_busy = False
         obj.ppms_connection_var = Mock()
+        obj.ppms_current_live_var = Mock()
         obj.ppms_sr830_range_vars = {}
         obj.ppms_sr830_status_vars = {}
         obj._require_ppms_control_ready = Mock()
@@ -509,7 +510,7 @@ class CurrentCallbacks(unittest.TestCase):
 
     def test_submit_failure_restores_ui(self):
         obj = self.make_app()
-        obj.ppms_executor.submit.side_effect = RuntimeError("closed executor")
+        obj.state.ppms_executor.submit.side_effect = RuntimeError("closed executor")
         with patch.object(panel_mod.messagebox, "showerror"):
             obj._run_ppms_command("setting", Mock())
         self.assertFalse(obj.state.environment_busy)

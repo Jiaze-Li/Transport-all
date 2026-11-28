@@ -233,6 +233,7 @@ class NestedTests(unittest.TestCase):
         obj.shell = types.SimpleNamespace(closing=False, post_ui=lambda callback: callback(), thread_log=lambda text: None)
         obj._apply_ppms_environment_readback = lambda _data: None
         obj.ppms_angle_live_var = types.SimpleNamespace(set=lambda value: None)
+        obj.on_status = lambda _text: None
         state = dict(angle=26., field=0., temp=300.)
         events = []
         remote = types.SimpleNamespace(active=state)

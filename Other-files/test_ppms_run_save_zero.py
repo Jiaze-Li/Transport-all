@@ -79,8 +79,8 @@ class Page:
         with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
                 mock.patch.object(motor_mod, "PPMSMotorDebug", Motor), \
-                mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer) as ask, \
-                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer), \
+                mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer), \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer) as ask, \
                 mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory",
                                   return_value=self.folder.name if folder else "") as directory, \
@@ -584,7 +584,7 @@ class FieldReadAtStartTests(unittest.TestCase):
             page = Page(self)
             page.panel.ppms_field_target_var.set(box)
             page.start(answer=False)
-            estimates.append(page.ask.call_args.args[1].split("Estimated duration: ")[1].split("\n")[0])
+            estimates.append(page.ask.call_args.args[2].split("Estimated duration: ")[1].split("\n")[0])
         self.assertEqual(estimates[0], estimates[1], "the H Oe box is not a ramp")
 
 

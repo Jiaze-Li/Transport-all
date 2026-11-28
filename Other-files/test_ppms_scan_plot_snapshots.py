@@ -160,7 +160,7 @@ class PpmsTests(unittest.TestCase):
         page = ppms_runs.Page(self)
         box = page.panel.__dict__["ppms_plot_frame"]
         page.start()
-        folder = page.panel.ppms_run_folder
+        folder = page.panel.state.run_folder
         self.assertEqual(grabs.calls, [(box, folder / "run1_plots_snapshot.png")])
         events = page.events()
         self.assertEqual(last_events(events), ["outputs_zeroed", "plot_snapshots", "run_finished"])

@@ -342,11 +342,15 @@ class Rig:
         settings = dict(self.settings)
         settings["harmonic_passes"] = (dict(self.settings),)
         request = ScanRequest(
+            mode=self.settings.get("scan_mode", "Frequency"),
             sequence=[(1, 1, 1, 1234.0)],
             rate_oe_s=100.0,
             stable_s=0.0,
             approach_code=1,
             transport_settings=settings,
+            total_points=self.page.state.scan_total,
+            estimated_seconds=1.0,
+            sr830_tc_code=10,
         )
         with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \

@@ -125,8 +125,8 @@ class AngleFieldPage(Page):
         with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
                 mock.patch.object(motor_mod, "PPMSMotorDebug", self.motor), \
-                mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer) as ask, \
-                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer), \
+                mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer), \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer) as ask, \
                 mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory",
                                   return_value=self.folder.name if folder else ""), \
@@ -154,11 +154,15 @@ class ModeRegistrationTests(unittest.TestCase):
         self.assertEqual(PPMS_SCAN_PLOT_AXES["Angle+Field"], "angle")
         self.assertEqual(PPMS_FIELD_COMMANDING_MODES, ("Field", "Field+Temperature", "Angle+Field"))
         page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_default_field_range = ("-15000", "15000", "1500")
         defaults = page._ppms_scan_mode_defaults()
         self.assertEqual(set(defaults), set(PPMS_SCAN_MODES))
         self.assertEqual(defaults["Angle+Field"], defaults["Angle"])
         self.assertEqual(defaults["Angle+Field"], ("0", "360", "5", "°"))
-        self.assertEqual(PPMSPanelView._ppms_acquisition_default("Angle+Field"), "1")
+        page.ppms_acquisition_default_shown = None
+        page.ppms_acquisition_time_var = Var("5")
+        page._apply_ppms_mode_acquisition_default("Angle+Field")
+        self.assertEqual(page.ppms_acquisition_time_var.get(), "1")
         # The Mode list keeps its width: its longest entry is unchanged.
         self.assertEqual(max(PPMS_SCAN_MODES, key=len), "Current+Temperature")
 
@@ -179,13 +183,16 @@ class ModeRegistrationTests(unittest.TestCase):
         table: the worker's close, the finish, the nested and point workers
         and the page's close."""
         for method in (PPMSScanRunner.run,
-                       PPMSPanelView._report_ppms_scan_finished,
+                       PPMSPanelView.on_scan_finished,
                        PPMSScanRunner.nested_scan_worker,
                        PPMSScanRunner.field_scan_worker,
                        PPMSPanelView.safe_close_ppms,
                        plan_ppms_scan_axes):
             with self.subTest(method=method.__name__):
-                self.assertIn("PPMS_FIELD_COMMANDING_MODES", inspect.getsource(method))
+                if method is PPMSPanelView.on_scan_finished:
+                    self.assertIn("outputs_confirmed", inspect.getsource(method))
+                else:
+                    self.assertIn("PPMS_FIELD_COMMANDING_MODES", inspect.getsource(method))
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
         obj.shell = types.SimpleNamespace(

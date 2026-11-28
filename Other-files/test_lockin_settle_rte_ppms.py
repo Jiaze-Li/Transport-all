@@ -409,7 +409,7 @@ class PPMSStartTests(NoWindows):
                       ppms_motor_confirm_var=True, ppms_sr830_time_constant_var=label)
         for name, value in values.items():
             setattr(obj, name, Var(value))
-        obj.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
+        obj.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
         obj.state.ppms_instrument_controllers = {
             "6221": types.SimpleNamespace(connected=True, resource_name="GPIB0::12::INSTR"),
             "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")}

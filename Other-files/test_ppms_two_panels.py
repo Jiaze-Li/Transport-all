@@ -177,7 +177,7 @@ class TwoPanelTests(unittest.TestCase):
             _, panel, _ = self.make_panel()
             for var in panel.ppms_lockin_selection.values():
                 var.set(False)
-            self.assertEqual(panel._ppms2_measured_orders(), {1: [], 2: [], 3: []})
+            self.assertEqual(panel._ppms2_measured_orders(), {})
             panel.zurich_harmonic.set('1+2+3')
             for key in sequence:
                 panel.ppms_lockin_selection[key].set(True)
@@ -225,7 +225,7 @@ class TwoPanelTests(unittest.TestCase):
         state.ppms_environment_controller.read_environment.side_effect = [
             {'field_oe': 0., 'field_status': 'StableDriven'},
             {'field_oe': 0., 'field_status': 'StablePersistent'}]
-        runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
+        runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}))
         self.assertEqual([c.args for c in state.ppms_environment_controller.set_field.call_args_list], [(0.,100.,0,1),(0.,100.,0,0)])
         self.assertTrue(state.zero_persist_completed)
         for failure in (True, False):
@@ -234,10 +234,10 @@ class TwoPanelTests(unittest.TestCase):
             runner.nested_scan_worker.side_effect = RuntimeError('scan failed') if failure else None
             if failure:
                 with self.assertRaises(RuntimeError):
-                    runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
+                    runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}))
             else:
                 state.scan_stop_event.set()
-                runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
+                runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}))
             state.ppms_environment_controller.set_field.assert_not_called()
             self.assertFalse(state.zero_persist_pending)
 

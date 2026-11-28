@@ -26,17 +26,27 @@ class ModeTests(unittest.TestCase):
         # and a stop with the 6221 read back off opens no dialog.
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
+        obj.macro_runner = Mock()
         later = []
         obj.shell = types.SimpleNamespace(closing=False, root=types.SimpleNamespace(after=lambda _ms, show: later.append(show)), thread_log=Mock())
         obj.root = obj.shell.root
         obj.thread_log = obj.shell.thread_log
         obj.ppms_field_scan_status_var = Mock()
         obj.ppms_field_scan_eta_var = Mock()
+        obj.ppms_field_scan_stop_button = Mock()
+        obj.ppms_field_scan_save_button = Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
         for mode in ("Temperature", "Field", "Angle", "Current"):
             for error in (None, PPMSScanCancelled("stopped as requested while waiting for lock-in reference")):
                 with patch.object(panel_mod.messagebox, "showerror") as popup:
-                    obj.on_scan_finished(mode, True, error)
+                    status = "Stopped; 6221 zeroed" + ("; field kept at its setpoint" if mode == "Field" else "")
+                    obj.on_scan_finished(
+                        mode=mode, outcome="stopped", status=status,
+                        results=obj.state.scan_outputs, outputs_confirmed=True,
+                        field_note="", error=error, problems=[],
+                    )
                     popup.assert_not_called()
                 self.assertEqual(later, [])
                 self.assertEqual(obj.ppms_field_scan_status_var.set.call_args.args[0],
@@ -47,15 +57,24 @@ class ModeTests(unittest.TestCase):
         # (user, 2026-10-18).
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
+        obj.macro_runner = Mock()
         later_root = types.SimpleNamespace(after=lambda _ms, show: show())
         obj.shell = types.SimpleNamespace(closing=False, root=later_root, thread_log=Mock())
         obj.root = later_root
         obj.thread_log = obj.shell.thread_log
         obj.ppms_field_scan_status_var = Mock()
         obj.ppms_field_scan_eta_var = Mock()
+        obj.ppms_field_scan_stop_button = Mock()
+        obj.ppms_field_scan_save_button = Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
         with patch.object(panel_mod.messagebox, "showerror") as popup:
-            obj.on_scan_finished("Current", True, OSError("CSV write failed"))
+            obj.on_scan_finished(
+                mode="Current", outcome="error", status="Failed: CSV write failed",
+                results=obj.state.scan_outputs, outputs_confirmed=True,
+                field_note="", error=OSError("CSV write failed"), problems=[],
+            )
             popup.assert_called_once_with("PPMS Current scan", "CSV write failed\n\nAt the end: 6221 zeroed",
                                           parent=obj.root)
         self.assertEqual(obj.ppms_field_scan_status_var.set.call_args.args[0], "Failed: CSV write failed")
