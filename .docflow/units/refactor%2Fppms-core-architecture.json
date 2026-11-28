@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:17:42.332Z",
+  "updatedAt": "2026-11-28T09:29:29.859Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Update MacroRunner, ScanRequest, and remaining PPMS test harness mocks",
+    "current": "Guard optional resource_vars in _ppms_run_settings and update remaining 7 test files",
     "next": "",
     "history": [
       {
@@ -74,6 +74,10 @@
       {
         "at": "2026-11-28T17:17:27+08:00",
         "text": "Finish migrating remaining PPMS test harness attributes and assertions"
+      },
+      {
+        "at": "2026-11-28T17:29:15+08:00",
+        "text": "Update MacroRunner, ScanRequest, and remaining PPMS test harness mocks"
       }
     ],
     "commits": [
@@ -178,6 +182,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:17:27+08:00",
         "message": "Update MacroRunner, ScanRequest, and remaining PPMS test harness mocks"
+      },
+      {
+        "sha": "a0dd054d1f30e6782f791b2c344d3fb4d1978c96",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:29:15+08:00",
+        "message": "Guard optional resource_vars in _ppms_run_settings and update remaining 7 test files"
       }
     ],
     "pr": {
