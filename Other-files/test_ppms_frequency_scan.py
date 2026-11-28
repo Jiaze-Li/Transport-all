@@ -317,6 +317,15 @@ class Rig:
             setattr(page, name, Var(""))
         page.ppms_field_scan_progress = mock.Mock()
         page._redraw_ppms_transport_plot = lambda: None
+        page.ppms_zero_persist_button = mock.Mock()
+        page.ppms_field_scan_stop_button = mock.Mock()
+        page.ppms_field_scan_save_button = mock.Mock()
+        page.ppms_control_widgets = []
+        page.ppms_control_safety_var = mock.Mock(get=lambda: False)
+        page.macro_runner = mock.Mock()
+        page.ppms_field_scan_status_var = Var("")
+        page.ppms_field_scan_eta_var = Var("")
+        page.shell = types.SimpleNamespace(closing=True, root=None, post_ui=lambda cb: cb(), thread_log=lambda _m: None)
         page.state.scan_context = {}
         page.state.scan_rows = []
         page.state.scan_started_at = self.clock.now
@@ -354,7 +363,7 @@ class Rig:
         )
         with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
-                mock.patch.object(motor_mod, "PPMSMotorDebug", Motor):
+                mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
             self.page.runner.run(request, sink=self.page)
 
     def rows(self):
@@ -917,7 +926,7 @@ class SequenceTests(unittest.TestCase):
                               approach_code=1, transport_settings=settings)
         with mock.patch.object(runner_mod.time, "monotonic", rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
-                mock.patch.object(motor_mod, "PPMSMotorDebug", Motor):
+                mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
             rig.page.runner.run(request, sink=rig.page)
         rows = rig.rows()
         self.assertEqual([(r["harmonic_pass"], float(r["6221_frequency_hz"])) for r in rows],

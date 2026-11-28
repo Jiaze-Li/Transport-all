@@ -110,7 +110,7 @@ class AngleFieldPage(Page):
         remote = panel.state.ppms_environment_controller
         remote.set_field = self.magnet.set_field
         remote.read_environment = self.magnet.read
-        panel.runner._read_live = self.magnet.read
+        panel.runner._read_live_override = self.magnet.read
         panel._read_ppms_live = self.magnet.read
         panel.ppms_field_rate_var.set("100")
         for var, value in zip(panel.ppms_outer_field_scan_range, outer):
@@ -124,7 +124,7 @@ class AngleFieldPage(Page):
             self.dialogs.append((title, text))
         with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
-                mock.patch.object(motor_mod, "PPMSMotorDebug", self.motor), \
+                mock.patch.object(runner_mod, "PPMSMotorDebug", self.motor), \
                 mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer), \
                 mock.patch.object(panel_mod, "ask_scan_start", return_value=answer) as ask, \
                 mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
@@ -201,9 +201,23 @@ class ModeRegistrationTests(unittest.TestCase):
         obj.root = obj.shell.root
         obj.thread_log = obj.shell.thread_log
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
+        obj.macro_runner = mock.Mock()
+        obj.ppms_field_scan_stop_button = mock.Mock()
+        obj.ppms_field_scan_save_button = mock.Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
         obj.state.scan_field_note = ""
-        obj._report_ppms_scan_finished("Angle+Field", True, None)
+        obj.on_scan_finished(
+            mode="Angle+Field",
+            outcome="stopped",
+            status="Stopped; 6221 zeroed; field kept at its setpoint",
+            results=obj.state.scan_outputs,
+            outputs_confirmed=True,
+            field_note="",
+            error=None,
+            problems=[],
+        )
         self.assertEqual(obj.ppms_field_scan_status_var.get(), "Stopped; 6221 zeroed; field kept at its setpoint")
 
     def test_the_outer_field_row(self):
@@ -567,7 +581,7 @@ class EndingTests(unittest.TestCase):
             if page.panel.state.scan_rows:
                 data["field_oe"] = 150.0       # off 100 Oe after the first point
             return data
-        page.panel.runner._read_live = drifting
+        page.panel.runner._read_live_override = drifting
         page.panel._read_ppms_live = drifting
         page.start()
         self.assertEqual(len(page.rows()), 1)
@@ -640,7 +654,12 @@ class PlotTests_(unittest.TestCase):
         rows = [dict(row, target_temperature_k=t, temperature_index=ti) for row in self.rows()[:2]
                 for ti, t in ((1, 300.0), (2, 290.0))]
         page = PlotTests.panel_page(rows, "Angle+Temperature")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         self.assertTrue(all(" K) L1" in name for name in page.calls[0][0][1]))
 
 

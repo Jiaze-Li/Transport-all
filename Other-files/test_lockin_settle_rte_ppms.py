@@ -443,7 +443,7 @@ class PPMSStartTests(NoWindows):
         ask = mock.Mock(return_value=yes)
         with tempfile.TemporaryDirectory() as folder, \
                 mock.patch.object(panel_mod.messagebox, "askyesno", ask), \
-                mock.patch.object(panel_mod, "ask_scan_start", return_value=True), \
+                mock.patch.object(panel_mod, "ask_scan_start", ask), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
                 mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""):
             (run or obj.start_ppms_field_scan)()
@@ -523,7 +523,7 @@ class PPMSStartTests(NoWindows):
         panel.ppms_field_scan_stable_var.set("0.5")
         panel.ppms_acquisition_time_var.set("1")
         panel.state.last_readback = dict(temperature_k=300, field_oe=100)
-        panel.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
+        panel.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
         panel.ppms_motor_confirm_var.set(True)     # every scan holds an angle
         panel.state.ppms_instrument_controllers["6221"] = types.SimpleNamespace(
             connected=True, resource_name="GPIB0::12::INSTR")
@@ -539,7 +539,7 @@ class PPMSStartTests(NoWindows):
         ask = self.start(panel, yes=False)
         self.assertEqual(panel.state.zurich_scan_tau, 2.0)
         self.assertIn("Wait before each reading: 2 s (1 x 2 s, the time constant of the Zurich, the slowest "
-                      "lock-in measured; Settle s is 0.5 s)\n", ask.call_args.args[1])
+                      "lock-in measured; Settle s is 0.5 s)\n", ask.call_args.args[2])
 
     def test_a_macro_scan_line_goes_through_the_same_start(self):
         obj = self.scan_object(label="3 s")

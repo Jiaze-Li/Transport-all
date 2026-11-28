@@ -179,6 +179,7 @@ class TwoPanelTests(unittest.TestCase):
                 var.set(False)
             self.assertEqual(panel._ppms2_measured_orders(), {})
             panel.zurich_harmonic.set('1+2+3')
+            panel.ppms_transport_harmonic_b_var.set(1)
             for key in sequence:
                 panel.ppms_lockin_selection[key].set(True)
             orders = panel._ppms2_measured_orders()
@@ -233,8 +234,9 @@ class TwoPanelTests(unittest.TestCase):
             state.ppms_environment_controller.reset_mock()
             runner.nested_scan_worker.side_effect = RuntimeError('scan failed') if failure else None
             if failure:
-                with self.assertRaises(RuntimeError):
-                    runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}))
+                sink = Mock()
+                runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}), sink=sink)
+                self.assertIsInstance(sink.on_scan_finished.call_args.kwargs['error'], RuntimeError)
             else:
                 state.scan_stop_event.set()
                 runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={"harmonic_passes": ({"active_lockins": ()},)}))

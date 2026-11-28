@@ -316,8 +316,8 @@ class NestedTests(unittest.TestCase):
                 obj, motor, settings, events = self.harness()
                 settings['scan_mode'] = mode
                 obj.runner.configure_transport_scan = lambda config, sink=None: None
-                read = obj.runner._read_live_override
-                obj.runner._read_live_override = lambda: dict(read(), temperature_status='Near')
+                read = obj.runner._read_live_override_override
+                obj.runner._read_live_override_override = lambda: dict(read(), temperature_status='Near')
                 self.run_worker(obj, motor, settings)
                 self.assertEqual(len([e for e in events if e[0] == 'plane']), 4)
 
@@ -331,8 +331,8 @@ class NestedTests(unittest.TestCase):
                     raise AssertionError('non-field scan must not check field readiness')
                 obj.state.ppms_environment_controller.set_field = forbidden
                 with patch.object(runner_mod, 'ppms_field_is_ready', forbidden):
-                    read = obj.runner._read_live
-                    obj.runner._read_live = lambda: dict(read(), field_oe=999., field_status='Charging')
+                    read = obj.runner._read_live_override
+                    obj.runner._read_live_override = lambda: dict(read(), field_oe=999., field_status='Charging')
                     self.run_worker(obj, motor, settings)
                 self.assertEqual(len([e for e in events if e[0] == 'plane']), 4)
 
@@ -348,7 +348,7 @@ class NestedTests(unittest.TestCase):
             def read_and_stop():
                 obj.state.scan_stop_event.set()
                 return dict(field_oe=60000., field_status='Persistent')
-            obj.runner._read_live = read_and_stop
+            obj.runner._read_live_override = read_and_stop
             obj.state.scan_preserve_on_stop = True
             obj.runner.field_scan_worker([(1, 1, 1, 0.)], 100., 0., 1, settings, sink=obj)
             self.assertFalse(any(e[0] in ('field', 'zero') for e in events))
@@ -425,11 +425,11 @@ class NestedTests(unittest.TestCase):
     def test_temperature_wait_does_not_close_current(self):
         obj, motor, settings, events = self.harness()
         settings.update(nested=dict(angle=(26.,), temperature=(300.,)), scan_mode="Field")
-        read = obj.runner._read_live
+        read = obj.runner._read_live_override
         def check_wait():
             self.assertNotIn(('off',), events)
             return read()
-        obj.runner._read_live = check_wait
+        obj.runner._read_live_override = check_wait
         self.run_worker(obj, motor, settings)
         self.assertNotIn(('off',), events)
 

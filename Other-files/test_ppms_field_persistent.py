@@ -170,8 +170,8 @@ class PersistentSetpointTests(unittest.TestCase):
         # The command's own readback never ends the follow-up, however late it
         # is handled, so its "Going to…" text cannot overwrite a confirmation.
         panel = self.make_panel()
-        panel.ppms_environment_controller.set_field.return_value = reading(5000, "StablePersistent")
-        panel.ppms_environment_controller.set_field.side_effect = lambda *args: (
+        panel.state.ppms_environment_controller.set_field.return_value = reading(5000, "StablePersistent")
+        panel.state.ppms_environment_controller.set_field.side_effect = lambda *args: (
             setattr(self.clock, "now", self.clock.now + 30) or reading(5000, "StablePersistent"))
         panel.set_ppms_field()
         self.assertEqual(panel.ppms_connection_var.get(), GOING)
@@ -186,7 +186,7 @@ class PersistentSetpointTests(unittest.TestCase):
         text = self.feed(panel, 4997, "StablePersistent", 90)
         self.assertEqual(text, "Persistent at +4997 Oe, not +5000 Oe; check MultiVu, not resent")
         self.assertIsNone(panel.state.persistent_watch)
-        panel.ppms_environment_controller.set_field.assert_called_once()  # Nothing resent.
+        panel.state.ppms_environment_controller.set_field.assert_called_once()  # Nothing resent.
 
     def test_gives_up_after_the_ramp_time_plus_the_margin(self):
         panel = self.make_panel()
@@ -196,7 +196,7 @@ class PersistentSetpointTests(unittest.TestCase):
         self.assertEqual(self.feed(panel, 5000, "StableDriven", limit),
                          "StableDriven at +5000 Oe, not Persistent at +5000 Oe in time; check MultiVu, not resent")
         self.assertIsNone(panel.state.persistent_watch)
-        panel.ppms_environment_controller.set_field.assert_called_once()
+        panel.state.ppms_environment_controller.set_field.assert_called_once()
         # The PPMS never acted on the setpoint.
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
@@ -276,7 +276,7 @@ class PersistentSetpointTests(unittest.TestCase):
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
         panel.thread_log = lambda text: None
         panel._ppms_zero_field_after_interrupted_scan(100., 1)
-        panel.ppms_environment_controller.set_field.assert_called_with(0., 100., 1, 1)
+        panel.state.ppms_environment_controller.set_field.assert_called_with(0., 100., 1, 1)
         self.assertEqual(panel.ppms_connection_var.get(),
                          "The scan clean-up now sets the field; Persistent no longer followed")
         self.assertIsNone(panel.state.persistent_watch)
@@ -287,7 +287,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_field_scan_status_var = Var("")
         panel.ppms_zero_persist_pending = True
         panel._ppms_nested_scan_worker = Mock()
-        panel.ppms_environment_controller.read_environment.side_effect = [
+        panel.state.ppms_environment_controller.read_environment.side_effect = [
             reading(0, "StableDriven"), reading(0, "StablePersistent")]
         panel._ppms_scan_with_final_field()
         self.assertEqual(panel.ppms_connection_var.get(),
@@ -298,7 +298,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         panel.state.ppms_environment_controller.backend = PPMS_MULTIPYVU_BACKEND
         self.press(panel, panel.set_ppms_field, (0, "Stable"))
-        panel.ppms_environment_controller.set_field.assert_called_once_with(5000., 100., 1, 0)
+        panel.state.ppms_environment_controller.set_field.assert_called_once_with(5000., 100., 1, 0)
         self.assertEqual(panel.ppms_connection_var.get(),
                          "Sent +5000 Oe, ending Persistent; see the field status")
         self.assertIsNone(panel.state.persistent_watch)

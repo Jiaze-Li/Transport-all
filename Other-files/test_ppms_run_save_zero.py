@@ -78,7 +78,7 @@ class Page:
             self.dialogs.append((title, text))
         with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
                 mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
-                mock.patch.object(motor_mod, "PPMSMotorDebug", Motor), \
+                mock.patch.object(runner_mod, "PPMSMotorDebug", Motor), \
                 mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer), \
                 mock.patch.object(panel_mod, "ask_scan_start", return_value=answer) as ask, \
                 mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
