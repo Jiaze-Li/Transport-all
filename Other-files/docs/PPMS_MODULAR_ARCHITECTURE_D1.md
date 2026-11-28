@@ -291,7 +291,7 @@ Updated to reflect human feedback on **Q1–Q3**, the three design principles (`
 
 ## 7. D2 implementation record — Batch 1 (PR #5)
 
-Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **Batch 1 implemented (M0 + M1 + independent M2; awaiting GitHub Actions CI & human acceptance)**.
+Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **Batch 1 accepted and merged in PR #5 (`9636139`); final review HEAD `e26defe`**.
 
 ### Dependency Order & Checkpoints
 1. **M0 (Source Authority):** Froze `tools/extract_app.py` (raises `SystemExit` on execution), marked `tools/ppms_host.py` and `tools/ppms_package_glue.py` as frozen legacy artifacts (removal condition: Batch 2 / PR #6), updated `transport/ppms/app.py`, `README.md`, `pyproject.toml`, and `.github/workflows/ppms-windows-exe.yml` to declare `Transport-PPMS` (`transport/ppms`, `transport/common`, `transport/core`) as the sole authoritative source. Preserved `tools/prune_tests.py`.
@@ -312,3 +312,16 @@ Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **B
   - `NonLocalACController = ZurichMFLIController` (`controllers/zurich.py`, re-exported in `app.py` for `test_ppms_sr830_tc.py`, `test_ppms_two_panels.py`, `test_ppms_zurich_close_order.py`, `test_lockin_downrange.py`, `test_mfli_connect_message.py`, `test_nonlocal_review.py`, `test_rte_panel.py`, `test_sr830_display_xy.py`, `test_visa_shared_manager.py`, `test_zurich_choice.py`).
 - **Legacy cleanup (Q2) & Batch 2 deferrals:** Deferred pruning of unused Non-local 6221/2182A/SR830 methods on `ZurichMFLIController` and their dedicated tests to Batch 2 (M4) to avoid breaking existing test coverage prematurely. Deferred remaining M2 (`PPMSMotorService`, `MacroRunner`), M3 (`PPMSScanRunner`, `AppShell`, `PPMSPanelView`, `PPMSAppState` single ownership), and M4 (`tools/` extraction retirement, `PPMSPanel(CombinedControlApp)` / `__getattr__` removal) to Batch 2 (PR #6).
 - **Testing policy:** All formal test suites, layout checks, wheel install, and Windows `.exe` checks run on GitHub Actions CI only (no local Mac suite execution; no physical hardware acceptance claimed).
+
+
+## 8. D2 implementation record — Batch 2 (PR #6)
+
+Baseline: `Transport-PPMS@96361394f55d5632ce00a97afde33f527a9996e7` (PR #5 merged). Status: **Implementation pending**.
+
+Scope: remaining M2, M3, and residual M4 under the approved two-batch plan (§5). Complete the independent PPMS architecture, without changing established measurement behavior or introducing unnecessary abstractions.
+
+Record the actual dependency checkpoints and final evidence in this section:
+- Composition root, explicit resource/lifecycle ownership, engine/UI contracts, and remaining Motor/Macro separation.
+- Safety and finalization guarantees, including queued scans, active Macro scans, PR #3's Zurich handoff, and data persistence independent of the Tk window.
+- Removed obsolete code, tests, extraction tools, and compatibility aliases; evidence for retention/removal, and any exceptional remaining dependency.
+- Test migration, focused regressions, dependency checks, final HEAD and GitHub Actions results (including Windows EXE before merge, no release from PR branches), limitations and unresolved issues.
