@@ -338,7 +338,9 @@ class QueuedScanAndInflightShutdownTests(unittest.TestCase):
         state.last_readback = {"temperature_k": 300.0, "field_oe": 0.0}
 
         panel.runner = PPMSScanRunner(state, post_ui=lambda _cb: None)
-        panel.runner._zero_outputs_after_scan = mock.Mock(return_value={"6221": "zeroed"})
+        panel.runner._zero_outputs_after_scan = lambda sink=None: (
+            events.append("runner:zeroed") or {"6221": "zeroed"}
+        )
         panel.runner.nested_scan_worker = lambda *a, **kw: events.append("worker:ran")
 
         # Occupy all 5 ppms_executor workers so start_ppms_field_scan queues runner.run
@@ -375,8 +377,8 @@ class QueuedScanAndInflightShutdownTests(unittest.TestCase):
             release_workers.set()
             self.assertTrue(disconnected.wait(5.0))
             self.assertTrue(recorder.closed)
-            self.assertIn("worker:ran", events)
-            self.assertLess(events.index("worker:ran"), events.index("disconnect:mfli"))
+            self.assertIn("runner:zeroed", events)
+            self.assertLess(events.index("runner:zeroed"), events.index("disconnect:mfli"))
 
     def test_safe_close_waits_for_inflight_hardware_task_before_disconnect(self):
         state = PPMSAppState(lambda _msg: None)
