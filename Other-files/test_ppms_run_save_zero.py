@@ -317,7 +317,7 @@ class FieldScanEndTests(unittest.TestCase):
 
         def run():
             clock = iter(range(10000))
-            with mock.patch.object(motor_mod, 'PPMSMotorDebug', motor), \
+            with mock.patch.object(runner_mod, 'PPMSMotorDebug', motor), \
                     mock.patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
                 obj.runner.nested_scan_worker([(1, 1, 1, 100.)], 100., 0., 1, settings, sink=obj)
         case.run_worker = lambda *_args: run()

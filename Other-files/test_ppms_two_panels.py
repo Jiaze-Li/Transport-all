@@ -189,8 +189,8 @@ class TwoPanelTests(unittest.TestCase):
             panel.zurich_harmonic.set('1')
             orders = panel._ppms2_measured_orders()
             self.assertEqual(set(orders[1]), {'830_a', '830_b', 'zurich'})
-            self.assertEqual(orders[2], [])
-            self.assertEqual(orders[3], [])
+            self.assertNotIn(2, orders)
+            self.assertNotIn(3, orders)
 
     def test_temperature_shades_follow_values_not_acquisition_order(self):
         panel = PPMSPanelView.__new__(PPMSPanelView)
@@ -220,7 +220,7 @@ class TwoPanelTests(unittest.TestCase):
     def test_finish_zero_then_persistent_only_after_success(self):
         state = PPMSAppState()
         state.zero_persist_pending = True
-        runner = PPMSScanRunner(state, post_ui=lambda f: None)
+        runner = PPMSScanRunner(state, post_ui=lambda f: f())
         runner.nested_scan_worker = Mock()
         state.ppms_environment_controller = Mock()
         state.ppms_environment_controller.read_environment.side_effect = [

@@ -264,13 +264,17 @@ class PPMSWorkerTests(NoWindows):
     def run_scan(self, obj, sequence, settings):
         from transport.ppms.engine.runner import ScanRequest
         request = ScanRequest(
+            mode=settings.get("scan_mode", "Field"),
             sequence=sequence,
             rate_oe_s=100.,
             stable_s=self.stable,
             approach_code=1,
             transport_settings=settings,
+            total_points=len(sequence),
+            estimated_seconds=1.0,
+            sr830_tc_code=10,
         )
-        with mock.patch.object(motor_mod, "PPMSMotorDebug", self.motor), \
+        with mock.patch.object(runner_mod, "PPMSMotorDebug", self.motor), \
                 mock.patch.object(runner_mod.time, "monotonic", self.clock):
             obj.runner.run(request, sink=obj)
 

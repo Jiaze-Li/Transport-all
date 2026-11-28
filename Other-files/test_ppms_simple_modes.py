@@ -134,9 +134,20 @@ class ModeTests(unittest.TestCase):
             for key in ('830_a', '830_b'):
                 obj.state.ppms_instrument_controllers[key].connected = key in selected
         obj.state.last_readback = dict(temperature_k=300, field_oe=100)
-        for name in ("_redraw_ppms_transport_plot", "_update_ppms_control_ui",
-                     "ppms_field_scan_progress", "ppms_field_scan_eta_var", "ppms_field_scan_status_var", "ppms_transport_status_var"):
-            setattr(obj, name, Mock())
+        obj._redraw_ppms_transport_plot = Mock()
+        obj._update_ppms_control_ui = Mock()
+        obj.ppms_field_scan_progress = Mock()
+        obj.ppms_field_scan_eta_var = Mock()
+        obj.ppms_field_scan_status_var = Mock()
+        obj.ppms_transport_status_var = Mock()
+        obj.ppms_resource_vars = {}
+        obj.ppms_field_scan_save_button = Mock()
+        obj.ppms_field_scan_stop_button = Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = Mock(get=lambda: False)
+        obj.macro_runner = Mock()
+        obj.ppms_zero_persist_button = Mock()
+        obj.ppms_scan_target_widgets = {}
         obj.state.ppms_executor = Mock()
         self.durations = []
         obj._format_scan_duration = lambda seconds: (self.durations.append(seconds), f"{seconds:g} s")[1]

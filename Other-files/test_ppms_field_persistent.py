@@ -252,21 +252,36 @@ class PersistentSetpointTests(unittest.TestCase):
         self.assertEqual(panel.ppms_connection_var.get(), "Temperature command", "nothing to end")
 
     def test_only_a_macro_field_line_ends_the_follow_up(self):
+        from transport.ppms.engine.macro import MacroRunner
+
         for op, args, ended in (("TEMP", (10., 1., 0), False), ("FIELD", (0., 100., 0, 1), True)):
             with self.subTest(op=op):
                 panel = self.make_panel()
                 self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
-                panel.ppms_macro_stop = threading.Event()
-                panel.ppms_macro_commands = iter([(1, op, args)])
                 panel.ppms_macro_status = Var("")
                 panel.ppms_macro_editor = Mock()
+                panel.ppms_macro_edit_buttons = []
+                panel.ppms_macro_window = None
                 panel.ppms_temperature_target_var = Var("300")
                 # A TEMP line with a rate also fills the rate box (audit, 2026-10-13).
                 panel.ppms_temperature_rate_var = Var("10")
-                panel.thread_log = lambda text: None
-                panel._ppms_macro_operation = Mock()
-                panel._ppms_macro_finish = Mock()
-                panel._ppms_macro_next()
+                panel.state.ppms_executor = Mock()
+                runner = MacroRunner(
+                    environment_controller=panel.state.ppms_environment_controller,
+                    executor=panel.state.ppms_executor,
+                    macro_stop_event=panel.state.macro_stop_event,
+                    is_closed=lambda: False,
+                    field_ready_fn=ppms_field_is_ready,
+                    stop_scan_fn=lambda: None,
+                    post_ui=lambda cb: cb(),
+                )
+                runner.start(
+                    [(1, op, args)],
+                    sink=panel,
+                    start_scan=lambda: False,
+                    is_scan_running=lambda: False,
+                    schedule_poll=lambda _ms, _cb: None,
+                )
                 self.assertEqual(panel.state.persistent_watch is None, ended)
                 self.assertEqual(panel.ppms_connection_var.get(), MACRO_TOOK_OVER if ended else GOING)
 

@@ -636,7 +636,12 @@ class PlotTests_(unittest.TestCase):
 
     def test_the_panel_plot(self):
         page = PlotTests.panel_page(self.rows(), "Angle+Field")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         args, options = page.calls[0]
         series, x_label = args[1], args[2]
         self.assertEqual(x_label, "Measured angle (°)")

@@ -304,8 +304,10 @@ class Rig:
         remote = types.SimpleNamespace(backend="MultiPyVu", active=object())
         remote.set_temperature = lambda target, rate, approach: self.log.append(("ppms", "set_temperature", target))
         remote.set_field = lambda *args: test.fail("a frequency scan never commands the field")
+        remote.connected = True
         page.state.ppms_environment_controller = remote
         page.state.last_readback = None
+        page._update_ppms_control_ui = lambda: None
         page.post_ui = page.shell.post_ui
         read_live = lambda: dict(field_oe=1234.0, field_status="Persistent",
                                  temperature_k=300.0, temperature_status="Stable")

@@ -170,7 +170,7 @@ class PpmsTests(unittest.TestCase):
         )
         self.assertEqual(page.panel.ppms_field_scan_status_var.get(), "Completed; 6221 zeroed")
         self.assertEqual(page.dialogs, [])
-        self.assertTrue(page.panel.ppms_macro_scan_result, "a Macro goes on as before")
+        self.assertTrue(page.panel.macro_runner.scan_result, "a Macro goes on as before")
 
 
 if __name__ == "__main__":
