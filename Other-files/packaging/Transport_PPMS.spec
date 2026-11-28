@@ -46,7 +46,7 @@ PUBLISHER = "HengNiu & ClaudeCode"
 # the copyright, so the publisher is named there too (user, 2026-11-12).
 COPYRIGHT = f"© 2026 {PUBLISHER}"
 VERSION = re.search(
-    r'^APP_VERSION = "(.+)"', (ROOT / "transport" / "ppms" / "app.py").read_text(encoding="utf-8"), re.M
+    r'^APP_VERSION = "(.+)"', (ROOT / "transport" / "ppms" / "ui" / "theme.py").read_text(encoding="utf-8"), re.M
 ).group(1)
 VERSION_NUMBERS = tuple((list(map(int, re.findall(r"\d+", VERSION))) + [0, 0, 0, 0])[:4])
 
