@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-27T16:54:48.599Z",
+  "updatedAt": "2026-11-28T02:20:58.792Z",
   "task": {
     "id": "fix/ppms-zurich-close-handoff",
     "branch": "fix/ppms-zurich-close-handoff",
     "title": "fix/ppms-zurich-close-handoff",
     "task": "Development branch: fix/ppms-zurich-close-handoff",
     "started": "2026-11-28T00:38:18+08:00",
-    "status": "In progress",
+    "status": "Completed",
     "current": "fix(ppms): drain zurich_executor before MFLI disconnect and preserve fix in ppms_host REPLACE",
     "next": "Authorize merge of PR #3 (CI and review READY on 7df432f)",
     "history": [
@@ -32,13 +32,15 @@
     ],
     "pr": {
       "number": 3,
-      "state": "open",
+      "state": "closed",
       "title": "fix(ppms): defer Zurich disconnect until scan close handoff (A2-3)",
       "url": "https://github.com/Jiaze-Li/Transport-all/pull/3",
-      "merged": false,
-      "updatedAt": "2026-11-27T16:46:02Z"
+      "merged": true,
+      "mergedAt": "2026-11-28T02:20:38Z",
+      "closedAt": "2026-11-28T02:20:39Z",
+      "updatedAt": "2026-11-28T02:20:39Z"
     },
-    "completed": null,
-    "outcome": null
+    "completed": "2026-11-28T02:20:38Z",
+    "outcome": "Merged"
   }
 }
