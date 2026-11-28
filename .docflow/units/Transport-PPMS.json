@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:20:49.373Z",
+  "updatedAt": "2026-11-28T02:54:50.208Z",
   "task": {
     "id": "Transport-PPMS",
     "branch": "Transport-PPMS",
@@ -8,12 +8,16 @@
     "task": "Development branch: Transport-PPMS",
     "started": "2026-11-27T23:24:15+08:00",
     "status": "In progress",
-    "current": "Merge pull request #3 from Jiaze-Li/fix/ppms-zurich-close-handoff",
+    "current": "Merge pull request #4 from Jiaze-Li/design/ppms-modular-architecture",
     "next": "",
     "history": [
       {
         "at": "2026-11-28T10:20:38+08:00",
         "text": "Enable DocFlow progress ingestion"
+      },
+      {
+        "at": "2026-11-28T10:54:39+08:00",
+        "text": "Merge pull request #3 from Jiaze-Li/fix/ppms-zurich-close-handoff"
       }
     ],
     "commits": [
@@ -28,6 +32,12 @@
         "branch": "Transport-PPMS",
         "timestamp": "2026-11-28T10:20:38+08:00",
         "message": "Merge pull request #3 from Jiaze-Li/fix/ppms-zurich-close-handoff"
+      },
+      {
+        "sha": "ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb",
+        "branch": "Transport-PPMS",
+        "timestamp": "2026-11-28T10:54:39+08:00",
+        "message": "Merge pull request #4 from Jiaze-Li/design/ppms-modular-architecture"
       }
     ],
     "pr": null,
