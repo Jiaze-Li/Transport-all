@@ -40,7 +40,6 @@ class Page:
         self.test = test
         self.rig = rig = Rig(test, mode, None, (0.5, 1.0), zurich=False)
         panel, _ttk = build_ppms_panel()
-        del panel.thread_log            # the page's own: its log lines become notes
         self.lines = []
         panel.shell.append_log = self.lines.append
         panel.state.ppms_instrument_controllers = rig.page.state.ppms_instrument_controllers
@@ -486,7 +485,7 @@ class AutorangeTests(unittest.TestCase):
         for _ in range(20):
             runner._autorange_sr830("830_a", small, 0)
         self.assertEqual(state["SENS"], 14, "never back down to the range that overloaded")
-        state_obj.clear_sr830_range_floor()
+        runner.clear_sr830_range_floor()
         for _ in range(3):
             runner._autorange_sr830("830_a", small, 0)
         self.assertEqual(state["SENS"], 13, "after the floor is cleared it steps down again")

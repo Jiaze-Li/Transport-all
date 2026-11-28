@@ -394,13 +394,14 @@ class ZurichTests(unittest.TestCase):
         state = PPMSAppState()
         state.sr830_range_states = {}
         state.zurich_controller = mock.Mock()
-        state.clear_sr830_range_floor()                                   # a pass's or sweep's first point
-        state.clear_sr830_range_floor(("830_a",), zurich=True)            # a new excitation
+        runner = PPMSScanRunner(state, post_ui=lambda _cb: None)
+        runner.clear_sr830_range_floor()                                   # a pass's or sweep's first point
+        runner.clear_sr830_range_floor(("830_a",), zurich=True)            # a new excitation
         self.assertEqual(state.zurich_controller.forget_mfli_range_guard.call_count, 2)
-        state.clear_sr830_range_floor(("830_a",))                         # one SR830 alone
+        runner.clear_sr830_range_floor(("830_a",))                         # one SR830 alone
         self.assertEqual(state.zurich_controller.forget_mfli_range_guard.call_count, 2)
         state.zurich_controller = None                                    # a page without a Zurich
-        state.clear_sr830_range_floor()
+        runner.clear_sr830_range_floor()
         import inspect
         self.assertIn("clear_sr830_range_floor(active_lockins, zurich=True)",
                       inspect.getsource(PPMSScanRunner.configure_transport_scan))

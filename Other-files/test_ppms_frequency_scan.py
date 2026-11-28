@@ -441,9 +441,12 @@ class ModeTableTests(unittest.TestCase):
         self.assertLessEqual(max(len(mode) for mode in PPMS_SCAN_MODES), 19)
 
     def test_acquire_s_is_1_s_for_both(self):
-        for mode in PPMS_FREQUENCY_SCAN_MODES:
-            self.assertEqual(PPMSPanelView._ppms_acquisition_default(mode), "1")
         page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_acquisition_default_shown = None
+        page.ppms_acquisition_time_var = Var("5")
+        for mode in PPMS_FREQUENCY_SCAN_MODES:
+            page._apply_ppms_mode_acquisition_default(mode)
+            self.assertEqual(page.ppms_acquisition_time_var.get(), "1")
         page.ppms_acquisition_time_var = Var("1")
         page._apply_ppms_mode_acquisition_default("Temperature")
         self.assertEqual(page.ppms_acquisition_time_var.get(), "5")
@@ -490,7 +493,12 @@ class ModeTableTests(unittest.TestCase):
         for mode, axis in PPMS_SCAN_PLOT_AXES.items():
             with self.subTest(mode=mode):
                 panel = PlotTests.panel_page([row], mode)
-                panel._redraw_ppms_transport_plot()
+                with mock.patch.object(
+                    panel_mod,
+                    "draw_nonlocal_series",
+                    side_effect=lambda *args, **options: panel.calls.append((args, options)),
+                ):
+                    panel._redraw_ppms_transport_plot()
                 self.assertTrue(panel.calls)
 
 

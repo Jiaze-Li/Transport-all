@@ -143,9 +143,10 @@ class DefaultSetupsAtTheNewTc(NoWindows):
                 def sleep(seconds):
                     clock[0] += seconds
 
-                module = two_panels.app
-                with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                        mock.patch.object(module.time, "sleep", sleep):
+                import time as std_time
+
+                with mock.patch.object(std_time, "monotonic", lambda: clock[0]), \
+                        mock.patch.object(std_time, "sleep", sleep):
                     panel._poll_ppms2_zurich()
                 self.assertEqual(controller.read_stfmr_mfli.call_count, 4)
                 self.assertTrue(all(call.kwargs["auto_range"]

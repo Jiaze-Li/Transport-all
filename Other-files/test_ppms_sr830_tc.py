@@ -868,6 +868,8 @@ class StartSettleTests(NoWindows):
         panel.state.ppms_instrument_controllers = {
             "6221": types.SimpleNamespace(connected=True, resource_name="GPIB0::12::INSTR"),
             "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")}
+        panel.ppms_lockin_selection["zurich"].set(False)
+        panel.ppms_lockin_selection["830_b"].set(False)
         panel.state.last_readback = dict(temperature_k=300, field_oe=100)
         ask = mock.Mock(return_value=False)   # the user answers No
         with mock.patch.object(panel_mod.messagebox, "askyesno", ask):

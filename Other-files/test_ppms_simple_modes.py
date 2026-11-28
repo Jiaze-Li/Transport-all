@@ -169,11 +169,11 @@ class ModeTests(unittest.TestCase):
                 _, _, settings = self.launch("Angle", (26, 28, 1), speed=typed)
                 self.assertEqual(settings["slowdown"], code)
                 self.assertIs(type(settings["slowdown"]), int)
-                self.assertEqual(app.PPMSMotorDebug.validate_move(26, typed, 26)[1], code)
+                self.assertEqual(motor_mod.PPMSMotorDebug.validate_move(26, typed, 26)[1], code)
         for typed in ("5.5", "15", "-1", "nan", "1e3"):
             with self.subTest(typed=typed):
                 with self.assertRaises(ValueError):
-                    app.PPMSMotorDebug.validate_move(26, typed, 26)
+                    motor_mod.PPMSMotorDebug.validate_move(26, typed, 26)
                 # launch() asserts that no error dialog opened; here that
                 # assertion fails on the refusal, which names the decel code.
                 with self.assertRaisesRegex(AssertionError, "Decel code must be an integer within 0–14"):

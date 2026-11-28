@@ -128,14 +128,21 @@ class TwoPanelTests(unittest.TestCase):
                              [f'/dev4414/demods/{i}/enable' for i in indices])
 
     def test_compact_five_row_axes_stay_inside_canvas(self):
-        panel = PPMSPanelView.__new__(PPMSPanelView)
-        panel._draw_plot_grid = Mock()
+        from transport.ppms.ui.theme import draw_nonlocal_series
+
         for height in (80, 95, 119, 150):
             canvas = Mock(ppms_compact_plot=True)
             canvas.winfo_width.return_value = 600
             canvas.winfo_height.return_value = height
-            panel._draw_nonlocal_series(canvas, {'test': [(0., 0.), (1., 1.)]},
-                                        'Magnetic field (T)', 'X voltage', 'waiting', show_legend=False)
+            draw_nonlocal_series(
+                canvas,
+                {'test': [(0., 0.), (1., 1.)]},
+                'Magnetic field (T)',
+                'X voltage',
+                'waiting',
+                show_legend=False,
+                draw_grid=Mock(),
+            )
             rect = canvas.create_rectangle.call_args.args
             self.assertEqual(rect[3], height - 44)
             for call in canvas.create_text.call_args_list:
@@ -278,9 +285,9 @@ class TwoPanelTests(unittest.TestCase):
             for suffix in ('x_v', 'y_v', 'theta_deg'):
                 row[f'zurich_demod{demod}_{suffix}'] = demod
         panel.state.scan_rows = [row]
-        panel._draw_nonlocal_series = Mock()
-        panel._redraw_ppms_transport_plot()
-        drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
+        with patch.object(panel_mod, 'draw_nonlocal_series') as draw_fn:
+            panel._redraw_ppms_transport_plot()
+        drawn = [c for c in draw_fn.call_args_list if c.args[1]]
         self.assertEqual(len(drawn), 6)
         self.assertEqual([next(iter(c.args[1].values()))[0][1] for c in drawn], [1, 1, 1, 2, 2, 2])
         # Zurich points are drawn as open circles so they stay distinguishable

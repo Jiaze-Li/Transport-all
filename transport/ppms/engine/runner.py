@@ -1129,7 +1129,7 @@ class PPMSScanRunner:
         frequency: float,
         lockins: tuple[str, ...],
         acquisition_s: float,
-        sink: ScanEventSink | None,
+        sink: ScanEventSink | None = None,
     ) -> tuple[dict[str, object], int]:
         self.clear_sr830_range_floor()
         previous = None

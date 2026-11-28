@@ -218,6 +218,7 @@ class NestedTests(unittest.TestCase):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
         obj.shell = types.SimpleNamespace(closing=False, post_ui=lambda callback: callback(), thread_log=lambda text: None)
+        obj._apply_ppms_environment_readback = lambda _data: None
         obj.ppms_angle_live_var = types.SimpleNamespace(set=lambda value: None)
         state = dict(angle=26., field=0., temp=300.)
         events = []

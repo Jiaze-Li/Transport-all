@@ -37,7 +37,7 @@ class CurrentCallbacks(unittest.TestCase):
                 obj.ppms_instrument_controllers = {
                     key: Mock(connected=True, lock=threading.RLock(), resource_name=f'GPIB0::{address}::INSTR')
                     for key, address in (('6221', 30), ('830_a', 8), ('830_b', 10))}
-                settings = app.validate_ppms_transport_scan_settings(1., 317.3, 50., ha, hb, ('830_a', '830_b'))
+                settings = validate_ppms_transport_scan_settings(1., 317.3, 50., ha, hb, ('830_a', '830_b'))
                 source_writes, lockin_writes = [], []
                 harmonics = {'830_a': 1, '830_b': 2}
                 obj._ppms_write_6221_checked = source_writes.append
@@ -80,7 +80,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj.ppms_instrument_controllers = {
             key: Mock(connected=True, lock=threading.RLock(), resource_name='GPIB0::8::INSTR')
             for key in ('6221', '830_a')}
-        settings = app.validate_ppms_transport_scan_settings(1., 317.3, 50., 1, 2, ('830_a',))
+        settings = validate_ppms_transport_scan_settings(1., 317.3, 50., 1, 2, ('830_a',))
         writes = []
         obj._ppms_write_6221_checked = lambda command: writes.append(command)
         def query(key, command, count):
@@ -347,7 +347,7 @@ class CurrentCallbacks(unittest.TestCase):
         good = dict(sr830_8_x_v=1., sr830_8_y_v=0., sr830_8_frequency_hz=317.3, sr830_8_reference_valid=True, sr830_8_overload=False)
         bad = dict(good, sr830_8_x_v=100., sr830_8_overload=True)
         obj._read_ppms_transport_sample = Mock(side_effect=[bad, good, bad, good])
-        with patch.object(app.time, 'monotonic', side_effect=[0., .2, .4, .6, 1.2, 1.2]):
+        with patch.object(runner_mod.time, 'monotonic', side_effect=[0., .2, .4, .6, 1.2, 1.2]):
             result = obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
         self.assertEqual(result["sr830_8_x_v"], 1.)
         self.assertEqual(result["sample_count"], 2)
@@ -355,19 +355,19 @@ class CurrentCallbacks(unittest.TestCase):
 
     def test_range_switch_discards_old_samples(self):
         obj = self.make_app()
-        obj.ppms_field_scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
+        obj.state.scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
         obj._read_ppms_transport_sample = Mock(side_effect=[
             {"range_settle_s": 5., "sr830_8_x_v": 999., "sr830_8_y_v": 999.},
             {"range_settle_s": 0., "sr830_8_x_v": 2., "sr830_8_y_v": 4.}])
-        with patch.object(app.time, "monotonic", side_effect=[0., 0., 5., 7., 7.]):
+        with patch.object(runner_mod.time, "monotonic", side_effect=[0., 0., 5., 7., 7.]):
             result = obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
         self.assertEqual(result["sample_count"], 1)
         self.assertEqual(result["sr830_8_x_v"], 2.)
-        obj.ppms_field_scan_stop_event.wait.assert_called_once_with(5.)
+        obj.state.scan_stop_event.wait.assert_called_once_with(5.)
 
     def test_window_averages_two_lockins_and_records_count(self):
         obj = self.make_app()
-        obj.ppms_field_scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
+        obj.state.scan_stop_event = Mock(is_set=Mock(return_value=False), wait=Mock(return_value=False))
         samples = []
         for value in (1., 3.):
             sample = {"6221_output_on": True}
@@ -376,7 +376,7 @@ class CurrentCallbacks(unittest.TestCase):
                                f"sr830_{address}_frequency_hz": 317.3, f"sr830_{address}_reference_valid": True})
             samples.append(sample)
         obj._read_ppms_transport_sample = Mock(side_effect=samples)
-        with patch.object(app.time, "monotonic", side_effect=(0., .4, 1.2, 1.2)):
+        with patch.object(runner_mod.time, "monotonic", side_effect=(0., .4, 1.2, 1.2)):
             result = obj._average_ppms_transport_sample(317.3, ("830_a", "830_b"), 1.)
         self.assertEqual(result["sample_count"], 2)
         for address in (8, 10):
@@ -386,12 +386,12 @@ class CurrentCallbacks(unittest.TestCase):
 
     def test_window_cancel_or_bad_reference_does_not_return_partial_point(self):
         obj = self.make_app()
-        obj.ppms_field_scan_stop_event.set()
+        obj.state.scan_stop_event.set()
         obj._read_ppms_transport_sample = Mock()
-        with self.assertRaises(app.PPMSScanCancelled):
+        with self.assertRaises(PPMSScanCancelled):
             obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
         obj._read_ppms_transport_sample.assert_not_called()
-        obj.ppms_field_scan_stop_event.clear()
+        obj.state.scan_stop_event.clear()
         obj._read_ppms_transport_sample.return_value = {"sr830_8_reference_valid": False}
         with self.assertRaisesRegex(RuntimeError, "reference unlocked"):
             obj._average_ppms_transport_sample(317.3, ("830_a",), 1.)
@@ -472,7 +472,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj = self.make_app()
         obj._run_ppms_command("setting", Mock())
         result = {"command_verification": "Temperature reply uncertain, confirming by readback"}
-        with patch.object(app.messagebox, "showerror") as popup:
+        with patch.object(panel_mod.messagebox, "showerror") as popup:
             self.future.set_result(result)
             popup.assert_not_called()
         obj.ppms_connection_var.set.assert_called_with(result["command_verification"])
@@ -480,7 +480,7 @@ class CurrentCallbacks(unittest.TestCase):
     def test_late_on_callback_does_not_overwrite_off(self):
         obj = self.make_app()
         obj._run_ppms_command("setting", Mock(), success_text="ON confirmed")
-        obj.ppms_field_scan_stop_event.set()
+        obj.state.scan_stop_event.set()
         obj.ppms_connection_var.set("OFF confirmed")
         self.future.set_result(None)
         obj.ppms_connection_var.set.assert_called_with("OFF confirmed")
@@ -490,7 +490,7 @@ class CurrentCallbacks(unittest.TestCase):
             obj = self.make_app()
             if readback_failure:
                 obj._apply_ppms_environment_readback.side_effect = ValueError("bad payload")
-            with patch.object(app.messagebox, "showerror") as popup:
+            with patch.object(panel_mod.messagebox, "showerror") as popup:
                 obj._run_ppms_command("setting", Mock())
                 if readback_failure:
                     self.future.set_result({})
@@ -504,7 +504,7 @@ class CurrentCallbacks(unittest.TestCase):
     def test_submit_failure_restores_ui(self):
         obj = self.make_app()
         obj.ppms_executor.submit.side_effect = RuntimeError("closed executor")
-        with patch.object(app.messagebox, "showerror"):
+        with patch.object(panel_mod.messagebox, "showerror"):
             obj._run_ppms_command("setting", Mock())
         self.assertFalse(obj.ppms_environment_busy)
 
@@ -520,9 +520,9 @@ class CurrentCallbacks(unittest.TestCase):
         # The error dialog opens from root.after (review, 2026-10-18).
         obj.root = types.SimpleNamespace(after=lambda _ms, show: show())
         obj.ppms_sources_off()
-        self.assertTrue(obj.ppms_field_scan_stop_event.is_set())
+        self.assertTrue(obj.state.scan_stop_event.is_set())
         worker = obj.ppms_executor.submit.call_args.args[0]
-        with patch.object(app.messagebox, "showerror") as popup:
+        with patch.object(panel_mod.messagebox, "showerror") as popup:
             try:
                 result = worker()
             except Exception as error:
@@ -546,8 +546,8 @@ class CurrentCallbacks(unittest.TestCase):
         source = Mock()
         source.lock = threading.RLock()
         obj.ppms_instrument_controllers = {"6221": source}
-        obj.ppms_field_scan_stop_event.set()
-        with self.assertRaises(app.PPMSScanCancelled):
+        obj.state.scan_stop_event.set()
+        with self.assertRaises(PPMSScanCancelled):
             obj._ppms_write_6221_checked("SOUR:WAVE:INIT")
         source.instrument.write.assert_not_called()
 

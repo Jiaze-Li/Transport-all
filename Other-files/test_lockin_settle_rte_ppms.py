@@ -436,6 +436,7 @@ class PPMSStartTests(NoWindows):
         ask = mock.Mock(return_value=yes)
         with tempfile.TemporaryDirectory() as folder, \
                 mock.patch.object(panel_mod.messagebox, "askyesno", ask), \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=True), \
                 mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
                 mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""):
             (run or obj.start_ppms_field_scan)()
