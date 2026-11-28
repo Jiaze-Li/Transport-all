@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:55:46.603Z",
+  "updatedAt": "2026-11-28T09:58:40.583Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s",
+    "current": "Fix final test harness assertions and closed-state stop_reason",
     "next": "",
     "history": [
       {
@@ -90,6 +90,10 @@
       {
         "at": "2026-11-28T17:55:32+08:00",
         "text": "Fix remaining 7 PPMS test harnesses (ppms_zero_persist_button, mock targets, connected flag)"
+      },
+      {
+        "at": "2026-11-28T17:58:27+08:00",
+        "text": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s"
       }
     ],
     "commits": [
@@ -218,6 +222,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:55:32+08:00",
         "message": "Fix remaining 6 PPMS test modules and restore _ppms_frequency_set_up_s"
+      },
+      {
+        "sha": "2c161b19d1e7bf72993bb1eafdd3a51f0e006a6c",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:58:27+08:00",
+        "message": "Fix final test harness assertions and closed-state stop_reason"
       }
     ],
     "pr": {
