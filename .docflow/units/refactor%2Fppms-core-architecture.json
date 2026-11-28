@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T10:09:23.131Z",
+  "updatedAt": "2026-11-28T10:11:21.627Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix final 4 PPMS test modules (messagebox mock, autorange sink kwargs, macro window)",
+    "current": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)",
     "next": "",
     "history": [
       {
@@ -102,6 +102,10 @@
       {
         "at": "2026-11-28T18:09:06+08:00",
         "text": "Fix remaining 5 PPMS test modules and Angle+Field target widget lock"
+      },
+      {
+        "at": "2026-11-28T18:11:05+08:00",
+        "text": "Fix final 4 PPMS test modules (messagebox mock, autorange sink kwargs, macro window)"
       }
     ],
     "commits": [
@@ -248,6 +252,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T18:09:06+08:00",
         "message": "Fix final 4 PPMS test modules (messagebox mock, autorange sink kwargs, macro window)"
+      },
+      {
+        "sha": "f1e62a9d7804d26e821d988ed26f07a67c5a1bc8",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T18:11:05+08:00",
+        "message": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)"
       }
     ],
     "pr": {
