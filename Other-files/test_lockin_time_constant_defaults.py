@@ -84,7 +84,7 @@ class WaitsAtTheNewDefaults(NoWindows):
 
         with mock.patch.object(std_time, "monotonic", lambda: clock[0]), \
                 mock.patch.object(std_time, "sleep", sleep):
-            result = panel._read_ppms2_zurich_ranged(317.3, scanning=True)
+            result = panel.runner.read_zurich_ranged(317.3, scanning=True, sink=panel)
         self.assertEqual(result["X"], 1e-6)
         self.assertAlmostEqual(clock[0], 10.0, places=6)
 

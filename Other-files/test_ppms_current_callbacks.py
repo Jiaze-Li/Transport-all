@@ -249,13 +249,15 @@ class CurrentCallbacks(unittest.TestCase):
         controller.disconnect.assert_called_once()
 
     def test_indicator_overload_red_then_recovers(self):
+        from transport.ppms.app_shell import AppShell
+
         obj = self.make_app()
         canvas = Mock()
-        obj.instrument_connection_indicators = {"ppms_ref_830_a": (canvas, 1)}
+        obj.shell.instrument_connection_indicators = {"ppms_ref_830_a": (canvas, 1)}
         for connected, fault, color in ((True, True, "#e53935"),
                                         (True, False, "#20b15a"),
                                         (False, False, "#9aa0a6")):
-            obj.shell._set_connection_indicator("ppms_ref_830_a", connected, fault=fault)
+            AppShell._set_connection_indicator(obj.shell, "ppms_ref_830_a", connected, fault=fault)
             self.assertEqual(canvas.itemconfigure.call_args.kwargs["fill"], color)
 
     def test_scan_sampling_autoranges_in_both_directions(self):
@@ -458,7 +460,7 @@ class CurrentCallbacks(unittest.TestCase):
         self.future.set_result(None)
         obj._apply_ppms_environment_readback.assert_not_called()
         obj.ppms_connection_var.set.assert_called_with("ON confirmed")
-        self.assertFalse(obj.ppms_environment_busy)
+        self.assertFalse(obj.state.environment_busy)
 
     def test_environment_success_still_applies_readback(self):
         obj = self.make_app()
@@ -466,7 +468,7 @@ class CurrentCallbacks(unittest.TestCase):
         result = {"temperature_k": 300}
         self.future.set_result(result)
         obj._apply_ppms_environment_readback.assert_called_once_with(result)
-        self.assertFalse(obj.ppms_environment_busy)
+        self.assertFalse(obj.state.environment_busy)
 
     def test_uncertain_environment_status_is_not_overwritten(self):
         obj = self.make_app()
@@ -497,7 +499,7 @@ class CurrentCallbacks(unittest.TestCase):
                 else:
                     self.future.set_exception(RuntimeError("device timeout"))
                 popup.assert_called_once()
-            self.assertFalse(obj.ppms_environment_busy)
+            self.assertFalse(obj.state.environment_busy)
             self.assertIn("Command failed", obj.ppms_connection_var.set.call_args.args[0])
             self.assertEqual(obj._set_ppms_environment_ui.call_count, 2)
 
@@ -506,7 +508,7 @@ class CurrentCallbacks(unittest.TestCase):
         obj.ppms_executor.submit.side_effect = RuntimeError("closed executor")
         with patch.object(panel_mod.messagebox, "showerror"):
             obj._run_ppms_command("setting", Mock())
-        self.assertFalse(obj.ppms_environment_busy)
+        self.assertFalse(obj.state.environment_busy)
 
     def shutdown(self, state):
         obj = self.make_app()

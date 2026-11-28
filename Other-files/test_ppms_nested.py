@@ -302,8 +302,8 @@ class NestedTests(unittest.TestCase):
                 obj, motor, settings, events = self.harness()
                 settings['scan_mode'] = mode
                 obj.runner.configure_transport_scan = lambda config, sink=None: None
-                read = obj.runner.read_live_fn
-                obj.runner.read_live_fn = lambda: dict(read(), temperature_status='Near')
+                read = obj.runner._read_live_override
+                obj.runner._read_live_override = lambda: dict(read(), temperature_status='Near')
                 self.run_worker(obj, motor, settings)
                 self.assertEqual(len([e for e in events if e[0] == 'plane']), 4)
 

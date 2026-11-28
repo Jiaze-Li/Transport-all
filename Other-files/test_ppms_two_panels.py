@@ -346,9 +346,9 @@ class TwoPanelTests(unittest.TestCase):
         panel.state.scan_rows = [dict(measured_field_oe=10, zurich_harmonic='1', zurich_x_v=5, zurich_y_v=5, zurich_theta_deg=5,
             sr830_8_harmonic=1, sr830_8_x_v=1, sr830_8_y_v=1, sr830_8_theta_deg=1,
             sr830_9_harmonic=2, sr830_9_x_v=2, sr830_9_y_v=2, sr830_9_theta_deg=2)]
-        panel._draw_nonlocal_series = Mock()
-        panel._redraw_ppms_transport_plot()
-        drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
+        with patch.object(panel_mod, 'draw_nonlocal_series') as draw_fn:
+            panel._redraw_ppms_transport_plot()
+        drawn = [c for c in draw_fn.call_args_list if c.args[1]]
         first_row = drawn[0]
         self.assertEqual(sorted(v[0][1] for v in first_row.args[1].values()), [1, 5])
         self.assertEqual(sorted(first_row.kwargs['series_colors'].values()),
@@ -407,6 +407,7 @@ class TwoPanelTests(unittest.TestCase):
             panel.ppms_transport_plot_frames = {(key, ch): Mock() for key in ('830_a', '830_b', '830_c') for ch in channels}
             panel.zurich_plot_frames = {ch: Mock() for ch in channels}
             panel.ppms_harmonic_plot_frames = {(order, ch): Mock() for order in (1, 2, 3) for ch in channels}
+            panel.ppms_harmonic_canvases = {}
             panel.ppms_lockin_selection = {key: Var(value) for key, value in zip(meters, flags)}
             panel._redraw_ppms_transport_plot = Mock()
             panel._refresh_ppms2_plot_layout()

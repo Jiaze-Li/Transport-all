@@ -116,7 +116,7 @@ class PersistentSetpointTests(unittest.TestCase):
         self.assertEqual(panel.ppms_field_status_var.get(), "Status: CoolingSwitch")
         self.assertEqual(self.feed(panel, 5000.4, "StablePersistent", 90), CONFIRMED)
         self.assertEqual(panel.ppms_field_status_var.get(), "Status: StablePersistent")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
         panel.ppms_connection_var.set("Temperature command")
         self.assertEqual(self.feed(panel, 5000, "StablePersistent", 200), "Temperature command",
                          "said once, then the line is free for other commands")
@@ -134,7 +134,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "WarmingSwitch"))
         self.assertEqual(self.feed(panel, 0, "StablePersistent", 0.2, taken=self.sent - 0.3), GOING)
-        self.assertIsNotNone(panel.ppms_persistent_watch)
+        self.assertIsNotNone(panel.state.persistent_watch)
         # The same field again: a late reading from before the switch cycle
         # must not confirm it.
         panel = self.make_panel()
@@ -174,7 +174,7 @@ class PersistentSetpointTests(unittest.TestCase):
             setattr(self.clock, "now", self.clock.now + 30) or reading(5000, "StablePersistent"))
         panel.set_ppms_field()
         self.assertEqual(panel.ppms_connection_var.get(), GOING)
-        self.assertIsNotNone(panel.ppms_persistent_watch)
+        self.assertIsNotNone(panel.state.persistent_watch)
 
     def test_persistent_away_from_the_setpoint_is_reported_not_confirmed(self):
         panel = self.make_panel()
@@ -184,7 +184,7 @@ class PersistentSetpointTests(unittest.TestCase):
         self.feed(panel, 1000, "Charging", 40)
         text = self.feed(panel, 4997, "StablePersistent", 90)
         self.assertEqual(text, "Persistent at +4997 Oe, not +5000 Oe; check MultiVu, not resent")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
         panel.ppms_environment_controller.set_field.assert_called_once()  # Nothing resent.
 
     def test_gives_up_after_the_ramp_time_plus_the_margin(self):
@@ -194,7 +194,7 @@ class PersistentSetpointTests(unittest.TestCase):
         self.assertEqual(self.feed(panel, 5000, "StableDriven", limit - 1), GOING)
         self.assertEqual(self.feed(panel, 5000, "StableDriven", limit),
                          "StableDriven at +5000 Oe, not Persistent at +5000 Oe in time; check MultiVu, not resent")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
         panel.ppms_environment_controller.set_field.assert_called_once()
         # The PPMS never acted on the setpoint.
         panel = self.make_panel()
@@ -266,7 +266,7 @@ class PersistentSetpointTests(unittest.TestCase):
                 panel._ppms_macro_operation = Mock()
                 panel._ppms_macro_finish = Mock()
                 panel._ppms_macro_next()
-                self.assertEqual(panel.ppms_persistent_watch is None, ended)
+                self.assertEqual(panel.state.persistent_watch is None, ended)
                 self.assertEqual(panel.ppms_connection_var.get(), MACRO_TOOK_OVER if ended else GOING)
 
     def test_the_scan_clean_up_zeroing_ends_the_follow_up(self):
@@ -278,7 +278,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_environment_controller.set_field.assert_called_with(0., 100., 1, 1)
         self.assertEqual(panel.ppms_connection_var.get(),
                          "The scan clean-up now sets the field; Persistent no longer followed")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
 
     def test_zero_and_persist_after_a_scan_ends_the_follow_up(self):
         panel = self.make_panel()
@@ -291,7 +291,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel._ppms_scan_with_final_field()
         self.assertEqual(panel.ppms_connection_var.get(),
                          "Zero + persist now sets the field; Persistent no longer followed")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
 
     def test_multipyvu_sends_persistent_without_the_follow_up(self):
         panel = self.make_panel()
@@ -300,7 +300,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_environment_controller.set_field.assert_called_once_with(5000., 100., 1, 0)
         self.assertEqual(panel.ppms_connection_var.get(),
                          "Sent +5000 Oe, ending Persistent; see the field status")
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
 
     def test_a_failed_command_starts_no_follow_up(self):
         panel = self.make_panel()
@@ -318,7 +318,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_field_target_var.set("3000")
         self.press(panel, panel.set_ppms_field, (100, "Charging"))
         panel.state.ppms_environment_controller.set_field.assert_called_with(3000., 100., 1, 1)
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
         self.assertEqual(panel.ppms_connection_var.get(), "Command completed; live readback in progress")
         self.assertEqual(self.feed(panel, 5000, "StablePersistent", 90),
                          "Command completed; live readback in progress")
@@ -329,7 +329,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_control_safety_var = Var(True)
         panel.state.ppms_environment_controller.disconnect = Mock()
         panel.disconnect_ppms_environment()
-        self.assertIsNone(panel.ppms_persistent_watch)
+        self.assertIsNone(panel.state.persistent_watch)
 
     def test_live_readings_carry_the_time_they_were_taken(self):
         panel = self.make_panel()

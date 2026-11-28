@@ -432,6 +432,7 @@ class ModeTableTests(unittest.TestCase):
         self.assertEqual(PPMS_SCAN_PLOT_AXES["Frequency"], "frequency")
         self.assertEqual(PPMS_SCAN_PLOT_AXES["Frequency+Current"], "current")
         page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_default_field_range = ("-15000", "15000", "1500")
         defaults = page._ppms_scan_mode_defaults()
         self.assertEqual(set(defaults), set(PPMS_SCAN_MODES))
         self.assertEqual(defaults["Frequency"], ("7", "97", "", "Hz (primes)"))

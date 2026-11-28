@@ -100,7 +100,7 @@ class ModeTests(unittest.TestCase):
             ppms_transport_compliance_var=50, ppms_transport_harmonic_a_var=1,
             ppms_transport_harmonic_b_var=2, ppms_motor_confirm_var=True,
             ppms_temperature_rate_var=1, ppms_temperature_approach_var="No overshoot",
-            ppms_motor_speed_var=speed)
+            ppms_motor_speed_var=speed, ppms_sr830_time_constant_var="1 s")
         for name, value in defaults.items():
             setattr(obj, name, Mock(get=lambda v=value: v))
         obj.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)

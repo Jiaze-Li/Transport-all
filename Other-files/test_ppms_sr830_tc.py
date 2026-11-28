@@ -872,11 +872,10 @@ class StartSettleTests(NoWindows):
         panel.ppms_lockin_selection["830_b"].set(False)
         panel.state.last_readback = dict(temperature_k=300, field_oe=100)
         ask = mock.Mock(return_value=False)   # the user answers No
-        with mock.patch.object(panel_mod.messagebox, "askyesno", ask), \
-                mock.patch.object(panel_mod, "ask_scan_start", return_value=False):
+        with mock.patch.object(panel_mod, "ask_scan_start", ask):
             panel.start_ppms_field_scan()
         self.error.assert_not_called()
-        message = ask.call_args.args[1]
+        message = ask.call_args.args[2]
         self.assertIn("Measurement points: 5\nWait before each reading: 10 s (1 x 10 s, the time constant of "
                       "SR830-1, the slowest lock-in measured; Settle s is 0.5 s)\n", message)
         # 4 s of field ramp, 5 x (10 s + 1 s), and the 6 s and 12 s allowances.

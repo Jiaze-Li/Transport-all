@@ -45,8 +45,8 @@ class Page:
         panel.state.ppms_instrument_controllers = rig.page.state.ppms_instrument_controllers
         panel.state.sr830_range_states = rig.page.state.sr830_range_states
         panel.runner._autorange_sr830 = rig.page.runner._autorange_sr830
-        panel.runner.read_live_fn = rig.page.runner.read_live_fn
-        panel._read_ppms_live = rig.page.runner.read_live_fn
+        panel.runner._read_live_override = rig.page.runner._read_live_override
+        panel._read_ppms_live = rig.page.runner.read_live
         panel._apply_ppms_environment_readback = rig.page._apply_ppms_environment_readback
         rig.page.state.ppms_environment_controller.backend = PPMS_QDINSTRUMENT_BACKEND
         rig.page.state.ppms_environment_controller.connected = True
