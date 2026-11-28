@@ -24,12 +24,12 @@ from unittest import mock
 
 import transport.ppms.engine.motor as motor_mod
 import transport.ppms.engine.runner as runner_mod
+from transport.ppms.engine.runner import PPMS_ROTATOR_MOVE_ALLOWANCE_S
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.engine.planning import (
     PPMS_FIELD_COMMANDING_MODES,
     PPMS_FIELD_LIMIT_OE,
-    PPMS_ROTATOR_MOVE_ALLOWANCE_S,
     PPMS_SCAN_MODES,
     PPMS_SCAN_PLOT_AXES,
     PPMS_SR830_KEYS,

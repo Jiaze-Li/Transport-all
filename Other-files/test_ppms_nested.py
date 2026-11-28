@@ -6,9 +6,10 @@ from unittest.mock import Mock, patch
 import transport.ppms.engine.motor as motor_mod
 import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
-from transport.ppms.engine.planning import PPMS_FIRST_POINT_MAX_WINDOWS, ppms_scan_axis, ppms_scan_temperature_segments
+from transport.ppms.engine.planning import ppms_scan_axis
 from transport.ppms.engine.errors import PPMSFieldScanError, PPMSLockinRangeError, PPMSMotorScanError
-from transport.ppms.engine.runner import PPMSScanRunner
+from transport.ppms.engine.runner import PPMS_FIRST_POINT_MAX_WINDOWS, PPMSScanRunner
+from transport.ppms.protocol import ppms_scan_temperature_segments
 from transport.ppms.state import PPMSAppState
 from transport.ppms.ui.panel import PPMSPanelView
 from transport.ppms.ui.theme import PPMS_HARMONIC_COLORS, format_sr830_voltage_text

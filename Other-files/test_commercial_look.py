@@ -296,7 +296,8 @@ class OverviewTests(unittest.TestCase):
         body = source[source.index("class ConnectionOverview"):source.index("    def _show_tooltip")]
         self.assertNotIn("self.frame.grid(", body)
         self.assertNotIn("self.frame.pack(", body)
-        self.assertIn("self.frame.place(in_=self.notebook", body)
+        self.assertIn("self.frame.place(", body)
+        self.assertIn("in_=self.notebook", body)
 
 
 class Widget(tk.Misc):

@@ -17,6 +17,7 @@ from unittest import mock
 
 import transport.ppms.engine.motor as motor_mod
 import transport.ppms.engine.runner as runner_mod
+from transport.ppms.engine.runner import PPMS_SET_UP_ALLOWANCE_S, PPMS_SR830_REFERENCE_SLOPE
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.engine.planning import (
@@ -24,9 +25,7 @@ from transport.ppms.engine.planning import (
     PPMS_FREQUENCY_SCAN_MODES,
     PPMS_SCAN_MODES,
     PPMS_SCAN_PLOT_AXES,
-    PPMS_SET_UP_ALLOWANCE_S,
     PPMS_SR830_KEYS,
-    PPMS_SR830_REFERENCE_SLOPE,
     PPMS_TRANSPORT_REFERENCE_TIMEOUT_S,
     PPMS_ZURICH_LOCK_READS,
     ppms_frequency_count_text,

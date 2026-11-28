@@ -75,7 +75,7 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(parents["metrics_outer"], "content")
         self.assertEqual(parents["metrics_view"], "metrics_outer")
         self.assertEqual(parents["metrics"], "metrics_view")
-        self.assertNotIn("in_=", inspect.getsource(PPMSPanelView._compact_ppms_controls))
+        self.assertNotIn("in_=", inspect.getsource(PPMSPanelView._build_compact_controls))
 
     def launch(self, mode, values, confirm=True, cancel_folder=False, filename="", existing=None, selected=None, speed=14,
                expect_error=None):

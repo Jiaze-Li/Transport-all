@@ -25,7 +25,7 @@ if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
 from transport.ppms.app import APP_VERSION
 import transport.core.scan_lifecycle as scan_lifecycle
-import transport.core.scan_recording as run_recorder
+import transport.ppms.ui.dialogs as run_recorder
 import transport.ppms.ui.dialogs as app
 
 BOM = "﻿".encode("utf-8")

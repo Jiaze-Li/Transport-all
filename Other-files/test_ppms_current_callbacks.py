@@ -7,9 +7,9 @@ import transport.ppms.engine.runner as runner_mod
 import transport.ppms.ui.panel as panel_mod
 from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
 from transport.ppms.controllers.sr830 import NONLOCAL_SR830_FULL_SCALE_V
-from transport.ppms.engine.planning import PPMS_SR830_REFERENCE_SLOPE, validate_ppms_transport_scan_settings
+from transport.ppms.engine.planning import validate_ppms_transport_scan_settings
 from transport.ppms.engine.errors import PPMSLockinRangeError, PPMSScanCancelled
-from transport.ppms.engine.runner import PPMSScanRunner, ppms_field_is_ready
+from transport.ppms.engine.runner import PPMS_SR830_REFERENCE_SLOPE, PPMSScanRunner, ppms_field_is_ready
 from transport.ppms.state import PPMSAppState
 from transport.ppms.ui.panel import PPMSPanelView
 from transport.ppms.ui.theme import format_sr830_full_scale

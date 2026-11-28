@@ -26,6 +26,7 @@ class Var:
     def __init__(self, value=None, **kwargs): self.value = value
     def get(self): return self.value
     def set(self, value): self.value = value
+    def trace_add(self, *_args, **_kwargs): pass
 
 
 class ImmediateExecutor:
@@ -451,7 +452,7 @@ class TwoPanelTests(unittest.TestCase):
              patch.object(panel_mod.tk, 'Canvas'), patch.object(panel_mod.ttk, 'Frame'), patch.object(panel_mod.ttk, 'Checkbutton'), \
              patch.object(panel_mod.ttk, 'LabelFrame'), patch.object(panel_mod.ttk, 'Label'), \
              patch.object(panel_mod.ttk, 'Entry'), patch.object(panel_mod.ttk, 'Combobox'), patch.object(panel_mod.ttk, 'Button'):
-            state = PPMSAppState(log=shell.thread_log)
+            state = PPMSAppState(logger=shell.thread_log)
             panel = PPMSPanelView(shell, Mock(), state)
         panel.post_ui = lambda callback: callback()
         return shell, panel, controller

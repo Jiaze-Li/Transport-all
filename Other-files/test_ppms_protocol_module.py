@@ -169,7 +169,7 @@ class TestPPMSProtocolModule(unittest.TestCase):
 
         self.assertIs(protocol.validate_ppms_temperature_command, validate_ppms_temperature_command)
         self.assertIs(protocol.validate_ppms_field_command, validate_ppms_field_command)
-        self.assertIs(planning.ppms_scan_temperature_segments, ppms_scan_temperature_segments)
+        self.assertIs(protocol.ppms_scan_temperature_segments, ppms_scan_temperature_segments)
 
         self.assertEqual(protocol.PPMS_TEMPERATURE_MIN_K, PPMS_TEMPERATURE_MIN_K)
         self.assertEqual(protocol.PPMS_TEMPERATURE_MAX_K, PPMS_TEMPERATURE_MAX_K)

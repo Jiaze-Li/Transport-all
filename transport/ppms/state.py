@@ -35,7 +35,9 @@ class PPMSAppState:
     thread-safe live shared state.
     """
 
-    def __init__(self, logger: Callable[[str], None]) -> None:
+    def __init__(self, logger: Callable[[str], None] | None = None) -> None:
+        if logger is None:
+            logger = lambda _msg: None
         self.logger = logger
         self.ppms_executor = ThreadPoolExecutor(
             max_workers=5, thread_name_prefix="ppms"

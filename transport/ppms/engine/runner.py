@@ -297,8 +297,13 @@ class PPMSScanRunner:
         controller = self.state.ppms_instrument_controllers[key]
         last_response = ""
         last_error: BaseException | None = None
-        zurich_cls = type(self.state.zurich_controller)
-        once = command.strip().upper() in zurich_cls.CLEAR_ON_READ_QUERIES
+        zurich_cls = type(getattr(self.state, "zurich_controller", None))
+        clear_queries = getattr(
+            zurich_cls,
+            "CLEAR_ON_READ_QUERIES",
+            ZurichMFLIController.CLEAR_ON_READ_QUERIES,
+        )
+        once = command.strip().upper() in clear_queries
         with controller.lock:
             instrument = controller.instrument
             if instrument is None:
@@ -498,7 +503,9 @@ class PPMSScanRunner:
                 state.overload_floor = None
         if keys is None if zurich is None else zurich:
             forget = getattr(
-                self.state.zurich_controller, "forget_mfli_range_guard", None
+                getattr(self.state, "zurich_controller", None),
+                "forget_mfli_range_guard",
+                None,
             )
             if callable(forget):
                 forget()

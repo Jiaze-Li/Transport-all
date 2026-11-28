@@ -111,7 +111,7 @@ class ZurichChoiceTests(unittest.TestCase):
                 self.errors.clear()
                 panel.zurich_resource.set(label)
                 panel.connect_ppms2_zurich()
-                self.pump(lambda: not panel.zurich_busy and self.probed)
+                self.pump(lambda: not panel.state.zurich_busy and self.probed)
                 self.assertEqual(self.probed, servers)
                 self.assertFalse(panel.zurich_controller.mfli_connected)
                 self.assertEqual(str(panel.zurich_entries[0].cget("state")), "readonly",
