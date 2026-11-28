@@ -138,7 +138,8 @@ class RuleTests(NoWindows):
             with self.subTest(taus=taus):
                 self.assertEqual(str(rule(settle, taus)), expected)
         self.assertEqual(str(rule(0.05, [app.SR830_TIME_CONSTANTS_S[8]])), "0.1", "the 100 ms 'SR830 TC'")
-        with mock.patch.object(app, "LOCKIN_SETTLE_TAUS", 7.0):
+        import transport.ppms.engine.planning as planning
+        with mock.patch.object(planning, "LOCKIN_SETTLE_TAUS", 7.0):
             for taus, settle, expected in (([0.1], 0.5, "0.7"), ([0.3], 0.5, "2.1"), ([1e-5], 0., "7e-05"),
                                            ([0.03], 0.1, "0.21"), ([3e-5], 0., "0.00021")):
                 with self.subTest(taus=taus, taus_rule=7.0):

@@ -168,6 +168,11 @@ def self_targets(statement):
 
 
 def main(argv) -> int:
+    raise SystemExit(
+        "tools/extract_app.py is frozen: Transport-PPMS (transport/ppms, "
+        "transport/common, transport/core) is the sole authoritative source "
+        "for PPMS (D1/M0). Do not regenerate transport/ppms/app.py."
+    )
     if len(argv) != 3:
         print(__doc__)
         return 2

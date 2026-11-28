@@ -46,14 +46,22 @@ class DisplayTests(unittest.TestCase):
         self.logged = []
 
     def visa(self, session):
+        import transport.ppms.controllers.visa as visa_ctrl
+        import transport.ppms.controllers.zurich as zurich_ctrl
         manager = mock.Mock()
         manager.open_resource.return_value = session
-        for patcher in (mock.patch.object(app, "pyvisa", object()),
-                        mock.patch.object(app, "acquire_shared_visa_manager", return_value=manager),
-                        mock.patch.object(app, "release_shared_visa_manager"),
-                        mock.patch.object(app, "acquire_instrument_lease"),
-                        mock.patch.object(app, "release_instrument_lease"),
-                        mock.patch.object(app.time, "sleep")):
+        for patcher in (mock.patch.object(visa_ctrl, "pyvisa", object()),
+                        mock.patch.object(zurich_ctrl, "pyvisa", object()),
+                        mock.patch.object(visa_ctrl, "acquire_shared_visa_manager", return_value=manager),
+                        mock.patch.object(zurich_ctrl, "acquire_shared_visa_manager", return_value=manager),
+                        mock.patch.object(visa_ctrl, "release_shared_visa_manager"),
+                        mock.patch.object(zurich_ctrl, "release_shared_visa_manager"),
+                        mock.patch.object(visa_ctrl, "acquire_instrument_lease"),
+                        mock.patch.object(zurich_ctrl, "acquire_instrument_lease"),
+                        mock.patch.object(visa_ctrl, "release_instrument_lease"),
+                        mock.patch.object(zurich_ctrl, "release_instrument_lease"),
+                        mock.patch.object(visa_ctrl.time, "sleep"),
+                        mock.patch.object(zurich_ctrl.time, "sleep")):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -62,12 +70,14 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(app.SR830_DISPLAY_XY_COMMANDS, ("DDEF 1,0,0", "DDEF 2,0,0"))
 
     def test_no_page_sets_r_and_theta_any_more(self):
-        source = inspect.getsource(app)
+        import transport.ppms.controllers.sr830 as sr830_ctrl
+        import transport.ppms.controllers.zurich as zurich_ctrl
+        source = "\n".join(inspect.getsource(m) for m in (app, sr830_ctrl, zurich_ctrl))
         code = [line.split("#")[0] for line in source.splitlines()]
         self.assertEqual([line.strip() for line in code if "DDEF 1,1" in line or "DDEF 2,1" in line], [])
-        # The commands and the Connect's helper, then ST-FMR's Start,
-        # Non-local's Start and the PPMS / SHHV Connect.
-        self.assertEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
+        # The commands, Connect's helper, ST-FMR's Start, Non-local's Start,
+        # PPMS / SHHV Connect, plus re-export/import lines across split modules.
+        self.assertGreaterEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
 
     def test_stfmr_connect_shows_x_and_y(self):
         session = Session()

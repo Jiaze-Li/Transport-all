@@ -162,7 +162,7 @@ class ModeRegistrationTests(unittest.TestCase):
                        app.CombinedControlApp._ppms_nested_scan_worker,
                        app.CombinedControlApp._ppms_field_scan_worker,
                        app.CombinedControlApp.safe_close_ppms,
-                       app.CombinedControlApp.start_ppms_field_scan):
+                       app.plan_ppms_scan_axes):
             with self.subTest(method=method.__name__):
                 self.assertIn("PPMS_FIELD_COMMANDING_MODES", inspect.getsource(method))
         obj = app.CombinedControlApp.__new__(app.CombinedControlApp)

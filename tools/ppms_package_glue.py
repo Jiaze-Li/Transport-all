@@ -1,12 +1,8 @@
-"""How the standalone PPMS application uses the transport package (Jiaze Li's
-modules, 2026-11): the definitions here replace the main program's of the
-same name, so the shared logic comes from the package instead of a copy.
-tools/extract_app.py reads this file; the application does not import it.
+"""FROZEN LEGACY ARTIFACT (D1/M0 — scheduled for removal in Batch 2).
 
-Each wrapper keeps the main program's name and signature and hands the work
-to the package with this application's own limits.  They are the wrappers of
-the modular Transport_all.py (the branch this application was made on), kept
-because the main program's own definitions had not changed since the split.
+Formerly read by tools/extract_app.py to wire package imports during extraction.
+Transport-PPMS (transport/ppms, transport/common, transport/core) is now the
+sole authoritative source for PPMS; this file is not imported or executed.
 """
 # Names the transport package already has: imported, not copied.
 PACKAGE_IMPORTS = {

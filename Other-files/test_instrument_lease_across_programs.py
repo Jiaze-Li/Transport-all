@@ -23,6 +23,7 @@ import unittest.mock
 from pathlib import Path
 
 from test_ppms_motor_debug import app
+import transport.ppms.controllers.visa as visa_ctrl
 
 SOURCE = Path(app.__file__).resolve()
 CHILD = r"""
@@ -160,7 +161,7 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
             self.assertIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES)
         finally:
             app.release_instrument_lease(self.resource, first)
-        self.assertNotIn(app.instrument_lease_key(self.resource), app._process_instrument_leases())
+        self.assertNotIn(app.instrument_lease_key(self.resource), visa_ctrl._process_instrument_leases())
         app.acquire_instrument_lease(self.resource, second, "CIDWM / 6221")
         app.release_instrument_lease(self.resource, second)
 
@@ -172,11 +173,11 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         del app._INSTRUMENT_LEASES[key]
         app.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
         app.release_instrument_lease(self.resource, owner)
-        app._process_instrument_leases().pop(key, None)
+        visa_ctrl._process_instrument_leases().pop(key, None)
 
     def test_a_system_that_cannot_make_the_object_does_not_stop_the_connect(self):
         owner = object()
-        with unittest.mock.patch.object(app, "hold_instrument_for_this_process", return_value=None):
+        with unittest.mock.patch.object(visa_ctrl, "hold_instrument_for_this_process", return_value=None):
             app.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
         self.assertIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES)
         app.release_instrument_lease(self.resource, owner)
