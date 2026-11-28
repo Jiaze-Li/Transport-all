@@ -6,7 +6,7 @@ from transport.ppms.controllers.qdinstrument import (
     PPMSQDInstrumentReadbackController,
     QDCommandUncertain,
 )
-from transport.ppms.controllers.sr830 import SR830Controller, STFMRSR830Controller
+from transport.ppms.controllers.sr830 import SR830Controller
 from transport.ppms.controllers.visa import (
     SafeVisaIdentityController,
     acquire_instrument_lease,
@@ -19,7 +19,6 @@ from transport.ppms.controllers.zurich import (
     LabOneCAPIAdapter,
     LabOneDotNetAdapter,
     LegacyMFLIBridge,
-    NonLocalACController,
     ZurichMFLIController,
 )
 
@@ -27,13 +26,11 @@ __all__ = [
     "LabOneCAPIAdapter",
     "LabOneDotNetAdapter",
     "LegacyMFLIBridge",
-    "NonLocalACController",
     "PPMSMultiVuReadbackController",
     "PPMSQDInstrumentReadbackController",
     "PPMSRemoteReadbackController",
     "QDCommandUncertain",
     "SR830Controller",
-    "STFMRSR830Controller",
     "SafeVisaIdentityController",
     "ZurichMFLIController",
     "acquire_instrument_lease",

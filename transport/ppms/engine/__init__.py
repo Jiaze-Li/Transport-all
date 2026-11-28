@@ -1,5 +1,14 @@
 """Hardware- and Tk-independent PPMS measurement planning and execution helpers."""
 
+from transport.ppms.engine.errors import (
+    PPMSFieldScanError,
+    PPMSLockinRangeError,
+    PPMSMotorScanError,
+    PPMSScanCancelled,
+    PPMS_FIELD_NOT_ZEROED_TEXT,
+)
+from transport.ppms.engine.macro import MacroEventSink, MacroRunner
+from transport.ppms.engine.motor import PPMSMotorDebug, PPMSMotorService
 from transport.ppms.engine.planning import (
     PPMS_FIELD_COMMANDING_MODES,
     PPMS_FREQUENCY_SCAN_MODES,
@@ -19,23 +28,50 @@ from transport.ppms.engine.planning import (
     ppms_settle_status_text,
     validate_ppms_transport_scan_settings,
 )
+from transport.ppms.engine.runner import (
+    PPMSScanRunner,
+    ScanEventSink,
+    ScanRequest,
+    format_scan_duration,
+    format_sr830_full_scale,
+    format_voltage_range,
+    ppms_field_is_ready,
+    ppms_sr830_address,
+)
 
 __all__ = [
+    "MacroEventSink",
+    "MacroRunner",
+    "PPMSFieldScanError",
+    "PPMSLockinRangeError",
+    "PPMSMotorDebug",
+    "PPMSMotorScanError",
+    "PPMSMotorService",
     "PPMSScanAxisPlan",
+    "PPMSScanCancelled",
+    "PPMSScanRunner",
     "PPMS_FIELD_COMMANDING_MODES",
+    "PPMS_FIELD_NOT_ZEROED_TEXT",
     "PPMS_FREQUENCY_SCAN_MODES",
     "PPMS_PLOT_AXIS_COLUMNS",
     "PPMS_SCAN_MODES",
     "PPMS_SCAN_PLOT_AXES",
+    "ScanEventSink",
+    "ScanRequest",
     "build_ppms_field_scan_sequence",
+    "format_scan_duration",
+    "format_sr830_full_scale",
+    "format_voltage_range",
     "nonlocal_prime_frequencies",
     "parse_ppms_macro",
     "plan_ppms_scan_axes",
+    "ppms_field_is_ready",
     "ppms_frequency_count_text",
     "ppms_frequency_scan_note",
     "ppms_lockin_settle_s",
     "ppms_lockin_settle_text",
     "ppms_prime_frequencies",
     "ppms_settle_status_text",
+    "ppms_sr830_address",
     "validate_ppms_transport_scan_settings",
 ]

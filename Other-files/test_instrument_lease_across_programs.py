@@ -22,10 +22,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from test_ppms_motor_debug import app
 import transport.ppms.controllers.visa as visa_ctrl
 
-SOURCE = Path(app.__file__).resolve()
+SOURCE = Path(visa_ctrl.__file__).resolve()
 CHILD = r"""
 import importlib.util, os, sys
 spec = importlib.util.spec_from_file_location("lease_child", sys.argv[1])
@@ -88,7 +87,7 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         deadline = time.monotonic() + seconds
         while True:
             try:
-                return app.acquire_instrument_lease(self.resource, owner, "This program / 6221")
+                return visa_ctrl.acquire_instrument_lease(self.resource, owner, "This program / 6221")
             except RuntimeError:
                 if time.monotonic() > deadline:
                     raise
@@ -100,24 +99,24 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         pid = int(line.split()[1])      # the program's own process (a venv's python.exe is only its launcher)
         owner = object()
         with self.assertRaises(RuntimeError) as caught:
-            app.acquire_instrument_lease(self.resource, owner, "This program / 6221")
+            visa_ctrl.acquire_instrument_lease(self.resource, owner, "This program / 6221")
         message = str(caught.exception)
         self.assertIn(f"{self.resource} is in use by another Transport program on this PC", message)
         self.assertIn("Other program / 6221", message)
         self.assertIn(f"process {pid}", message)
         self.assertIn("if no such window is open, end that process in Task Manager", message)
         self.assertIn('then connect from "This program / 6221"', message)
-        self.assertNotIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES, "nothing taken here")
+        self.assertNotIn(visa_ctrl.instrument_lease_key(self.resource), visa_ctrl._INSTRUMENT_LEASES, "nothing taken here")
         # The other program disconnects: the instrument is free.
         child.stdin.write("release\n")
         child.stdin.flush()
         self.assertEqual(child.stdout.readline().strip(), "RELEASED")
         self.acquire_soon(owner)
-        app.release_instrument_lease(self.resource, owner)
+        visa_ctrl.release_instrument_lease(self.resource, owner)
 
     def test_the_other_program_is_refused_what_this_one_holds(self):
         owner = object()
-        app.acquire_instrument_lease(self.resource, owner, "This program / SR830")
+        visa_ctrl.acquire_instrument_lease(self.resource, owner, "This program / SR830")
         try:
             _child, line = self.start()
             self.assertTrue(line.startswith("REFUSED "), line)
@@ -125,7 +124,7 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
             self.assertIn("This program / SR830", line)
             self.assertIn(f"process {os.getpid()}", line)
         finally:
-            app.release_instrument_lease(self.resource, owner)
+            visa_ctrl.release_instrument_lease(self.resource, owner)
         # Released here: the other program can take it.
         _child, line = self.start()
         self.assertTrue(line.startswith("HELD "), line)
@@ -137,7 +136,7 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         child.communicate()
         owner = object()
         self.acquire_soon(owner)
-        app.release_instrument_lease(self.resource, owner)
+        visa_ctrl.release_instrument_lease(self.resource, owner)
 
     def test_the_same_address_written_another_way_is_the_same_instrument(self):
         # A board number no real program uses, so nothing else on the PC holds it.
@@ -145,43 +144,43 @@ class LeaseAcrossProgramsTests(unittest.TestCase):
         _child, line = self.start(f"gpib{os.getpid()}::05")
         self.assertTrue(line.startswith("HELD "), line)
         with self.assertRaisesRegex(RuntimeError, "in use by another Transport program"):
-            app.acquire_instrument_lease(self.resource, object(), "This program / 6221")
+            visa_ctrl.acquire_instrument_lease(self.resource, object(), "This program / 6221")
 
     def test_inside_one_program_the_page_message_is_unchanged(self):
         first, second = object(), object()
-        app.acquire_instrument_lease(self.resource, first, "PPMS / 6221")
+        visa_ctrl.acquire_instrument_lease(self.resource, first, "PPMS / 6221")
         try:
             with self.assertRaises(RuntimeError) as caught:
-                app.acquire_instrument_lease(self.resource, second, "CIDWM / 6221")
+                visa_ctrl.acquire_instrument_lease(self.resource, second, "CIDWM / 6221")
             self.assertEqual(str(caught.exception),
                              f'{self.resource} is already connected by "PPMS / 6221"; please disconnect it in that '
                              'module first, then connect from "CIDWM / 6221"')
             # Another owner's release does nothing; the holder's frees it for the next page.
-            app.release_instrument_lease(self.resource, second)
-            self.assertIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES)
+            visa_ctrl.release_instrument_lease(self.resource, second)
+            self.assertIn(visa_ctrl.instrument_lease_key(self.resource), visa_ctrl._INSTRUMENT_LEASES)
         finally:
-            app.release_instrument_lease(self.resource, first)
-        self.assertNotIn(app.instrument_lease_key(self.resource), visa_ctrl._process_instrument_leases())
-        app.acquire_instrument_lease(self.resource, second, "CIDWM / 6221")
-        app.release_instrument_lease(self.resource, second)
+            visa_ctrl.release_instrument_lease(self.resource, first)
+        self.assertNotIn(visa_ctrl.instrument_lease_key(self.resource), visa_ctrl._process_instrument_leases())
+        visa_ctrl.acquire_instrument_lease(self.resource, second, "CIDWM / 6221")
+        visa_ctrl.release_instrument_lease(self.resource, second)
 
     def test_a_cleared_table_does_not_lock_the_program_out_of_its_own_instrument(self):
         # Tests clear the table directly; the object this process holds is its own.
         owner = object()
-        app.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
-        key = app.instrument_lease_key(self.resource)
-        del app._INSTRUMENT_LEASES[key]
-        app.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
-        app.release_instrument_lease(self.resource, owner)
+        visa_ctrl.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
+        key = visa_ctrl.instrument_lease_key(self.resource)
+        del visa_ctrl._INSTRUMENT_LEASES[key]
+        visa_ctrl.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
+        visa_ctrl.release_instrument_lease(self.resource, owner)
         visa_ctrl._process_instrument_leases().pop(key, None)
 
     def test_a_system_that_cannot_make_the_object_does_not_stop_the_connect(self):
         owner = object()
         with unittest.mock.patch.object(visa_ctrl, "hold_instrument_for_this_process", return_value=None):
-            app.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
-        self.assertIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES)
-        app.release_instrument_lease(self.resource, owner)
-        self.assertNotIn(app.instrument_lease_key(self.resource), app._INSTRUMENT_LEASES)
+            visa_ctrl.acquire_instrument_lease(self.resource, owner, "PPMS / 6221")
+        self.assertIn(visa_ctrl.instrument_lease_key(self.resource), visa_ctrl._INSTRUMENT_LEASES)
+        visa_ctrl.release_instrument_lease(self.resource, owner)
+        self.assertNotIn(visa_ctrl.instrument_lease_key(self.resource), visa_ctrl._INSTRUMENT_LEASES)
 
 
 if __name__ == "__main__":

@@ -2,12 +2,13 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from test_ppms_motor_debug import app
+import transport.ppms.app_shell as app_shell
+from transport.ppms.app_shell import AppShell
 
 
 class LogPauseTests(unittest.TestCase):
     def test_pause_copy_save_resume(self):
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        obj = AppShell.__new__(AppShell)
         obj.root = Mock()
         obj.log_text = Mock()
         obj.log_text.get.return_value = 'earlier\n'
@@ -22,7 +23,7 @@ class LogPauseTests(unittest.TestCase):
         obj.root.clipboard_append.assert_called_once_with('earlier\n')
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'log.txt'
-            with patch.object(app.filedialog, 'asksaveasfilename', return_value=str(path)):
+            with patch.object(app_shell.filedialog, 'asksaveasfilename', return_value=str(path)):
                 obj.save_communication_log()
             self.assertIn('LabOne diagnostic', path.read_text(encoding='utf-8-sig'))
         pending = ''.join(obj.log_pending_lines)

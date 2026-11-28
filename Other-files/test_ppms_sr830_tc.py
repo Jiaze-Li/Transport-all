@@ -36,6 +36,18 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
+import transport.ppms.app_shell as app_shell_mod
+import transport.ppms.state as state_mod
+import transport.ppms.ui.panel as panel_mod
+import transport.ppms.engine.runner as runner_mod
+from transport.ppms.app_shell import AppShell
+from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
+from transport.ppms.controllers.sr830 import SR830_TIME_CONSTANTS_S, STFMR_LOCKIN_SR830_TIME_CONSTANTS
+from transport.ppms.engine.errors import PPMSLockinRangeError
+from transport.ppms.engine.planning import PPMS_SR830_KEYS, PPMS_SR830_LABELS
+from transport.ppms.engine.runner import PPMSScanRunner
+from transport.ppms.state import PPMSAppState
+from transport.ppms.ui.panel import PPMSPanelView
 from test_ppms_motor_debug import app
 from test_ppms_two_panels import ImmediateExecutor, Var
 
@@ -118,60 +130,57 @@ class Kinds:
 
 
 def _parent():
-    parent = app.CombinedControlApp.__new__(app.CombinedControlApp)
-    parent.root = mock.Mock()
-    parent.closing = False
-    parent.ui_queue = mock.Mock()
-    parent.post_ui = lambda callback: callback()
-    parent.thread_log = mock.Mock()
-    parent.ui_scale = parent.canvas_scale = 1.0
-    return parent
+    shell = AppShell.__new__(AppShell)
+    shell.root = mock.Mock()
+    shell.closing = False
+    shell.ui_queue = mock.Mock()
+    shell.post_ui = lambda callback: callback()
+    shell.thread_log = mock.Mock()
+    shell.append_log = mock.Mock()
+    shell.ui_scale = shell.canvas_scale = 1.0
+    shell._ui_px = lambda value, minimum=1, **_kw: max(int(minimum), int(round(float(value))))
+    shell._pair_inset = lambda _c: 0
+    shell._create_connection_indicator = lambda master, _name: StandIn(master)
+    shell._set_connection_indicator = mock.Mock()
+    return shell
 
 
 def _patches(stack, ttk):
     font = types.SimpleNamespace(
         nametofont=lambda *_args, **_options: types.SimpleNamespace(measure=lambda text: 7 * len(text)),
         Font=lambda *_args, **_options: types.SimpleNamespace(measure=lambda text: 7 * len(text)))
-    stack.enter_context(mock.patch.object(app, "ttk", ttk))
-    stack.enter_context(mock.patch.object(app, "tkfont", font))
-    stack.enter_context(mock.patch.object(app.tk, "Canvas", ttk.Canvas))
+    stack.enter_context(mock.patch.object(panel_mod, "ttk", ttk))
+    stack.enter_context(mock.patch.object(panel_mod, "tkfont", font))
+    stack.enter_context(mock.patch.object(panel_mod.tk, "Canvas", ttk.Canvas))
     for name in ("StringVar", "IntVar", "BooleanVar", "DoubleVar"):
-        stack.enter_context(mock.patch.object(app.tk, name, Var))
-    stack.enter_context(mock.patch.object(app, "ThreadPoolExecutor", ImmediateExecutor))
-    stack.enter_context(mock.patch.object(app, "NonLocalACController", return_value=mock.Mock(mfli_connected=False)))
+        stack.enter_context(mock.patch.object(panel_mod.tk, name, Var))
+    stack.enter_context(mock.patch.object(state_mod, "ThreadPoolExecutor", ImmediateExecutor))
+    stack.enter_context(mock.patch.object(state_mod, "ZurichMFLIController", return_value=mock.Mock(mfli_connected=False)))
     stack.enter_context(mock.patch.object(
-        app, "create_zurich_chooser",
+        panel_mod, "create_zurich_chooser",
         lambda master, *_args, **_options: types.SimpleNamespace(
             zurich_shortfall=0, grid=lambda **_o: None, configure=lambda **_o: None, master=master)))
-    stack.enter_context(mock.patch.object(
-        app.CombinedControlApp, "_create_connection_indicator", lambda self, master, _name: StandIn(master)))
-    stack.enter_context(mock.patch.object(app.CombinedControlApp, "_set_connection_indicator", mock.Mock()))
-    stack.enter_context(mock.patch.object(app.CombinedControlApp, "_redraw_ppms_transport_plot", lambda self: None))
-    stack.enter_context(mock.patch.object(app.CombinedControlApp, "_draw_nonlocal_series", mock.Mock()))
+    stack.enter_context(mock.patch.object(panel_mod, "show_trimmed", lambda *_a, **_kw: None))
+    stack.enter_context(mock.patch.object(panel_mod, "draw_nonlocal_series", mock.Mock()))
 
 
 def _build(cls):
-    """The real panel constructor (page build and Zurich row) on stand-ins;
-    afterwards its SR830 slots hold fake SR830s and Tk callbacks run at once."""
+    """The real panel constructor on stand-ins; afterwards its SR830 slots
+    hold fake SR830s and Tk callbacks run at once."""
     ttk = Kinds()
+    shell = _parent()
     with ExitStack() as stack:
         _patches(stack, ttk)
-        panel = cls(_parent(), StandIn())
-    panel.post_ui = lambda callback: callback()
-    panel._set_connection_indicator = mock.Mock()
+        state = PPMSAppState(shell.thread_log)
+        panel = cls(shell, StandIn(), state)
     panel._redraw_ppms_transport_plot = lambda: None
-    panel.thread_log = mock.Mock()
-    for key in app.PPMS_SR830_KEYS:
-        panel.ppms_instrument_controllers[key] = FakeController(app.PPMS_SR830_LABELS[key])
+    for key in PPMS_SR830_KEYS:
+        state.ppms_instrument_controllers[key] = FakeController(PPMS_SR830_LABELS[key])
     return panel, ttk
 
 
 def build_ppms_panel():
-    return _build(app.PPMSPanel)
-
-
-def build_rte_panel():
-    return _build(app.RTEPanel)
+    return _build(PPMSPanelView)
 
 
 class FakeSR830:
@@ -270,7 +279,7 @@ class NoWindows(unittest.TestCase):
         patches = [
             mock.patch("tkinter.Tk", side_effect=AssertionError("a test tried to open a Tk window")),
             mock.patch.object(tkinter.messagebox, "showerror", self.error),
-            mock.patch.object(app.time, "sleep"),  # the 30 ms after each SR830 write
+            mock.patch.object(runner_mod.time, "sleep"),  # the 30 ms after each SR830 write
         ]
         for name in ("showwarning", "showinfo", "askyesno", "askokcancel", "askyesnocancel",
                      "askquestion", "askretrycancel"):
@@ -293,16 +302,16 @@ class PageTests(NoWindows):
                   and w.options.get("textvariable") is panel.ppms_sr830_time_constant_var]
         self.assertEqual(combos, [panel.ppms_sr830_time_constant_combo])
         combo = combos[0]
-        self.assertEqual(combo.options["values"], tuple(app.STFMR_LOCKIN_SR830_TIME_CONSTANTS))
+        self.assertEqual(combo.options["values"], tuple(STFMR_LOCKIN_SR830_TIME_CONSTANTS))
         self.assertEqual(combo.options["values"],
                          ("1 ms", "3 ms", "10 ms", "30 ms", "100 ms", "300 ms", "1 s", "3 s", "10 s"))
-        self.assertEqual([app.SR830_TIME_CONSTANTS_S[code] for code in app.STFMR_LOCKIN_SR830_TIME_CONSTANTS.values()],
+        self.assertEqual([SR830_TIME_CONSTANTS_S[code] for code in STFMR_LOCKIN_SR830_TIME_CONSTANTS.values()],
                          [1e-3, 3e-3, 10e-3, 30e-3, 100e-3, 300e-3, 1.0, 3.0, 10.0])
         self.assertEqual(panel.ppms_sr830_time_constant_var.get(), "1 s")
-        self.assertEqual(app.STFMR_LOCKIN_SR830_TIME_CONSTANTS["1 s"], 10, "today's Connect value")
+        self.assertEqual(STFMR_LOCKIN_SR830_TIME_CONSTANTS["1 s"], 10, "today's Connect value")
         self.assertEqual(panel._ppms_sr830_time_constant_code(), 10)
         self.assertEqual((combo.options["state"], combo.options["width"]), ("readonly", 6))
-        self.assertLessEqual(max(map(len, app.STFMR_LOCKIN_SR830_TIME_CONSTANTS)), 6)
+        self.assertLessEqual(max(map(len, STFMR_LOCKIN_SR830_TIME_CONSTANTS)), 6)
         self.assertEqual(self.texts(ttk).count("SR830 TC"), 1)
 
     def test_the_dropdown_sits_beside_macro_under_the_keithley_2400(self):
@@ -343,12 +352,12 @@ class ConnectTests(NoWindows):
     def connect(self, panel, key="830_a", label=None, keeps=None):
         if label is not None:
             panel.ppms_sr830_time_constant_var.set(label)
-        panel.ppms_instrument_controllers[key].keeps_time_constant = keeps
+        panel.state.ppms_instrument_controllers[key].keeps_time_constant = keeps
         panel.connect_ppms_device(key)
-        return panel.ppms_instrument_controllers[key]
+        return panel.state.ppms_instrument_controllers[key]
 
     def test_connect_sets_the_chosen_time_constant_and_reads_it_back(self):
-        for label, code in app.STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
+        for label, code in STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
             with self.subTest(label=label):
                 panel, _ttk = build_ppms_panel()
                 controller = self.connect(panel, label=label)
@@ -357,7 +366,7 @@ class ConnectTests(NoWindows):
                 self.assertEqual(sr830.writes, connect_setup(code), "the old order, the chosen code")
                 self.assertIn("OFLT?", sr830.queries)
                 self.assertEqual(sr830.state["OFSL"], 1, "12 dB/oct")
-                self.assertEqual(panel.ppms_sr830_time_constant_codes["830_a"], code)
+                self.assertEqual(panel.state.sr830_time_constant_codes["830_a"], code)
                 self.assertEqual(panel.ppms_device_connection_vars["830_a"].get(), "Connected")
                 self.error.assert_not_called()
 
@@ -374,23 +383,23 @@ class ConnectTests(NoWindows):
         self.assertIn("OFLT=10", self.error.call_args.args[1])
         self.assertIn("expected 8", self.error.call_args.args[1])
         self.assertTrue(panel.ppms_device_connection_vars["830_a"].get().startswith("Failed"))
-        self.assertNotIn("830_a", panel.ppms_sr830_time_constant_codes)
+        self.assertNotIn("830_a", panel.state.sr830_time_constant_codes)
         self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "readonly",
                          "unlocked again after the failed Connect")
 
     def test_the_choice_is_locked_until_a_connect_ends(self):
         panel, _ttk = build_ppms_panel()
-        panel.ppms_executor = DeferredExecutor()
+        panel.state.ppms_executor = DeferredExecutor()
         combo = panel.ppms_sr830_time_constant_combo
         panel.connect_ppms_device("830_b")
         self.assertEqual(combo.options["state"], "disabled")
         panel.ppms_sr830_time_constant_var.set("3 s")
         panel._ppms_apply_sr830_time_constant()      # cannot be picked; refused anyway
         self.assertEqual(panel.ppms_sr830_time_constant_var.get(), "1 s", "back to what Connect sends")
-        self.assertEqual(len(panel.ppms_executor.jobs), 1, "only the Connect")
-        panel.ppms_executor.run()
+        self.assertEqual(len(panel.state.ppms_executor.jobs), 1, "only the Connect")
+        panel.state.ppms_executor.run()
         self.assertEqual(combo.options["state"], "readonly")
-        self.assertEqual(panel.ppms_instrument_controllers["830_b"].instrument.writes,
+        self.assertEqual(panel.state.ppms_instrument_controllers["830_b"].instrument.writes,
                          connect_setup(10, harmonic=2))
 
 class ChangeTests(NoWindows):
@@ -398,8 +407,8 @@ class ChangeTests(NoWindows):
         panel, ttk = build_ppms_panel()
         for key in keys:
             panel.connect_ppms_device(key)
-            panel.ppms_instrument_controllers[key].instrument.writes.clear()
-            panel.ppms_instrument_controllers[key].instrument.queries.clear()
+            panel.state.ppms_instrument_controllers[key].instrument.writes.clear()
+            panel.state.ppms_instrument_controllers[key].instrument.queries.clear()
         return panel
 
     def choose(self, panel, label):
@@ -408,92 +417,92 @@ class ChangeTests(NoWindows):
 
     def test_a_new_choice_is_set_on_every_connected_sr830_on_the_worker(self):
         panel = self.connected_panel()
-        panel.ppms_executor = DeferredExecutor()
+        panel.state.ppms_executor = DeferredExecutor()
         state = types.SimpleNamespace(low_range_count=2, range_cooldown=3, low_range_peak=1e-4,
                                       sensitivity_index=12, clear_latch_pending=False)
-        panel.ppms_sr830_range_states = {"830_a": state}
-        panel.ppms_idle_range_ready_at = {"830_a": time.monotonic() + 50.0}  # 5 x 10 s, stale
-        controllers = panel.ppms_instrument_controllers
+        panel.state.sr830_range_states = {"830_a": state}
+        panel.state.idle_range_ready_at = {"830_a": time.monotonic() + 50.0}  # 5 x 10 s, stale
+        controllers = panel.state.ppms_instrument_controllers
         self.choose(panel, "100 ms")
         # Nothing is sent from the Tk thread; the choice is locked meanwhile.
         self.assertEqual(controllers["830_a"].instrument.writes, [])
-        self.assertTrue(panel.ppms_environment_busy)
+        self.assertTrue(panel.state.environment_busy)
         self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "disabled")
-        self.assertEqual(len(panel.ppms_executor.jobs), 1)
+        self.assertEqual(len(panel.state.ppms_executor.jobs), 1)
         before = time.monotonic()
-        panel.ppms_executor.run()
+        panel.state.ppms_executor.run()
         for key in ("830_a", "830_c"):
             sr830 = controllers[key].instrument
             self.assertEqual(sr830.writes, ["OFLT 8"], key)
             self.assertEqual(sr830.queries, ["*ESR?", "OFLT?"], key)
-            self.assertEqual(panel.ppms_sr830_time_constant_codes[key], 8)
+            self.assertEqual(panel.state.sr830_time_constant_codes[key], 8)
         self.assertFalse(controllers["830_b"].connected, "an unconnected SR830 gets it at Connect")
-        self.assertFalse(panel.ppms_environment_busy)
+        self.assertFalse(panel.state.environment_busy)
         self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "readonly")
         self.assertEqual(panel.ppms_sr830_time_constant_applied, "100 ms")
-        self.assertIn("OFLT 8", panel.thread_log.call_args.args[0])
+        self.assertIn("OFLT 8", panel.shell.thread_log.call_args.args[0])
         # Ranging restarts: the counts made with the old time constant are
         # dropped, and idle autorange waits 5 new time constants (0.5 s here).
         self.assertEqual((state.low_range_count, state.range_cooldown, state.low_range_peak), (0, 0, 0.0))
         self.assertEqual(state.sensitivity_index, 12, "the range itself is kept")
-        ready = panel.ppms_idle_range_ready_at["830_a"]
+        ready = panel.state.idle_range_ready_at["830_a"]
         self.assertGreaterEqual(ready, before + 0.5)
         self.assertLess(ready, time.monotonic() + 0.6)
         # A later Connect sends the new choice.
         panel.connect_ppms_device("830_b")
-        panel.ppms_executor.run()
+        panel.state.ppms_executor.run()
         self.assertEqual(controllers["830_b"].instrument.writes, connect_setup(8, harmonic=2))
         self.error.assert_not_called()
 
     def test_with_no_sr830_connected_the_choice_waits_for_connect(self):
         panel, _ttk = build_ppms_panel()
-        panel.ppms_executor = DeferredExecutor()
+        panel.state.ppms_executor = DeferredExecutor()
         self.choose(panel, "3 s")
-        self.assertEqual(panel.ppms_executor.jobs, [])
-        self.assertFalse(panel.ppms_environment_busy)
+        self.assertEqual(panel.state.ppms_executor.jobs, [])
+        self.assertFalse(panel.state.environment_busy)
         self.assertEqual(panel.ppms_sr830_time_constant_applied, "3 s")
-        panel.ppms_executor.submit = ImmediateExecutor().submit
+        panel.state.ppms_executor.submit = ImmediateExecutor().submit
         panel.connect_ppms_device("830_c")
-        self.assertEqual(panel.ppms_instrument_controllers["830_c"].instrument.writes,
+        self.assertEqual(panel.state.ppms_instrument_controllers["830_c"].instrument.writes,
                          connect_setup(11, harmonic=3))
 
     def test_a_change_is_refused_and_locked_while_busy(self):
-        for busy in ("ppms_environment_busy", "ppms_field_scan_running", "ppms_sr830_connecting"):
+        for busy in ("environment_busy", "scan_running", "sr830_connecting"):
             with self.subTest(busy=busy):
                 panel = self.connected_panel(("830_a",))
-                panel.ppms_executor = DeferredExecutor()
-                setattr(panel, busy, {"830_b"} if busy == "ppms_sr830_connecting" else True)
+                panel.state.ppms_executor = DeferredExecutor()
+                setattr(panel.state, busy, {"830_b"} if busy == "sr830_connecting" else True)
                 panel._update_ppms_control_ui()
                 self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "disabled")
                 self.choose(panel, "10 s")
-                self.assertEqual(panel.ppms_executor.jobs, [])
-                self.assertEqual(panel.ppms_instrument_controllers["830_a"].instrument.writes, [])
+                self.assertEqual(panel.state.ppms_executor.jobs, [])
+                self.assertEqual(panel.state.ppms_instrument_controllers["830_a"].instrument.writes, [])
                 self.assertEqual(panel.ppms_sr830_time_constant_var.get(), "1 s", "shows what the SR830s have")
-                setattr(panel, busy, set() if busy == "ppms_sr830_connecting" else False)
+                setattr(panel.state, busy, set() if busy == "sr830_connecting" else False)
                 panel._update_ppms_control_ui()
                 self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "readonly")
 
     def test_a_readback_mismatch_is_reported_and_the_others_still_change(self):
         panel = self.connected_panel()
-        panel.ppms_instrument_controllers["830_a"].instrument.keeps_time_constant = 10
+        panel.state.ppms_instrument_controllers["830_a"].instrument.keeps_time_constant = 10
         self.choose(panel, "3 s")
         message = self.error.call_args.args[1]
         self.assertIn("SR830-1", message)
         self.assertIn("requested OFLT 11, read 10", message)
-        self.assertNotIn("830_a", panel.ppms_sr830_time_constant_codes, "unknown, not recorded")
-        self.assertEqual(panel.ppms_sr830_time_constant_codes["830_c"], 11)
-        self.assertEqual(panel.ppms_instrument_controllers["830_c"].instrument.writes, ["OFLT 11"])
-        self.assertTrue(panel.ppms_instrument_controllers["830_a"].connected, "a change never disconnects")
-        self.assertFalse(panel.ppms_environment_busy)
+        self.assertNotIn("830_a", panel.state.sr830_time_constant_codes, "unknown, not recorded")
+        self.assertEqual(panel.state.sr830_time_constant_codes["830_c"], 11)
+        self.assertEqual(panel.state.ppms_instrument_controllers["830_c"].instrument.writes, ["OFLT 11"])
+        self.assertTrue(panel.state.ppms_instrument_controllers["830_a"].connected, "a change never disconnects")
+        self.assertFalse(panel.state.environment_busy)
         self.assertEqual(panel.ppms_sr830_time_constant_combo.options["state"], "readonly")
 
     def test_the_change_runs_through_the_harmonic_changes_checked_write(self):
-        """OFLT goes through _ppms_write_sr830_checked (write, *ESR?) and is
+        """OFLT goes through runner.write_sr830_checked (write, *ESR?) and is
         read back with OFLT?, as HARM is."""
         panel = self.connected_panel(("830_b",))
-        panel._ppms_write_sr830_checked = mock.Mock(wraps=panel._ppms_write_sr830_checked)
+        panel.runner.write_sr830_checked = mock.Mock(wraps=panel.runner.write_sr830_checked)
         self.choose(panel, "30 ms")
-        panel._ppms_write_sr830_checked.assert_called_once_with("830_b", "OFLT 7")
+        panel.runner.write_sr830_checked.assert_called_once_with("830_b", "OFLT 7")
 
 
 class CsvTests(NoWindows):
@@ -501,38 +510,35 @@ class CsvTests(NoWindows):
         """One point of the real PPMS scan worker, with SR830-1 and SR830-3.
         The stop event moves a clock instead of waiting: the point waits
         1 time constant of the slower SR830 first (user, 2026-10-14)."""
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        obj.closing = False
-        obj.ppms_field_scan_stop_event = self.event = ClockEvent(Clock())
-        obj.ppms_scan_context = {}
-        obj.ppms_last_readback = None
-        obj.ppms_field_scan_rows = []
-        obj.ppms_field_scan_total = 1
-        obj.ppms_field_scan_started_at = time.monotonic()
-        obj.ppms_environment_controller = types.SimpleNamespace(backend="MultiPyVu")
-        obj.ppms_instrument_controllers = {
+        state = PPMSAppState()
+        state.scan_stop_event = self.event = ClockEvent(Clock())
+        state.scan_started_at = time.monotonic()
+        state.ppms_environment_controller = types.SimpleNamespace(backend="MultiPyVu")
+        state.ppms_instrument_controllers = {
             "830_a": types.SimpleNamespace(resource_name="GPIB0::8::INSTR"),
             "830_c": types.SimpleNamespace(resource_name="GPIB0::10::INSTR")}
-        obj.ppms_sr830_time_constant_codes = codes
-        obj._read_ppms_live = lambda: dict(field_oe=0.0, field_status="Persistent",
-                                           temperature_k=300.0, temperature_status="Stable")
-        obj._configure_ppms_transport_scan = lambda settings: None
+        state.sr830_time_constant_codes = codes
+        runner = PPMSScanRunner(
+            state,
+            post_ui=lambda callback: None,
+            read_live_fn=lambda: dict(field_oe=0.0, field_status="Persistent",
+                                      temperature_k=300.0, temperature_status="Stable"),
+        )
+        runner.configure_transport_scan = lambda settings, sink=None: None
         sample = {}
         for address in (8, 10):
             sample.update({f"sr830_{address}_x_v": 1e-6, f"sr830_{address}_frequency_hz": 317.3,
                            f"sr830_{address}_reference_valid": True, f"sr830_{address}_sensitivity_index": 9})
-        obj._acquire_ppms_first_point = lambda *args: (dict(sample), 1)
-        obj._average_ppms_transport_sample = lambda *args: dict(sample)
-        obj.post_ui = lambda callback: None
-        obj.thread_log = lambda text: None
+        runner._acquire_first_point = lambda *args, **kwargs: (dict(sample), 1)
+        runner.average_transport_sample = lambda *args, **kwargs: dict(sample)
         settings = dict(scan_mode="Temperature", active_lockins=("830_a", "830_c"),
                         harmonic_a=1, harmonic_b=2, harmonic_c=3, acquisition_s=1.0,
                         frequency_hz=317.3, current_rms_ma=1.0, compliance_v=50.0)
         with tempfile.TemporaryDirectory() as folder:
-            obj.ppms_live_csv_path = Path(folder) / "scan.csv"
-            obj.ppms_live_csv_fields = None
-            app.CombinedControlApp._ppms_field_scan_worker(obj, [(1, 1, 1, 300.0)], 100.0, 0.0, 1, settings)
-            with obj.ppms_live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
+            state.live_csv_path = Path(folder) / "scan.csv"
+            state.live_csv_fields = None
+            runner.field_scan_worker([(1, 1, 1, 300.0)], 100.0, 0.0, 1, settings)
+            with state.live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
                 reader = csv.reader(handle)
                 return next(reader), next(reader)
 
@@ -636,42 +642,42 @@ class RangeLimitTests(NoWindows):
     def averaging(self, settles):
         """The real averaging loop on scripted readings (each a range step
         with that wait, then settled ones) and a clock moved by the waits."""
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        obj.closing = False
+        state = PPMSAppState()
         clock = Clock()
-        obj.ppms_field_scan_stop_event = ClockEvent(clock)
+        state.scan_stop_event = ClockEvent(clock)
+        runner = PPMSScanRunner(state, post_ui=lambda callback: None)
         settled = {"sr830_8_x_v": 1e-6, "sr830_8_y_v": 0.0, "sr830_8_frequency_hz": 317.3,
                    "sr830_8_reference_valid": True, "sr830_8_overload": False}
         readings = iter([{"range_settle_s": s} for s in settles])
-        obj._read_ppms_transport_sample = lambda *_args: next(readings, settled)
-        return obj, clock
+        runner.read_transport_sample = lambda *_args, **_kwargs: next(readings, settled)
+        return state, runner, clock
 
     def run_steps(self, settle, steps):
-        obj, clock = self.averaging([settle] * steps)
-        with mock.patch.object(app.time, "monotonic", clock):
-            obj._average_ppms_transport_sample(317.3, ("830_a",), 1.0)
-        return obj
+        state, runner, clock = self.averaging([settle] * steps)
+        with mock.patch.object(runner_mod.time, "monotonic", clock):
+            runner.average_transport_sample(317.3, ("830_a",), 1.0)
+        return state
 
     def test_at_1_s_the_limit_is_still_180_s(self):
         """5 s per step: 36 steps fit, the 37th would end past 180 s."""
-        obj = self.run_steps(5.0, 36)
-        self.assertEqual(obj.ppms_field_scan_stop_event.waits.count(5.0), 36)
-        with self.assertRaisesRegex(app.PPMSLockinRangeError, r"within 180 s; current point not saved"):
+        state = self.run_steps(5.0, 36)
+        self.assertEqual(state.scan_stop_event.waits.count(5.0), 36)
+        with self.assertRaisesRegex(PPMSLockinRangeError, r"within 180 s; current point not saved"):
             self.run_steps(5.0, 37)
 
     def test_shorter_time_constants_keep_180_s(self):
         """100 ms: 0.5 s per step, so 360 fit in 180 s, and no more."""
         self.run_steps(0.5, 360)
-        with self.assertRaisesRegex(app.PPMSLockinRangeError, r"within 180 s"):
+        with self.assertRaisesRegex(PPMSLockinRangeError, r"within 180 s"):
             self.run_steps(0.5, 361)
 
     def test_a_long_time_constant_keeps_as_many_steps(self):
         """10 s: 50 s per step.  180 s held three; now 36 fit in 1800 s."""
         for settle, limit in ((15.0, "540"), (50.0, "1800")):
             with self.subTest(settle=settle):
-                obj = self.run_steps(settle, 36)
-                self.assertEqual(obj.ppms_field_scan_stop_event.waits.count(settle), 36)
-                with self.assertRaisesRegex(app.PPMSLockinRangeError, rf"within {limit} s"):
+                state = self.run_steps(settle, 36)
+                self.assertEqual(state.scan_stop_event.waits.count(settle), 36)
+                with self.assertRaisesRegex(PPMSLockinRangeError, rf"within {limit} s"):
                     self.run_steps(settle, 37)
 
     def test_the_first_point_after_connect_at_10_s_completes(self):
@@ -679,20 +685,19 @@ class RangeLimitTests(NoWindows):
         (OFLT 12) a 0.6 mV signal overloads up to SENS 17, eight steps of
         50 s each.  The point used to fail at the fourth step; the whole
         chain (6221 checks, SNAP?, LIAS?, SENS, OFLT?) now completes it."""
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        obj.closing = False
+        state = PPMSAppState()
         clock = Clock()
-        obj.ppms_field_scan_stop_event = ClockEvent(clock)
-        obj.post_ui = lambda callback: None
+        state.scan_stop_event = ClockEvent(clock)
         sr830 = RangingSR830(code=12)
-        obj.ppms_instrument_controllers = {
+        state.ppms_instrument_controllers = {
             "6221": slot("Keithley 6221", Fake6221()),
             "830_a": slot("SR830-1", sr830, "GPIB0::8::INSTR")}
+        runner = PPMSScanRunner(state, post_ui=lambda callback: None)
         started = clock.now
-        with mock.patch.object(app.time, "monotonic", clock):
-            sample = obj._average_ppms_transport_sample(317.3, ("830_a",), 1.0)
+        with mock.patch.object(runner_mod.time, "monotonic", clock):
+            sample = runner.average_transport_sample(317.3, ("830_a",), 1.0)
         self.assertEqual(sr830.writes, [f"SENS {code}" for code in range(10, 18)])
-        self.assertEqual(obj.ppms_field_scan_stop_event.waits.count(50.0), 8, "5 x 10 s after each step")
+        self.assertEqual(state.scan_stop_event.waits.count(50.0), 8, "5 x 10 s after each step")
         self.assertGreater(clock.now - started, 400.0, "well past the old 180 s")
         self.assertEqual(sample["sr830_8_sensitivity_index"], 17)
         self.assertAlmostEqual(sample["sr830_8_x_v"], 6e-4)
@@ -723,7 +728,7 @@ class IdlePollTests(NoWindows):
     def polling_panel(self):
         panel, _ttk = build_ppms_panel()
         panel.connect_ppms_device("830_a")
-        controller = panel.ppms_instrument_controllers["830_a"]
+        controller = panel.state.ppms_instrument_controllers["830_a"]
         controller.lock = self.HandOverLock()
         sr830 = controller.instrument
         # 0.5 % of the 2 uV range: a low reading (under 1 % since 2026-11-16;
@@ -731,15 +736,15 @@ class IdlePollTests(NoWindows):
         sr830.answers["OUTP? 3"] = "1e-08"
         sr830.writes.clear()
         sr830.queries.clear()
-        panel.ppms_environment_controller = types.SimpleNamespace(backend="fake", read_environment=lambda: {})
+        panel.state.ppms_environment_controller = types.SimpleNamespace(backend="fake", read_environment=lambda: {})
         panel._read_ppms_current_display = lambda: "ON / sine setpoint 1 mA RMS / 317.3 Hz"
         panel._read_ppms_cryogen_display = lambda: {}
-        panel.ppms_idle_autorange_enabled, panel.ppms_6221_zero_output = True, False
-        panel.ppms_field_scan_running = False
+        panel.state.idle_autorange_enabled, panel.state.k6221_zero_output = True, False
+        panel.state.scan_running = False
         state = types.SimpleNamespace(low_range_count=2, range_cooldown=0, low_range_peak=0.0,
                                       sensitivity_index=13, clear_latch_pending=False)
-        panel.ppms_sr830_range_states = {"830_a": state}
-        panel.ppms_idle_range_ready_at = {}
+        panel.state.sr830_range_states = {"830_a": state}
+        panel.state.idle_range_ready_at = {}
         return panel, controller, sr830, state
 
     def change_to_10_s(self, panel):
@@ -754,7 +759,7 @@ class IdlePollTests(NoWindows):
         result = panel._read_ppms_live()
         self.assertEqual(sr830.writes, ["OFLT 12"], "the change only, no range step")
         self.assertNotIn("OUTP? 3", sr830.queries, "the poll saw the wait and did not range")
-        self.assertGreaterEqual(panel.ppms_idle_range_ready_at["830_a"], before + 50.0, "5 x 10 s")
+        self.assertGreaterEqual(panel.state.idle_range_ready_at["830_a"], before + 50.0, "5 x 10 s")
         self.assertEqual(state.low_range_count, 0, "counting restarts after the wait")
         self.assertIn("LOCK", result["lockin_reference"]["830_a"])
 
@@ -766,14 +771,14 @@ class IdlePollTests(NoWindows):
         before = time.monotonic()
         panel._read_ppms_live()
         self.assertIn("OUTP? 3", sr830.queries)
-        self.assertGreaterEqual(panel.ppms_idle_range_ready_at["830_a"], before + 50.0)
+        self.assertGreaterEqual(panel.state.idle_range_ready_at["830_a"], before + 50.0)
 
     def test_without_a_change_the_poll_still_counts_low_readings(self):
         panel, _controller, sr830, state = self.polling_panel()
         panel._read_ppms_live()
         self.assertIn("OUTP? 3", sr830.queries)
         self.assertEqual(sr830.writes, ["SENS 8"], "the third low reading in a row ranges down from 9")
-        self.assertGreater(panel.ppms_idle_range_ready_at["830_a"], time.monotonic(), "and waits to settle")
+        self.assertGreater(panel.state.idle_range_ready_at["830_a"], time.monotonic(), "and waits to settle")
 
 
 class ScanStartTimeConstantTests(NoWindows):
@@ -781,20 +786,20 @@ class ScanStartTimeConstantTests(NoWindows):
     so a front-panel change since Connect is recorded as it is."""
 
     def configure(self, panel, front_panel_code=None):
-        sr830 = panel.ppms_instrument_controllers["830_a"].instrument
+        sr830 = panel.state.ppms_instrument_controllers["830_a"].instrument
         if front_panel_code is not None:
             sr830.state["OFLT"] = front_panel_code
         sr830.writes.clear()
         sr830.queries.clear()
-        panel.thread_log.reset_mock()
+        panel.shell.thread_log.reset_mock()
         source = Fake6221()
-        panel.ppms_instrument_controllers["6221"] = slot("Keithley 6221", source, "GPIB0::12::INSTR")
-        panel._ppms_write_6221_checked = source.write
-        panel._initialize_ppms_6221 = lambda: None
+        panel.state.ppms_instrument_controllers["6221"] = slot("Keithley 6221", source, "GPIB0::12::INSTR")
+        panel.runner.write_6221_checked = source.write
+        panel.runner.initialize_6221 = lambda: None
         # The page's own SR830-1 harmonic, which Connect set (SHHV's is 2
         # since the user's figure of 2026-11-16), so the start writes no HARM.
         own = str(panel._ppms_harmonic_var("830_a").get())
-        panel._configure_ppms_transport_scan(dict(
+        panel.runner.configure_transport_scan(dict(
             active_lockins=("830_a",), current_rms_ma=1.0, frequency_hz=317.3, compliance_v=10.0,
             harmonic_a=int(own) if own.isdigit() else 1, harmonic_b=2, harmonic_c=3))
         return sr830
@@ -812,23 +817,23 @@ class ScanStartTimeConstantTests(NoWindows):
         self.assertEqual(sr830.queries.count("OFLT?"), 1)
         self.assertLess(sr830.queries.index("RSLP?"), sr830.queries.index("OFLT?"))
         self.assertLess(sr830.queries.index("OFLT?"), sr830.queries.index("FREQ?"), "before the 6221 starts")
-        self.assertEqual(panel.ppms_sr830_time_constant_codes["830_a"], 10)
-        panel.thread_log.assert_not_called()
+        self.assertEqual(panel.state.sr830_time_constant_codes["830_a"], 10)
+        panel.shell.thread_log.assert_not_called()
 
     def test_a_front_panel_change_is_recorded_and_logged(self):
         panel = self.connected()
         self.configure(panel, front_panel_code=11)
-        self.assertEqual(panel.ppms_sr830_time_constant_codes["830_a"], 11, "3 s, as the SR830 reads")
-        message = panel.thread_log.call_args.args[0]
+        self.assertEqual(panel.state.sr830_time_constant_codes["830_a"], 11, "3 s, as the SR830 reads")
+        message = panel.shell.thread_log.call_args.args[0]
         self.assertIn("SR830-1", message)
         self.assertIn("3 s (OFLT 11), not the 1 s last set", message)
 
     def test_a_failed_read_leaves_the_column_unknown_and_stops_the_start(self):
         panel = self.connected()
-        panel.ppms_instrument_controllers["830_a"].instrument.answers["OFLT?"] = "25"
+        panel.state.ppms_instrument_controllers["830_a"].instrument.answers["OFLT?"] = "25"
         with self.assertRaisesRegex(RuntimeError, "time-constant readback invalid: OFLT=25"):
             self.configure(panel)
-        self.assertNotIn("830_a", panel.ppms_sr830_time_constant_codes)
+        self.assertNotIn("830_a", panel.state.sr830_time_constant_codes)
 
 class StartSettleTests(NoWindows):
     """The scan-start confirmation used to note a Settle s shorter than 5
@@ -842,16 +847,14 @@ class StartSettleTests(NoWindows):
         panel, _ttk = build()
         if label is not None:
             panel.ppms_sr830_time_constant_var.set(label)
-        return panel._ppms_lockin_settle(settle_s, lockins, False)
+        return panel.runner.lockin_settle(settle_s, lockins, False, fallback_code=panel._ppms_sr830_time_constant_code())
 
     def test_the_wait_is_in_the_scan_time_estimate(self):
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        obj.ppms_field_scan_running = obj.ppms_environment_busy = False
-        # Start clears it first (review, 2026-10-18).
-        obj.ppms_field_scan_stop_event = threading.Event()
-        obj._require_ppms_control_ready = mock.Mock()
-        obj.ppms_simple_mode = Var("Field")
-        obj.ppms_simple_range = [Var(v) for v in (100, 300, 100)]
+        panel, _ttk = build_ppms_panel()
+        panel.state.scan_running = panel.state.environment_busy = False
+        panel._require_ppms_control_ready = mock.Mock()
+        panel.ppms_simple_mode = Var("Field")
+        panel.ppms_simple_range = [Var(v) for v in (100, 300, 100)]
         values = dict(ppms_acquisition_time_var=1, ppms_field_target_var=100, ppms_temperature_target_var=300,
                       ppms_motor_target_var=26, ppms_field_scan_stable_var=0.5, ppms_field_rate_var=100,
                       ppms_field_approach_var="No overshoot", ppms_transport_current_var=1,
@@ -860,18 +863,19 @@ class StartSettleTests(NoWindows):
                       ppms_temperature_approach_var="No overshoot", ppms_motor_speed_var=14,
                       ppms_motor_confirm_var=True, ppms_sr830_time_constant_var="10 s")
         for name, value in values.items():
-            setattr(obj, name, Var(value))
-        obj.ppms_environment_controller = types.SimpleNamespace(backend=app.PPMS_QDINSTRUMENT_BACKEND)
-        obj.ppms_instrument_controllers = {
+            setattr(panel, name, Var(value))
+        panel.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
+        panel.state.ppms_instrument_controllers = {
             "6221": types.SimpleNamespace(connected=True, resource_name="GPIB0::12::INSTR"),
             "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")}
-        obj.ppms_last_readback = dict(temperature_k=300, field_oe=100)
-        obj.root = None
+        panel.ppms_lockin_selection["zurich"].set(False)
+        panel.ppms_lockin_selection["830_b"].set(False)
+        panel.state.last_readback = dict(temperature_k=300, field_oe=100)
         ask = mock.Mock(return_value=False)   # the user answers No
-        with mock.patch.object(app.messagebox, "askyesno", ask):
-            obj.start_ppms_field_scan()
+        with mock.patch.object(panel_mod, "ask_scan_start", ask):
+            panel.start_ppms_field_scan()
         self.error.assert_not_called()
-        message = ask.call_args.args[1]
+        message = ask.call_args.args[2]
         self.assertIn("Measurement points: 5\nWait before each reading: 10 s (1 x 10 s, the time constant of "
                       "SR830-1, the slowest lock-in measured; Settle s is 0.5 s)\n", message)
         # 4 s of field ramp, 5 x (10 s + 1 s), and the 6 s and 12 s allowances.
@@ -883,12 +887,12 @@ class StartSettleTests(NoWindows):
                       "as off.", message)
         self.assertTrue(message.endswith("\n\nContinue to choose the run folder and start the scan?"))
         self.assertEqual(ask.call_args.kwargs["icon"], "question")
-        self.assertFalse(obj.ppms_field_scan_running, "No: nothing starts")
+        self.assertFalse(panel.state.scan_running, "No: nothing starts")
 
     def test_every_choice_waits_1_time_constant_or_settle_s(self):
-        for label, code in app.STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
+        for label, code in STFMR_LOCKIN_SR830_TIME_CONSTANTS.items():
             with self.subTest(label=label):
-                tau = app.SR830_TIME_CONSTANTS_S[code]
+                tau = SR830_TIME_CONSTANTS_S[code]
                 settle, slowest, meter = self.settle(label, 0.5)
                 self.assertEqual((slowest, meter), (tau, "SR830-1"))
                 self.assertAlmostEqual(settle, max(0.5, 1.0 * tau))

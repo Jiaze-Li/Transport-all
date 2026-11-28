@@ -40,4 +40,5 @@ packages = [
     "transport.ppms",
     "transport.ppms.controllers",
     "transport.ppms.engine",
+    "transport.ppms.ui",
 ]

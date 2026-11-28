@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_ppms_motor_debug import app
+from transport.ppms.ui import dialogs as app
 
 
 def posix(path) -> str:

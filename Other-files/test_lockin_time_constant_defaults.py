@@ -26,8 +26,10 @@ for _path in (_HERE, _HERE.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import transport.ppms.app as app  # noqa: E402
-import test_ppms_two_panels as two_panels  # noqa: E402  (its own copy of the program)
+from transport.ppms.controllers.sr830 import SR830Controller
+from transport.ppms.controllers.zurich import ZurichMFLIController
+from transport.ppms.engine.runner import PPMS_ZURICH_TIME_CONSTANT_S
+import test_ppms_two_panels as two_panels  # noqa: E402
 
 
 class NoWindows(unittest.TestCase):
@@ -41,9 +43,9 @@ class DefaultsAreOneSecond(NoWindows):
 
     def test_the_methods_default_to_1_s(self):
         """What the program sends when the caller gives no time constant."""
-        self.assertEqual(inspect.signature(app.STFMRSR830Controller.configure)
+        self.assertEqual(inspect.signature(SR830Controller.configure)
                          .parameters["time_constant_code"].default, 10)
-        self.assertEqual(inspect.signature(app.NonLocalACController.configure_mfli)
+        self.assertEqual(inspect.signature(ZurichMFLIController.configure_mfli)
                          .parameters["timeconstant_s"].default, 1.0)
 
     def test_the_ppms_and_rte_zurich_box_shows_1(self):
@@ -78,10 +80,11 @@ class WaitsAtTheNewDefaults(NoWindows):
         def sleep(seconds):
             clock[0] += seconds
 
-        module = two_panels.app
-        with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                mock.patch.object(module.time, "sleep", sleep):
-            result = panel._read_ppms2_zurich_ranged(317.3, scanning=True)
+        import time as std_time
+
+        with mock.patch.object(std_time, "monotonic", lambda: clock[0]), \
+                mock.patch.object(std_time, "sleep", sleep):
+            result = panel.runner.read_zurich_ranged(317.3, scanning=True, sink=panel)
         self.assertEqual(result["X"], 1e-6)
         self.assertAlmostEqual(clock[0], 10.0, places=6)
 
@@ -93,15 +96,6 @@ def _step_seen(t_s, tau_s):
     return 1.0 - math.exp(-x) * (1.0 + x)
 
 
-def _iv6221_sample_times(settle_s, acquire_s):
-    """When _nonlocal_iv6221_read_point reads after a step (no read delay):
-    after Settle s, every NONLOCAL_IV6221_SAMPLE_INTERVAL_S until Acquire s
-    has passed since the first reading."""
-    interval = app.NONLOCAL_IV6221_SAMPLE_INTERVAL_S
-    count = int(math.ceil(acquire_s / interval - 1e-9)) + 1
-    return [settle_s + k * interval for k in range(count)]
-
-
 class DefaultSetupsAtTheNewTc(NoWindows):
     """Settle s, Acquire s and Wait/pt do not follow the TC, so these
     out-of-the-box setups read before a 1 s TC has settled (reviewed,
@@ -111,7 +105,7 @@ class DefaultSetupsAtTheNewTc(NoWindows):
         """The idle readout (after Set 6221 with a current) ranges under the
         Zurich lock, so Zurich actions and a scan Start's Zurich set-up wait
         for it: up to 4 x 10 s at the 1 s default, 4 x 1 s at 0.1 s."""
-        for tc_s, held_s in ((app.PPMS_ZURICH_TIME_CONSTANT_S, 40.0), (0.1, 4.0)):
+        for tc_s, held_s in ((PPMS_ZURICH_TIME_CONSTANT_S, 40.0), (0.1, 4.0)):
             with self.subTest(tc_s=tc_s):
                 _parent, panel, controller = two_panels.TwoPanelTests.make_panel(None)
                 panel.connect_ppms2_zurich()
@@ -143,16 +137,17 @@ class DefaultSetupsAtTheNewTc(NoWindows):
                 controller.mfli_config = {"timeconstant_s": tc_s}
                 controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: {
                     "auto_range": "RANGE 0.01->0.1 V", "X": 999}
-                panel.ppms_idle_autorange_enabled = True
-                panel.ppms_6221_zero_output = False
-                panel.ppms_field_scan_running = False
+                panel.state.idle_autorange_enabled = True
+                panel.state.k6221_zero_output = False
+                panel.state.scan_running = False
 
                 def sleep(seconds):
                     clock[0] += seconds
 
-                module = two_panels.app
-                with mock.patch.object(module.time, "monotonic", lambda: clock[0]), \
-                        mock.patch.object(module.time, "sleep", sleep):
+                import time as std_time
+
+                with mock.patch.object(std_time, "monotonic", lambda: clock[0]), \
+                        mock.patch.object(std_time, "sleep", sleep):
                     panel._poll_ppms2_zurich()
                 self.assertEqual(controller.read_stfmr_mfli.call_count, 4)
                 self.assertTrue(all(call.kwargs["auto_range"]

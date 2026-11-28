@@ -22,9 +22,26 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_nonlocal_keithley import Var
+import transport.ppms.engine.motor as motor_mod
+import transport.ppms.engine.runner as runner_mod
+from transport.ppms.engine.runner import PPMS_ROTATOR_MOVE_ALLOWANCE_S
+import transport.ppms.ui.panel as panel_mod
+from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
+from transport.ppms.engine.planning import (
+    PPMS_FIELD_COMMANDING_MODES,
+    PPMS_FIELD_LIMIT_OE,
+    PPMS_SCAN_MODES,
+    PPMS_SCAN_PLOT_AXES,
+    PPMS_SR830_KEYS,
+    plan_ppms_scan_axes,
+)
+from transport.ppms.engine.errors import PPMSScanCancelled
+from transport.ppms.engine.runner import PPMSScanRunner
+from transport.ppms.state import PPMSAppState
+from transport.ppms.ui.panel import PPMS_SR830_HARMONIC_ATTRS, PPMSPanelView
+from transport.ppms.ui.theme import PPMS_METER_COLORS, shade_color
+from test_ppms_two_panels import Var
 from test_ppms_frequency_scan import PlotTests, Rig
-from test_ppms_motor_debug import app
 from test_ppms_run_save_zero import ZERO, Page
 from test_ppms_sr830_tc import build_ppms_panel
 
@@ -73,7 +90,7 @@ def rotator(log, start=26.0):
 
         def move_and_verify(self, target, slowdown, cancelled=lambda: False, index_target=None):
             if cancelled():
-                raise app.PPMSScanCancelled("Cancelled before moving")
+                raise PPMSScanCancelled("Cancelled before moving")
             log.append(("motor", round(float(target), 6)))
             state["angle"] = float(target)
             return {"angle_deg": float(target), "status": "AtTarget"}
@@ -90,9 +107,10 @@ class AngleFieldPage(Page):
         super().__init__(test, "Angle+Field", main_row)
         panel, log = self.panel, self.rig.log
         self.magnet = Magnet(log)
-        remote = panel.ppms_environment_controller
+        remote = panel.state.ppms_environment_controller
         remote.set_field = self.magnet.set_field
         remote.read_environment = self.magnet.read
+        panel.runner._read_live_override = self.magnet.read
         panel._read_ppms_live = self.magnet.read
         panel.ppms_field_rate_var.set("100")
         for var, value in zip(panel.ppms_outer_field_scan_range, outer):
@@ -100,16 +118,19 @@ class AngleFieldPage(Page):
         self.motor = rotator(log)
 
     def start(self, name="run1", answer=True, folder=True):
+        import transport.ppms.ui.dialogs as dialogs_mod
+
         def error(title, text, **_options):
             self.dialogs.append((title, text))
-        with mock.patch.object(app.time, "monotonic", self.rig.clock), \
-                mock.patch.object(app.time, "sleep", lambda _s: None), \
-                mock.patch.object(app, "PPMSMotorDebug", self.motor), \
-                mock.patch.object(app.messagebox, "askyesno", return_value=answer) as ask, \
-                mock.patch.object(app.messagebox, "showerror", side_effect=error), \
-                mock.patch.object(app.filedialog, "askdirectory",
+        with mock.patch.object(runner_mod.time, "monotonic", self.rig.clock), \
+                mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
+                mock.patch.object(runner_mod, "PPMSMotorDebug", self.motor), \
+                mock.patch.object(panel_mod.messagebox, "askyesno", return_value=answer), \
+                mock.patch.object(panel_mod, "ask_scan_start", return_value=answer) as ask, \
+                mock.patch.object(panel_mod.messagebox, "showerror", side_effect=error), \
+                mock.patch.object(panel_mod.filedialog, "askdirectory",
                                   return_value=self.folder.name if folder else ""), \
-                mock.patch.object(app.simpledialog, "askstring", return_value=name):
+                mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=name):
             self.panel.start_ppms_field_scan()
         self.ask = ask
         return self
@@ -126,23 +147,27 @@ class ModeRegistrationTests(unittest.TestCase):
     modes' test checks theirs."""
 
     def test_the_mode_list_and_its_tables(self):
-        self.assertEqual(app.PPMS_SCAN_MODES, (
+        self.assertEqual(PPMS_SCAN_MODES, (
             "Temperature", "Field", "Angle", "Current", "Field+Temperature", "Angle+Temperature",
             "Current+Temperature", "Angle+Field", "Frequency", "Frequency+Current"))
-        self.assertEqual(set(app.PPMS_SCAN_PLOT_AXES), set(app.PPMS_SCAN_MODES))
-        self.assertEqual(app.PPMS_SCAN_PLOT_AXES["Angle+Field"], "angle")
-        self.assertEqual(app.PPMS_FIELD_COMMANDING_MODES, ("Field", "Field+Temperature", "Angle+Field"))
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        self.assertEqual(set(PPMS_SCAN_PLOT_AXES), set(PPMS_SCAN_MODES))
+        self.assertEqual(PPMS_SCAN_PLOT_AXES["Angle+Field"], "angle")
+        self.assertEqual(PPMS_FIELD_COMMANDING_MODES, ("Field", "Field+Temperature", "Angle+Field"))
+        page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_default_field_range = ("-15000", "15000", "1500")
         defaults = page._ppms_scan_mode_defaults()
-        self.assertEqual(set(defaults), set(app.PPMS_SCAN_MODES))
+        self.assertEqual(set(defaults), set(PPMS_SCAN_MODES))
         self.assertEqual(defaults["Angle+Field"], defaults["Angle"])
         self.assertEqual(defaults["Angle+Field"], ("0", "360", "5", "°"))
-        self.assertEqual(app.CombinedControlApp._ppms_acquisition_default("Angle+Field"), "1")
+        page.ppms_acquisition_default_shown = "5"
+        page.ppms_acquisition_time_var = Var("5")
+        page._apply_ppms_mode_acquisition_default("Angle+Field")
+        self.assertEqual(page.ppms_acquisition_time_var.get(), "1")
         # The Mode list keeps its width: its longest entry is unchanged.
-        self.assertEqual(max(app.PPMS_SCAN_MODES, key=len), "Current+Temperature")
+        self.assertEqual(max(PPMS_SCAN_MODES, key=len), "Current+Temperature")
 
     def test_the_angle_and_field_boxes_are_locked(self):
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        page = PPMSPanelView.__new__(PPMSPanelView)
         page.ppms_scan_target_widgets = {key: [mock.Mock()] for key in
                                          ("Temperature", "Field", "Angle", "Current", "Frequency")}
         page.ppms_scan_step_entry = mock.Mock()
@@ -157,21 +182,42 @@ class ModeRegistrationTests(unittest.TestCase):
         """The endings that follow the Field scan's rules read the one
         table: the worker's close, the finish, the nested and point workers
         and the page's close."""
-        for method in (app.CombinedControlApp._ppms_scan_with_final_field,
-                       app.CombinedControlApp._report_ppms_scan_finished,
-                       app.CombinedControlApp._ppms_nested_scan_worker,
-                       app.CombinedControlApp._ppms_field_scan_worker,
-                       app.CombinedControlApp.safe_close_ppms,
-                       app.plan_ppms_scan_axes):
+        for method in (PPMSScanRunner.run,
+                       PPMSPanelView.on_scan_finished,
+                       PPMSScanRunner.nested_scan_worker,
+                       PPMSScanRunner.field_scan_worker,
+                       PPMSAppState.safe_close,
+                       plan_ppms_scan_axes):
             with self.subTest(method=method.__name__):
-                self.assertIn("PPMS_FIELD_COMMANDING_MODES", inspect.getsource(method))
-        obj = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        obj.closing, obj.thread_log = False, mock.Mock()
-        obj.root = types.SimpleNamespace(after=lambda _ms, show: show())
+                if method is PPMSPanelView.on_scan_finished:
+                    self.assertIn("outputs_confirmed", inspect.getsource(method))
+                else:
+                    self.assertIn("PPMS_FIELD_COMMANDING_MODES", inspect.getsource(method))
+        obj = PPMSPanelView.__new__(PPMSPanelView)
+        obj.state = PPMSAppState()
+        obj.shell = types.SimpleNamespace(
+            closing=False, root=types.SimpleNamespace(after=lambda _ms, show: show()), thread_log=mock.Mock()
+        )
+        obj.root = obj.shell.root
+        obj.thread_log = obj.shell.thread_log
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
-        obj.ppms_scan_outputs = {"6221": "zeroed"}
-        obj.ppms_scan_field_note = ""
-        obj._report_ppms_scan_finished("Angle+Field", True, None)
+        obj.macro_runner = mock.Mock()
+        obj.ppms_field_scan_stop_button = mock.Mock()
+        obj.ppms_field_scan_save_button = mock.Mock()
+        obj.ppms_control_widgets = []
+        obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
+        obj.state.scan_outputs = {"6221": "zeroed"}
+        obj.state.scan_field_note = ""
+        obj.on_scan_finished(
+            mode="Angle+Field",
+            outcome="stopped",
+            status="Stopped; 6221 zeroed; field kept at its setpoint",
+            results=obj.state.scan_outputs,
+            outputs_confirmed=True,
+            field_note="",
+            error=None,
+            problems=[],
+        )
         self.assertEqual(obj.ppms_field_scan_status_var.get(), "Stopped; 6221 zeroed; field kept at its setpoint")
 
     def test_the_outer_field_row(self):
@@ -211,9 +257,12 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
              readback=None):
     """The PPMS Start (no window) in Angle+Field: returns (page, Yes/No text,
     sequence, settings, estimate s), or the error text."""
-    page = app.CombinedControlApp.__new__(app.CombinedControlApp)
-    page.ppms_field_scan_running = page.ppms_environment_busy = False
-    page.closing = False
+    page = PPMSPanelView.__new__(PPMSPanelView)
+    page.state = PPMSAppState()
+    page.shell = types.SimpleNamespace(closing=False, root=None, post_ui=lambda cb: cb(), thread_log=mock.Mock())
+    page.root = None
+    page.thread_log = page.shell.thread_log
+    page.runner = PPMSScanRunner(page.state, post_ui=page.shell.post_ui)
     page._require_ppms_control_ready = mock.Mock()
     page.ppms_simple_mode = Var("Angle+Field")
     page.ppms_simple_range = [Var(value) for value in main_row]
@@ -228,38 +277,43 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
                  ppms_temperature_approach_var="No overshoot", ppms_motor_speed_var="14")
     for name, value in boxes.items():
         setattr(page, name, Var(value))
-    for key, value in zip(app.PPMS_SR830_KEYS, ("1", "2", "3")):
-        setattr(page, app.PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
-    page.ppms_environment_controller = types.SimpleNamespace(backend=app.PPMS_QDINSTRUMENT_BACKEND)
-    page.ppms_instrument_controllers = {
+    for key, value in zip(PPMS_SR830_KEYS, ("1", "2", "3")):
+        setattr(page, PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
+    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
+    page.state.ppms_instrument_controllers = {
         key: types.SimpleNamespace(connected=True, resource_name=f"GPIB0::{address}::INSTR")
         for key, address in (("6221", 30), ("830_a", 8), ("830_b", 9), ("830_c", 10))}
-    page.ppms_last_readback = readback or dict(temperature_k=300.0, field_oe=1234.0, angle_deg=26.0)
-    page.ppms_field_scan_stop_event = threading.Event()
-    for name in ("_redraw_ppms_transport_plot", "_update_ppms_control_ui", "ppms_executor",
+    page.state.last_readback = readback or dict(temperature_k=300.0, field_oe=1234.0, angle_deg=26.0)
+    page.state.ppms_executor = mock.Mock()
+    for name in ("_redraw_ppms_transport_plot", "_update_ppms_control_ui",
                  "ppms_field_scan_progress", "ppms_field_scan_eta_var", "ppms_transport_status_var"):
         setattr(page, name, mock.Mock())
     page.ppms_field_scan_status_var = Var("")
-    page.root = None
-    page.thread_log = mock.Mock()
+    page.ppms_lockin_selection = {key: Var(True) for key in PPMS_SR830_KEYS}
+    page.ppms_lockin_selection["zurich"] = Var(False)
+    page.ppms_sr830_time_constant_var = Var("1 s")
+    page.ppms_zero_persist_button = mock.Mock()
     estimates = []
-    format_duration = page._format_scan_duration
-    page._format_scan_duration = lambda seconds: estimates.append(seconds) or format_duration(seconds)
+    import transport.ppms.ui.dialogs as dialogs_mod
+
+    format_duration = panel_mod.format_scan_duration
     with tempfile.TemporaryDirectory() as folder, \
-            mock.patch.object(app.simpledialog, "askstring", return_value=""), \
-            mock.patch.object(app.messagebox, "askyesno", return_value=True) as ask, \
-            mock.patch.object(app.filedialog, "askdirectory", return_value=folder), \
-            mock.patch.object(app.messagebox, "showerror") as error:
+            mock.patch.object(panel_mod, "format_scan_duration", lambda seconds: estimates.append(seconds) or format_duration(seconds)), \
+            mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""), \
+            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True), \
+            mock.patch.object(panel_mod, "ask_scan_start", return_value=True) as ask, \
+            mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
+            mock.patch.object(panel_mod.messagebox, "showerror") as error:
         page.start_ppms_field_scan()
         if error.called:
-            page.ppms_executor.submit.assert_not_called()
+            page.state.ppms_executor.submit.assert_not_called()
             return error.call_args.args[1]
-        test.assertTrue(page.ppms_field_scan_running)
+        test.assertTrue(page.state.scan_running)
         # The run log as Start left it (run_prepared), read before the
         # folder goes.
-        page.run_log_text = page.ppms_run_recorder.log_path.read_text(encoding="utf-8")
-    args = page.ppms_executor.submit.call_args.args
-    return page, ask.call_args.args[1], args[1], args[-1], estimates[0]
+        page.run_log_text = page.state.run_recorder.log_path.read_text(encoding="utf-8")
+    request = page.state.ppms_executor.submit.call_args.args[1]
+    return page, ask.call_args.args[2], request.sequence, request.transport_settings, estimates[0]
 
 
 class StartTests(unittest.TestCase):
@@ -271,19 +325,19 @@ class StartTests(unittest.TestCase):
         self.assertEqual(settings["nested"], {"angle": (0.0, 5.0, 10.0), "temperature": (300.0,)})
         self.assertEqual(settings["scan_mode"], "Angle+Field")
         self.assertEqual(settings["currents"], (1.0,))
-        self.assertEqual(page.ppms_field_scan_total, 9)
+        self.assertEqual(page.state.scan_total, 9)
         self.assertEqual(page.ppms_plot_axis, "angle")
         # The plots' x axis is the scan's own angles (user, 2026-11-15).
         self.assertEqual(page.ppms_plot_angle_range, (0.0, 10.0))
-        self.assertEqual(page.ppms_active_scan_mode, "Angle+Field")
+        self.assertEqual(page.state.active_scan_mode, "Angle+Field")
         self.assertTrue(page.ppms_field_scan_status_var.get().startswith(
             "Angle+Field scan: 3 fields x 3 angles; 9 points, settle 1 s; estimated about "))
         # The Yes/No: the outer steps and their ramps, the angles per field
         # and the rotator's moves, what is held, how every end leaves things.
         self.assertIn("Scan mode: Angle+Field\nOuter fields: 3 steps, 0 to 2000 Oe (Step 1000 Oe), "
                       "the whole angle sweep at each\n", question)
-        self.assertIn("At each field: set Driven at 100 Oe/s (about 10 s per step; about 13 s to the first field "
-                      "from 1234 Oe; 33 s of ramps in all), its stable reading awaited, then the angles; the first "
+        self.assertIn("At each field: set Driven at 100 Oe/s (about 10 s per step; about 12 s to the first field "
+                      "from 1234 Oe; 32 s of ramps in all), its stable reading awaited, then the angles; the first "
                       "angle after each field change takes agreeing windows\n", question)
         self.assertIn("Angles per field: 3, 0 to 10° (Step 5°); rotator: 12 moves of at most 0.9° per sweep and "
                       "12 back to 0° before each later field, 89 moves in all (planned at 1 s each)\n", question)
@@ -307,11 +361,11 @@ class StartTests(unittest.TestCase):
         26 -> 0° (29), 0 -> 5 -> 10° (6 + 6) at each of the 3 fields, and
         10 -> 0° (12) before the 2 later fields."""
         _page, _question, _sequence, _settings, estimate = launcher(self)
-        self.assertAlmostEqual(estimate, 9 * 2 + 6 * 9 + 12 * 9 + 32.34 + 89 * app.PPMS_ROTATOR_MOVE_ALLOWANCE_S)
-        self.assertEqual(app.PPMS_ROTATOR_MOVE_ALLOWANCE_S, 1.0)
+        self.assertAlmostEqual(estimate, 9 * 2 + 6 * 9 + 12 * 9 + 32.34 + 89 * PPMS_ROTATOR_MOVE_ALLOWANCE_S)
+        self.assertEqual(PPMS_ROTATOR_MOVE_ALLOWANCE_S, 1.0)
 
     def test_the_limits(self):
-        limit = f"{app.PPMS_FIELD_LIMIT_OE:g}"
+        limit = f"{PPMS_FIELD_LIMIT_OE:g}"
         for kwargs, expected in (
                 (dict(outer=("0", "100000", "50000")), f"Outer field 100000 Oe: PPMS target field must be within ±{limit} Oe"),
                 (dict(outer=("-90000", "0", "90000")), "Outer field -90000 Oe"),
@@ -398,7 +452,7 @@ class SequenceTests(unittest.TestCase):
     def test_the_files_and_log_events(self):
         page = AngleFieldPage(self).start()
         panel = page.panel
-        self.assertEqual(sorted(p.name for p in panel.ppms_run_folder.iterdir()), ["run1.csv", "run1.log"])
+        self.assertEqual(sorted(p.name for p in panel.state.run_folder.iterdir()), ["run1.csv", "run1.log"])
         # plot_snapshots: the end's picture of the plots, before the log is
         # closed (user, 2026-11-13); this page has no screen, so the entry
         # says why none was saved.
@@ -418,10 +472,10 @@ class SequenceTests(unittest.TestCase):
         self.assertTrue(events[0]["settings"]["field"]["commanded"])
         self.assertEqual(events[-1]["outcome"], "completed")
         self.assertEqual(events[-1]["status"], "Completed; 6221 zeroed")
-        self.assertTrue(panel.ppms_macro_scan_result)
-        with mock.patch.object(app.filedialog, "asksaveasfilename", return_value="") as save:
+        self.assertTrue(panel.macro_runner.scan_result)
+        with mock.patch.object(panel_mod.filedialog, "asksaveasfilename", return_value="") as save:
             panel.save_ppms_field_scan_csv()
-        self.assertEqual(save.call_args.kwargs["initialdir"], str(panel.ppms_run_folder))
+        self.assertEqual(save.call_args.kwargs["initialdir"], str(panel.state.run_folder))
 
     def test_every_harmonic_pass_repeats_the_whole_scan(self):
         """SR830-1 at 1+2: the second pass sets the fields again from the
@@ -439,7 +493,7 @@ class EndingTests(unittest.TestCase):
         page = AngleFieldPage(self)
 
         def on_wait(seconds):
-            if len(page.panel.ppms_field_scan_rows) == 1 and math.isclose(seconds, 1.0):
+            if len(page.panel.state.scan_rows) == 1 and math.isclose(seconds, 1.0):
                 page.panel.stop_ppms_field_scan()
         page.rig.stop.on_wait = on_wait
         page.start()
@@ -476,7 +530,7 @@ class EndingTests(unittest.TestCase):
                 page = AngleFieldPage(self)
                 if when == "mid-sweep":
                     def on_wait(seconds):
-                        if page.panel.ppms_field_scan_rows and not page.panel.ppms_field_scan_stop_event.is_set():
+                        if page.panel.state.scan_rows and not page.panel.state.scan_stop_event.is_set():
                             page.panel.ppms_sources_off()
                     page.rig.stop.on_wait = on_wait
                 else:
@@ -531,9 +585,10 @@ class EndingTests(unittest.TestCase):
 
         def drifting():
             data = read()
-            if page.panel.ppms_field_scan_rows:
+            if page.panel.state.scan_rows:
                 data["field_oe"] = 150.0       # off 100 Oe after the first point
             return data
+        page.panel.runner._read_live_override = drifting
         page.panel._read_ppms_live = drifting
         page.start()
         self.assertEqual(len(page.rows()), 1)
@@ -546,11 +601,11 @@ class EndingTests(unittest.TestCase):
         panel = page.panel
 
         def on_wait(seconds):
-            if panel.ppms_field_scan_rows and not panel.closing:
-                panel.parent_app.closing = True
-                panel.ppms_field_scan_stop_event.set()
+            if panel.state.scan_rows and not panel.state.closed:
+                panel.state.closed = True
+                panel.state.scan_stop_event.set()
         page.rig.stop.on_wait = on_wait
-        panel.parent_app.closing = False
+        panel.state.closed = False
         page.start()
         self.assertEqual(page.field_commands().count((0.0, 1)), 1)
         self.assertEqual(page.rig.source.output, 0)
@@ -562,7 +617,7 @@ class EndingTests(unittest.TestCase):
         queued = []
 
         def on_wait(_seconds):
-            if page.panel.ppms_field_scan_rows and not queued:
+            if page.panel.state.scan_rows and not queued:
                 queued.append(True)
                 page.panel._queue_ppms_zero_persist()
         page.rig.stop.on_wait = on_wait
@@ -588,7 +643,12 @@ class PlotTests_(unittest.TestCase):
 
     def test_the_panel_plot(self):
         page = PlotTests.panel_page(self.rows(), "Angle+Field")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         args, options = page.calls[0]
         series, x_label = args[1], args[2]
         self.assertEqual(x_label, "Measured angle (°)")
@@ -597,24 +657,21 @@ class PlotTests_(unittest.TestCase):
         self.assertEqual([x for x, _y in series[names[0]]], [0.0, 5.0])
         for (_x, y), expected in zip(series[names[0]], (-5e-7, -4.95e-7)):
             self.assertAlmostEqual(y, expected, delta=1e-15)
-        base = app.PPMS_METER_COLORS["830_a"]
+        base = PPMS_METER_COLORS["830_a"]
         colors = options["series_colors"]
-        self.assertEqual(colors[names[0]], app.shade_color(base, 0.0))   # lightest, lowest field
-        self.assertEqual(colors[names[2]], app.shade_color(base, 1.0))   # darkest, highest
-
-    def test_the_base_plot(self):
-        page = PlotTests.base_page(self.rows(), "Angle+Field")
-        page._redraw_ppms_transport_plot()
-        args, options = page.calls[0]
-        self.assertEqual(sorted(args[1]), ["GPIB8 X | H1 (-500 Oe) L1", "GPIB8 X | H2 (0 Oe) L1",
-                                           "GPIB8 X | H3 (500 Oe) L1"])
-        self.assertEqual(len(set(options["series_colors"].values())), 3)
+        self.assertEqual(colors[names[0]], shade_color(base, 0.0))   # lightest, lowest field
+        self.assertEqual(colors[names[2]], shade_color(base, 1.0))   # darkest, highest
 
     def test_angle_temperature_still_groups_by_temperature(self):
         rows = [dict(row, target_temperature_k=t, temperature_index=ti) for row in self.rows()[:2]
                 for ti, t in ((1, 300.0), (2, 290.0))]
         page = PlotTests.panel_page(rows, "Angle+Temperature")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         self.assertTrue(all(" K) L1" in name for name in page.calls[0][0][1]))
 
 

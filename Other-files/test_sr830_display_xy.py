@@ -13,7 +13,8 @@ import inspect
 import unittest
 from unittest import mock
 
-from test_ppms_motor_debug import app
+from transport.ppms.controllers.sr830 import SR830Controller, SR830_DISPLAY_XY_COMMANDS
+from transport.ppms.controllers.visa import SafeVisaIdentityController
 
 SR830 = "Stanford_Research_Systems,SR830,s/n12345,ver1.07"
 SHOW_XY = [("write", "DDEF 1,0,0"), ("write", "DDEF 2,0,0")]
@@ -53,7 +54,6 @@ class DisplayTests(unittest.TestCase):
         for patcher in (mock.patch.object(visa_ctrl, "pyvisa", object()),
                         mock.patch.object(zurich_ctrl, "pyvisa", object()),
                         mock.patch.object(visa_ctrl, "acquire_shared_visa_manager", return_value=manager),
-                        mock.patch.object(zurich_ctrl, "acquire_shared_visa_manager", return_value=manager),
                         mock.patch.object(visa_ctrl, "release_shared_visa_manager"),
                         mock.patch.object(zurich_ctrl, "release_shared_visa_manager"),
                         mock.patch.object(visa_ctrl, "acquire_instrument_lease"),
@@ -67,22 +67,23 @@ class DisplayTests(unittest.TestCase):
 
     def test_the_commands_are_x_on_ch1_and_y_on_ch2_without_a_ratio(self):
         # DDEF i, j, k: CH1 j = 0 X (1 R); CH2 j = 0 Y (1 theta); k = 0 no ratio.
-        self.assertEqual(app.SR830_DISPLAY_XY_COMMANDS, ("DDEF 1,0,0", "DDEF 2,0,0"))
+        self.assertEqual(SR830_DISPLAY_XY_COMMANDS, ("DDEF 1,0,0", "DDEF 2,0,0"))
 
     def test_no_page_sets_r_and_theta_any_more(self):
+        import transport.ppms.app as app
         import transport.ppms.controllers.sr830 as sr830_ctrl
         import transport.ppms.controllers.zurich as zurich_ctrl
-        source = "\n".join(inspect.getsource(m) for m in (app, sr830_ctrl, zurich_ctrl))
+        import transport.ppms.engine.runner as runner_mod
+        import transport.ppms.ui.panel as panel_mod
+        source = "\n".join(inspect.getsource(m) for m in (app, sr830_ctrl, zurich_ctrl, runner_mod, panel_mod))
         code = [line.split("#")[0] for line in source.splitlines()]
         self.assertEqual([line.strip() for line in code if "DDEF 1,1" in line or "DDEF 2,1" in line], [])
-        # The commands, Connect's helper, ST-FMR's Start, Non-local's Start,
-        # PPMS / SHHV Connect, plus re-export/import lines across split modules.
-        self.assertGreaterEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 5)
+        self.assertGreaterEqual(sum("SR830_DISPLAY_XY_COMMANDS" in line for line in code), 3)
 
     def test_stfmr_connect_shows_x_and_y(self):
         session = Session()
         self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
+        controller = SR830Controller(self.logged.append)
         self.assertEqual(controller.connect("GPIB0::8::INSTR"), SR830)
         # Nothing before the identity is known, then the display alone: the
         # rest of the set-up (range, time constant ...) still comes with Start.
@@ -92,7 +93,7 @@ class DisplayTests(unittest.TestCase):
     def test_a_device_that_is_not_an_sr830_is_sent_nothing(self):
         session = Session("KEITHLEY INSTRUMENTS INC.,MODEL 2400")
         self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
+        controller = SR830Controller(self.logged.append)
         with self.assertRaisesRegex(RuntimeError, "is not Stanford SR830"):
             controller.connect("GPIB0::8::INSTR")
         self.assertEqual(session.log, [("query", "*IDN?")])
@@ -101,7 +102,7 @@ class DisplayTests(unittest.TestCase):
     def test_a_display_write_that_fails_does_not_undo_the_connection(self):
         session = Session(refuse="DDEF")
         self.visa(session)
-        controller = app.STFMRSR830Controller(self.logged.append)
+        controller = SR830Controller(self.logged.append)
         self.assertEqual(controller.connect("GPIB0::8::INSTR"), SR830)
         self.assertTrue(controller.connected)
         self.assertFalse(session.closed)
@@ -113,27 +114,9 @@ class DisplayTests(unittest.TestCase):
         commands, each checked (test_ppms_sr830_tc)."""
         session = Session()
         self.visa(session)
-        controller = app.SafeVisaIdentityController(self.logged.append, "SR830-1", "SR830")
+        controller = SafeVisaIdentityController(self.logged.append, "SR830-1", "SR830")
         controller.connect("GPIB0::8::INSTR")
         self.assertEqual(session.log, [("query", "*IDN?")])
-
-    def test_nonlocal_connect_shows_x_and_y(self):
-        session = Session()
-        self.visa(session)
-        controller = app.NonLocalACController(self.logged.append)
-        self.assertEqual(controller.connect_lockin("8", "GPIB0::8::INSTR"), SR830)
-        self.assertEqual(session.log, [("write", "OUTX 1"), ("query", "*IDN?"), ("write", "OUTX 1"),
-                                       *SHOW_XY])
-        self.assertEqual(controller.connected_lockin_keys, ("8",))
-
-    def test_nonlocal_connect_stands_when_the_display_write_fails(self):
-        session = Session(refuse="DDEF")
-        self.visa(session)
-        controller = app.NonLocalACController(self.logged.append)
-        self.assertEqual(controller.connect_lockin("9", "GPIB0::9::INSTR"), SR830)
-        self.assertEqual(controller.connected_lockin_keys, ("9",))
-        self.assertFalse(session.closed)
-        self.assertIn("Non-local IV SR830 #9: the display was not set to X and Y: VI_ERROR_TMO", self.logged)
 
 
 if __name__ == "__main__":

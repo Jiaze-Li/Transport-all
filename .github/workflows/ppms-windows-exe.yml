@@ -5,7 +5,7 @@
 # Actions tab -> "PPMS Windows exe" -> Run workflow.  The .exe is attached to
 # the run as the artifact "Transport_PPMS-windows-x64".  A build of
 # Transport-PPMS also puts its files in the release "Transport_PPMS v<version>"
-# (tag ppms-v<version>; the version is APP_VERSION of transport/ppms/app.py), so they
+# (tag ppms-v<version>; the version is APP_VERSION of transport/ppms/ui/theme.py), so they
 # can be downloaded directly, without signing in: a release that is there
 # gets the new files, and a raised version starts a new release on the tag
 # the owner pushed for it (the repository lets only its owner make tags).
@@ -70,7 +70,7 @@ jobs:
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           # A plain \n line end, so `shasum -a 256 -c` also reads it on a Mac.
           Set-Content -NoNewline -Encoding ascii dist/Transport_PPMS.exe.sha256 -Value "$hash  Transport_PPMS.exe`n"
-          $version = (Select-String -Path transport/ppms/app.py -Pattern '^APP_VERSION = "(.+)"').Matches[0].Groups[1].Value
+          $version = (Select-String -Path transport/ppms/ui/theme.py -Pattern '^APP_VERSION = "(.+)"').Matches[0].Groups[1].Value
           # The version information set in the spec (publisher: user, 2026-11-12).
           $vi = $exe.VersionInfo
           $vi | Format-List CompanyName, LegalCopyright, FileDescription, ProductName, FileVersion, ProductVersion, OriginalFilename

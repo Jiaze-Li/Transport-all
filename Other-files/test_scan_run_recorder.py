@@ -10,6 +10,7 @@ Window-free: no Tk window, no instrument; every dialog is answered here."""
 import csv
 import datetime
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -22,7 +23,10 @@ from unittest import mock
 _HERE = Path(__file__).resolve().parent
 if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
-import transport.ppms.app as app
+from transport.ppms.app import APP_VERSION
+import transport.core.scan_lifecycle as scan_lifecycle
+import transport.ppms.ui.dialogs as run_recorder
+import transport.ppms.ui.dialogs as app
 
 BOM = "﻿".encode("utf-8")
 
@@ -37,8 +41,8 @@ class Folder(unittest.TestCase):
         self.addCleanup(guard.stop)
 
     def recorder(self, name="B1", settings=None, page="PPMS", **kwargs):
-        recorder = app.ScanRunRecorder(self.folder, page, name, {"mode": "Field"} if settings is None else settings,
-                                       **kwargs)
+        recorder = run_recorder.ScanRunRecorder(self.folder, page, name, {"mode": "Field"} if settings is None else settings,
+                                                **kwargs)
         self.addCleanup(recorder.close, "test")
         return recorder
 
@@ -66,7 +70,7 @@ class RecorderFileTests(Folder):
         (prepared,) = self.lines(recorder)
         self.assertEqual(prepared["event"], "run_prepared")
         datetime.datetime.fromisoformat(prepared["timestamp"])
-        self.assertEqual((prepared["program"], prepared["app_version"]), ("Transport_PPMS.py", app.APP_VERSION))
+        self.assertEqual((prepared["program"], prepared["app_version"]), ("Transport_PPMS.py", APP_VERSION))
         self.assertTrue(prepared["python_version"])
         self.assertEqual((prepared["file_name"], prepared["run_folder"], prepared["csv_path"], prepared["log_path"]),
                          ("B1", str(recorder.directory), str(recorder.csv_path), str(recorder.log_path)))
@@ -79,7 +83,7 @@ class RecorderFileTests(Folder):
         self.assertEqual(self.lines(recorder)[0]["file_name"], "")
 
     def test_without_settings_the_page_writes_run_prepared(self):
-        recorder = app.ScanRunRecorder(self.folder, "PPMS", "B1")
+        recorder = run_recorder.ScanRunRecorder(self.folder, "PPMS", "B1")
         self.addCleanup(recorder.close, "test")
         self.assertEqual(recorder.log_path.read_bytes(), b"")
 
@@ -97,37 +101,37 @@ class RecorderFileTests(Folder):
 
     def test_files_that_cannot_be_made_start_nothing(self):
         with self.assertRaises(OSError):
-            app.ScanRunRecorder(self.folder / "missing", "PPMS", "B1", {})
+            run_recorder.ScanRunRecorder(self.folder / "missing", "PPMS", "B1", {})
         self.assertFalse((self.folder / "missing").exists())
         # A CSV already there (another program): opened "x", it is kept and
         # no log is made.
-        real = app.make_scan_run_folder
+        real = run_recorder.make_scan_run_folder
 
         def taken(parent, stem):
             made = real(parent, stem)
             (made / f"{made.name}.csv").write_text("someone else's", encoding="utf-8")
             return made
-        with mock.patch.object(app, "make_scan_run_folder", taken), self.assertRaises(FileExistsError):
-            app.ScanRunRecorder(self.folder, "PPMS", "B1", {})
+        with mock.patch.object(run_recorder, "make_scan_run_folder", taken), self.assertRaises(FileExistsError):
+            run_recorder.ScanRunRecorder(self.folder, "PPMS", "B1", {})
         self.assertEqual((self.folder / "B1" / "B1.csv").read_text(encoding="utf-8"), "someone else's")
         self.assertFalse((self.folder / "B1" / "B1.log").exists())
 
     def test_a_prefix_that_is_no_file_name_is_refused_before_anything_is_made(self):
         with self.assertRaisesRegex(ValueError, "Use a valid Windows file name"):
-            app.ScanRunRecorder(self.folder, "|R| vs time", "", {})
+            run_recorder.ScanRunRecorder(self.folder, "|R| vs time", "", {})
         self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_a_first_line_that_cannot_be_written_starts_nothing(self):
         # As SHHV's Start: the run is closed not_started and the error raised.
-        real = app.scan_log_line
+        real = run_recorder.scan_log_line
 
         def line(name, details):
             if name == "run_prepared":
                 raise OSError(28, "No space left on device")
             return real(name, details)
-        with mock.patch.object(app, "scan_log_line", line), \
+        with mock.patch.object(run_recorder, "scan_log_line", line), \
                 self.assertRaisesRegex(OSError, "No space left on device"):
-            app.ScanRunRecorder(self.folder, "PPMS", "B1", {})
+            run_recorder.ScanRunRecorder(self.folder, "PPMS", "B1", {})
         with (self.folder / "B1" / "B1.log").open(encoding="utf-8") as handle:
             (closing,) = [json.loads(text) for text in handle]
         self.assertEqual((closing["event"], closing["outcome"]), ("run_finished", "not_started"))
@@ -157,7 +161,7 @@ class RecorderCSVTests(Folder):
 
     def test_each_row_is_fsynced_once(self):
         recorder = self.recorder()
-        with mock.patch.object(app.os, "fsync", wraps=app.os.fsync) as sync:
+        with mock.patch.object(os, "fsync", wraps=os.fsync) as sync:
             recorder.append_row({"index": 1})
             self.assertEqual(sync.call_count, 1)
             recorder.append_row({"index": 2})
@@ -172,7 +176,7 @@ class RecorderCSVTests(Folder):
         self.assertEqual(recorder.rows_written, 1)
 
     def test_a_fixed_header_is_written_with_the_files(self):
-        class Fixed(app.ScanRunRecorder):
+        class Fixed(run_recorder.ScanRunRecorder):
             FIELDNAMES = ("index", "x_v")
         recorder = Fixed(self.folder, "PPMS", "B1", {})
         self.addCleanup(recorder.close, "test")
@@ -311,7 +315,7 @@ class BeginScanRunTests(Folder):
         self.assertEqual(calls, [("folder", {"parent": "root", "title": "PPMS live CSV folder",
                                              "initialdir": str(self.folder / "last")}),
                                  ("name", "PPMS file name", app.SCAN_FILE_NAME_PROMPT, "root")])
-        self.assertIsInstance(recorder, app.ScanRunRecorder)
+        self.assertIsInstance(recorder, run_recorder.ScanRunRecorder)
         self.assertEqual(recorder.directory, self.folder / "B1")
         self.assertEqual(sorted(p.name for p in recorder.directory.iterdir()), ["B1.csv", "B1.log"])
         (prepared,) = self.lines(recorder)
@@ -373,13 +377,13 @@ class BeginScanRunTests(Folder):
         self.assertFalse(missing.exists())
 
     def test_a_first_line_that_cannot_be_written_is_shown_and_starts_nothing(self):
-        real = app.scan_log_line
+        real = run_recorder.scan_log_line
 
         def line(name, details):
             if name == "run_prepared":
                 raise OSError(28, "No space left on device")
             return real(name, details)
-        with mock.patch.object(app, "scan_log_line", line):
+        with mock.patch.object(run_recorder, "scan_log_line", line):
             recorder, _calls, error = self.begin(self.folder, "B1")
         self.assertIsNone(recorder)
         self.assertEqual(error.call_args.args[0], "PPMS run folder")
@@ -404,7 +408,7 @@ class BeginScanRunTests(Folder):
 class ScanEndTests(unittest.TestCase):
 
     def test_any_page_s_outputs(self):
-        text = app.scan_end_outputs_text
+        text = scan_lifecycle.scan_end_outputs_text
         self.assertEqual(text({"6221": "zeroed"}), "6221 zeroed")
         self.assertEqual(text({"6221": "zero FAILED: x"}), "6221 zero FAILED: check it")
         self.assertEqual(text({"6221": "not connected"}), "6221 not connected")
@@ -434,14 +438,14 @@ class ScanEndTests(unittest.TestCase):
                     raise error
                 return outcome
             return label, zero
-        results = app.zero_scan_outputs((step("6221", error=RuntimeError("the 6221 output did not read back OFF")),
-                                         step("KEPCO", outcome="not connected"), step("2400", outcome=0.0),
-                                         step("magnet", error=OSError("VISA timeout"))))
+        results = scan_lifecycle.zero_scan_outputs((step("6221", error=RuntimeError("the 6221 output did not read back OFF")),
+                                     step("KEPCO", outcome="not connected"), step("2400", outcome=0.0),
+                                     step("magnet", error=OSError("VISA timeout"))))
         self.assertEqual(order, ["6221", "KEPCO", "2400", "magnet"])
         self.assertEqual(results, {"6221": "zero FAILED: the 6221 output did not read back OFF",
                                    "KEPCO": "not connected", "2400": "zeroed", "magnet": "zero FAILED: VISA timeout"})
         self.assertEqual(list(results), ["6221", "KEPCO", "2400", "magnet"])
-        self.assertEqual(app.scan_end_outputs_text(results),
+        self.assertEqual(scan_lifecycle.scan_end_outputs_text(results),
                          "6221 zero FAILED; KEPCO not connected; 2400 zeroed; magnet zero FAILED: check them")
 
 

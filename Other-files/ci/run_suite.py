@@ -65,7 +65,10 @@ class WatchedResult(unittest.TextTestResult):
 def run_module(name: str, *, no_gui: bool = False) -> int:
     """Run one test module in this process (the child)."""
     # Test modules import each other ("from test_ppms_motor_debug import
-    # app"), as they could when the suite was discovered from this folder.
+    # app") and import "transport.*" from the repository root.
+    repo_root = str(Path(__file__).resolve().parents[2])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
     sys.path.insert(0, os.getcwd())
     if no_gui:
         install_no_gui_guard()

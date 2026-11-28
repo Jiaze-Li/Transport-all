@@ -2,9 +2,10 @@
 import unittest
 from unittest.mock import Mock
 
-from test_ppms_motor_debug import app
-
-Controller = app.NonLocalACController
+from transport.ppms.controllers.zurich import (
+    ZurichMFLIController as Controller,
+    short_status_error,
+)
 SERVERS = [("127.0.0.1", 8004)]
 
 
@@ -13,7 +14,7 @@ class ConnectFailureMessageTests(unittest.TestCase):
         text = Controller._mfli_connect_failure_message(
             "dev4414", SERVERS, ["Core 127.0.0.1:8004：cannot attach"],
             {("127.0.0.1", 8004): "visible=dev4435; connected=dev4435"})
-        first = app.short_status_error(RuntimeError(text), 200)
+        first = short_status_error(RuntimeError(text), 200)
         self.assertIn("dev4414 is not on that server", first)
         self.assertIn("dev4435", first)
         self.assertNotIn("handshake failed", first)
@@ -25,7 +26,7 @@ class ConnectFailureMessageTests(unittest.TestCase):
             "dev4414", SERVERS,
             ["LabOne C API 127.0.0.1:8004：ziAPIConnectEx failed", "Core 127.0.0.1:8004：version mismatch"],
             {})
-        first = app.short_status_error(RuntimeError(text), 200)
+        first = short_status_error(RuntimeError(text), 200)
         self.assertIn("handshake failed", first)
         self.assertIn("version mismatch", first)
         self.assertIn("INSTALL_MFLI_LABONE_18_12.bat", text)

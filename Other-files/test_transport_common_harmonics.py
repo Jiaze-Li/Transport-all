@@ -37,6 +37,8 @@ class DummyVar:
         self._value = value
 
 
+import transport.ppms.engine.planning as planning
+
 class ReferenceOriginalImplementation:
     """Reference implementation capturing the exact original logic prior to refactoring."""
 
@@ -44,9 +46,9 @@ class ReferenceOriginalImplementation:
     def original_ppms_harmonic_orders(panel, key: str) -> tuple[int, ...]:
         variable = panel._ppms_harmonic_var(key)
         value = str(variable.get()).strip() if variable is not None else "1"
-        if value not in app.PPMS_HARMONIC_MODE_ORDERS:
+        if value not in planning.PPMS_HARMONIC_MODE_ORDERS:
             raise ValueError("Select harmonic 1, 2, 3, 1+2 or 1+2+3")
-        return app.PPMS_HARMONIC_MODE_ORDERS[value]
+        return planning.PPMS_HARMONIC_MODE_ORDERS[value]
 
     @staticmethod
     def original_ppms_harmonic_passes(panel, settings):
@@ -56,8 +58,8 @@ class ReferenceOriginalImplementation:
             config = dict(settings, harmonic_pass=index + 1)
             config["active_lockins"] = tuple(k for k, orders in schedules.items() if index < len(orders))
             for key in config["active_lockins"]:
-                config[app.PPMS_SR830_HARMONIC_SETTING_KEYS[key]] = schedules[key][index]
-            app.validate_ppms_transport_scan_settings(
+                config[planning.PPMS_SR830_HARMONIC_SETTING_KEYS[key]] = schedules[key][index]
+            planning.validate_ppms_transport_scan_settings(
                 config["current_rms_ma"], config["frequency_hz"], config["compliance_v"],
                 config["harmonic_a"], config["harmonic_b"], config["active_lockins"],
                 allow_no_lockins=bool(config.get("allow_no_lockins", False)),
@@ -66,8 +68,10 @@ class ReferenceOriginalImplementation:
         return passes
 
 
+from transport.ppms.ui.panel import PPMSPanelView, PPMS_SR830_HARMONIC_ATTRS
+
 class DummyPanel:
-    """Mock panel instance for testing CombinedControlApp and RTEPanel harmonic methods."""
+    """Mock panel instance for testing PPMSPanelView harmonic methods."""
 
     def __init__(self, harmonic_choices=None):
         self.ppms_transport_harmonic_a_var = DummyVar("1")
@@ -75,13 +79,13 @@ class DummyPanel:
         self.ppms_transport_harmonic_c_var = DummyVar("3")
         if harmonic_choices:
             for key, choice in harmonic_choices.items():
-                attr = app.PPMS_SR830_HARMONIC_ATTRS[key]
+                attr = PPMS_SR830_HARMONIC_ATTRS[key]
                 setattr(self, attr, DummyVar(choice))
 
-    _ppms_harmonic_var = app.CombinedControlApp._ppms_harmonic_var
-    _ppms_harmonic_orders = app.CombinedControlApp._ppms_harmonic_orders
-    _ppms_harmonic_value = app.CombinedControlApp._ppms_harmonic_value
-    _ppms_harmonic_passes = app.CombinedControlApp._ppms_harmonic_passes
+    _ppms_harmonic_var = PPMSPanelView._ppms_harmonic_var
+    _ppms_harmonic_orders = PPMSPanelView._ppms_harmonic_orders
+    _ppms_harmonic_value = PPMSPanelView._ppms_harmonic_value
+    _ppms_harmonic_passes = PPMSPanelView._ppms_harmonic_passes
 
 
 class TestTransportCommonHarmonics(unittest.TestCase):
@@ -100,43 +104,43 @@ class TestTransportCommonHarmonics(unittest.TestCase):
             DEFAULT_SR830_HARMONIC_SETTING_KEYS,
             {"830_a": "harmonic_a", "830_b": "harmonic_b", "830_c": "harmonic_c"},
         )
-        self.assertEqual(app.PPMS_HARMONIC_ORDERS, (1, 2, 3))
-        self.assertEqual(app.PPMS_HARMONIC_CHOICES, (1, 2, 3, "1+2", "1+2+3"))
-        self.assertEqual(app.PPMS_HARMONIC_LABELS[1], "1st harmonic")
-        self.assertEqual(app.PPMS_SR830_HARMONIC_SETTING_KEYS["830_a"], "harmonic_a")
+        self.assertEqual(planning.PPMS_HARMONIC_ORDERS, (1, 2, 3))
+        self.assertEqual(planning.PPMS_HARMONIC_CHOICES, (1, 2, 3, "1+2", "1+2+3"))
+        self.assertEqual(planning.PPMS_HARMONIC_LABELS[1], "1st harmonic")
+        self.assertEqual(planning.PPMS_SR830_HARMONIC_SETTING_KEYS["830_a"], "harmonic_a")
 
     def test_independent_dictionaries_prevent_cross_mutation(self):
         """Correction 2: Module default dictionaries cannot accidentally mutate the application's configuration."""
-        self.assertIsNot(app.PPMS_HARMONIC_LABELS, DEFAULT_HARMONIC_LABELS)
-        self.assertIsNot(app.PPMS_ZURICH_MODE_ORDERS, DEFAULT_HARMONIC_MODE_ORDERS)
-        self.assertIsNot(app.PPMS_SR830_HARMONIC_SETTING_KEYS, DEFAULT_SR830_HARMONIC_SETTING_KEYS)
+        self.assertIsNot(planning.PPMS_HARMONIC_LABELS, DEFAULT_HARMONIC_LABELS)
+        self.assertIsNot(planning.PPMS_ZURICH_MODE_ORDERS, DEFAULT_HARMONIC_MODE_ORDERS)
+        self.assertIsNot(planning.PPMS_SR830_HARMONIC_SETTING_KEYS, DEFAULT_SR830_HARMONIC_SETTING_KEYS)
 
-        # Mutating app's dictionary does not affect default in transport.common.harmonics
-        orig_labels = dict(app.PPMS_HARMONIC_LABELS)
+        # Mutating planning's dictionary does not affect default in transport.common.harmonics
+        orig_labels = dict(planning.PPMS_HARMONIC_LABELS)
         try:
-            app.PPMS_HARMONIC_LABELS[99] = "99th harmonic"
+            planning.PPMS_HARMONIC_LABELS[99] = "99th harmonic"
             self.assertNotIn(99, DEFAULT_HARMONIC_LABELS)
         finally:
-            app.PPMS_HARMONIC_LABELS.clear()
-            app.PPMS_HARMONIC_LABELS.update(orig_labels)
+            planning.PPMS_HARMONIC_LABELS.clear()
+            planning.PPMS_HARMONIC_LABELS.update(orig_labels)
 
-        # Mutating default in transport.common.harmonics does not affect app's dictionary
+        # Mutating default in transport.common.harmonics does not affect planning's dictionary
         orig_default_labels = dict(DEFAULT_HARMONIC_LABELS)
         try:
             DEFAULT_HARMONIC_LABELS[99] = "99th harmonic"
-            self.assertNotIn(99, app.PPMS_HARMONIC_LABELS)
+            self.assertNotIn(99, planning.PPMS_HARMONIC_LABELS)
         finally:
             DEFAULT_HARMONIC_LABELS.clear()
             DEFAULT_HARMONIC_LABELS.update(orig_default_labels)
 
         # Setting keys independence
-        orig_keys = dict(app.PPMS_SR830_HARMONIC_SETTING_KEYS)
+        orig_keys = dict(planning.PPMS_SR830_HARMONIC_SETTING_KEYS)
         try:
-            app.PPMS_SR830_HARMONIC_SETTING_KEYS["custom"] = "harmonic_custom"
+            planning.PPMS_SR830_HARMONIC_SETTING_KEYS["custom"] = "harmonic_custom"
             self.assertNotIn("custom", DEFAULT_SR830_HARMONIC_SETTING_KEYS)
         finally:
-            app.PPMS_SR830_HARMONIC_SETTING_KEYS.clear()
-            app.PPMS_SR830_HARMONIC_SETTING_KEYS.update(orig_keys)
+            planning.PPMS_SR830_HARMONIC_SETTING_KEYS.clear()
+            planning.PPMS_SR830_HARMONIC_SETTING_KEYS.update(orig_keys)
 
     def test_no_misleading_ppms_aliases_in_transport_common(self):
         import transport.common as common
@@ -201,9 +205,11 @@ class TestTransportCommonHarmonics(unittest.TestCase):
         self.assertIsInstance(parse_harmonic_mode("custom_list", mode_orders=custom_mapping), list)
         self.assertEqual(parse_harmonic_mode("custom_str", mode_orders=custom_mapping), "123")
 
-        # Via panel method and app monkeypatching
+        # Via panel method and panel monkeypatching
+        import transport.ppms.ui.panel as panel_mod
+
         panel = DummyPanel({"830_a": "custom_mode"})
-        with mock.patch.object(app, "PPMS_HARMONIC_MODE_ORDERS", {"custom_mode": [2, 3]}):
+        with mock.patch.object(panel_mod, "PPMS_HARMONIC_MODE_ORDERS", {"custom_mode": [2, 3]}):
             orders = panel._ppms_harmonic_orders("830_a")
             self.assertEqual(orders, [2, 3])
             self.assertIsInstance(orders, list)

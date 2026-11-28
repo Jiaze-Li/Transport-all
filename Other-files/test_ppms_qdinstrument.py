@@ -11,23 +11,23 @@ import types
 import unittest
 from pathlib import Path
 
-from test_ppms_motor_debug import app
+from transport.ppms.controllers import qdinstrument as qd_mod
 
 
 class PPMSQDInstrumentTests(unittest.TestCase):
     def test_qdinstrument_pythonnet_readback_shapes(self):
-        value, status = app.PPMSQDInstrumentReadbackController._normalize_readback(
+        value, status = qd_mod.PPMSQDInstrumentReadbackController._normalize_readback(
             (0, 7.25, "Stable"), "温度"
         )
         self.assertEqual(value, 7.25)
         self.assertEqual(status, "Stable")
-        value, status = app.PPMSQDInstrumentReadbackController._normalize_readback(
+        value, status = qd_mod.PPMSQDInstrumentReadbackController._normalize_readback(
             (-1234.5, "Holding"), "磁场"
         )
         self.assertEqual(value, -1234.5)
         self.assertEqual(status, "Holding")
         with self.assertRaises(RuntimeError):
-            app.PPMSQDInstrumentReadbackController._normalize_readback(
+            qd_mod.PPMSQDInstrumentReadbackController._normalize_readback(
                 (1, 7.25, "Error"), "温度"
             )
 
@@ -35,7 +35,7 @@ class PPMSQDInstrumentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             dll = Path(directory) / "QDInstrument.dll"
             dll.write_bytes(b"offline-test-placeholder")
-            matches = app.PPMSQDInstrumentReadbackController.discover_dll_paths(
+            matches = qd_mod.PPMSQDInstrumentReadbackController.discover_dll_paths(
                 str(dll)
             )
             self.assertTrue(matches)
@@ -49,7 +49,7 @@ class PPMSQDInstrumentTests(unittest.TestCase):
             def AddReference(self, reference):
                 self.references.append(reference)
 
-        controller = app.PPMSQDInstrumentReadbackController
+        controller = qd_mod.PPMSQDInstrumentReadbackController
         original_discover = controller.__dict__["discover_dll_paths"]
         original_import = controller.__dict__["_import_qdinstrument_api"]
         fake_clr = FakeClr()
@@ -127,7 +127,7 @@ class PPMSQDInstrumentTests(unittest.TestCase):
         original_system = sys.modules.get("System")
         sys.modules["System"] = fake_system
         try:
-            raw = app.PPMSQDInstrumentReadbackController._invoke_ref_readback(
+            raw = qd_mod.PPMSQDInstrumentReadbackController._invoke_ref_readback(
                 FakeInstrument(), "GetTemperature"
             )
         finally:
@@ -137,7 +137,7 @@ class PPMSQDInstrumentTests(unittest.TestCase):
                 sys.modules["System"] = original_system
         self.assertEqual(raw, (0, 7.25, "Stable"))
         self.assertEqual(
-            app.PPMSQDInstrumentReadbackController._normalize_readback(
+            qd_mod.PPMSQDInstrumentReadbackController._normalize_readback(
                 raw, "温度"
             ),
             (7.25, "Stable"),
@@ -212,26 +212,26 @@ class PPMSQDInstrumentTests(unittest.TestCase):
         original_system = sys.modules.get("System")
         sys.modules["System"] = fake_system
         try:
-            result = app.PPMSQDInstrumentReadbackController._invoke_typed_command(
+            result = qd_mod.PPMSQDInstrumentReadbackController._invoke_typed_command(
                 FakeInstrument(), "SetField", (1000.0, 100.0, 1, 1)
             )
             FakeMethod.ReturnType = types.SimpleNamespace(FullName="System.Boolean")
             FakeMethod.Invoke = staticmethod(lambda _instrument, _arguments: True)
             self.assertIs(
-                app.PPMSQDInstrumentReadbackController._invoke_typed_command(
+                qd_mod.PPMSQDInstrumentReadbackController._invoke_typed_command(
                     FakeInstrument(), "SetField", (1000.0, 100.0, 1, 1)
                 ),
                 True,
             )
             FakeMethod.Invoke = staticmethod(lambda _instrument, _arguments: False)
             with self.assertRaisesRegex(RuntimeError, "Boolean False"):
-                app.PPMSQDInstrumentReadbackController._invoke_typed_command(
+                qd_mod.PPMSQDInstrumentReadbackController._invoke_typed_command(
                     FakeInstrument(), "SetField", (1000.0, 100.0, 1, 1)
                 )
             FakeMethod.ReturnType = types.SimpleNamespace(FullName="System.Int32")
             FakeMethod.Invoke = staticmethod(lambda _instrument, _arguments: 1)
             with self.assertRaisesRegex(RuntimeError, "may have taken effect"):
-                app.PPMSQDInstrumentReadbackController._invoke_typed_command(
+                qd_mod.PPMSQDInstrumentReadbackController._invoke_typed_command(
                     FakeInstrument(), "SetField", (1000.0, 100.0, 1, 1)
                 )
         finally:

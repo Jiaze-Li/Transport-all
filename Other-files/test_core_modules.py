@@ -8,18 +8,24 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_ppms_motor_debug import app
 from transport.core import scan_lifecycle, scan_recording, scan_sequences
+from transport.ppms.ui import dialogs as app
+from transport.ppms.ui.theme import APP_VERSION
 
 
 class CoreImportsTests(unittest.TestCase):
     def test_legacy_scan_helpers_are_shared(self):
-        self.assertIs(app.build_round_trip_values, scan_sequences.build_round_trip_values)
-        self.assertIs(app.ppms_scan_axis, scan_sequences.ppms_scan_axis)
+        # One implementation: every consumer module exposes the same object.
+        from transport.ppms.engine import planning
+        for name in ("build_round_trip_values", "ppms_scan_axis"):
+            with self.subTest(name=name):
+                self.assertTrue(callable(getattr(scan_sequences, name)))
+                if hasattr(planning, name):
+                    self.assertIs(getattr(planning, name), getattr(scan_sequences, name))
 
     def test_scan_planning_unchanged(self):
-        self.assertEqual(app.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
-        self.assertEqual(app.ppms_scan_axis(1, 1, 0.1), (1,))
+        self.assertEqual(scan_sequences.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
+        self.assertEqual(scan_sequences.ppms_scan_axis(1, 1, 0.1), (1,))
         self.assertEqual(scan_sequences.lakeshore_ramp_seconds([0, 2, -1], 1), 5)
 
     def test_legacy_json_log_uses_application_clock(self):
@@ -39,16 +45,14 @@ class CoreImportsTests(unittest.TestCase):
         self.assertTrue(actual["timestamp"].startswith("2026-10-18T12:34:56.789"))
 
     def test_file_name_rule_shared(self):
-        self.assertEqual(app.scan_file_stem(" B1.csv "), "B1")
         self.assertEqual(scan_recording.scan_file_stem(" B1.csv "), "B1")
         for invalid in ("CON.txt", "a/b", "x."):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                app.scan_file_stem(invalid)
+                scan_recording.scan_file_stem(invalid)
 
     def test_scan_close_handoff_is_shared(self):
-        self.assertIs(app.ScanCloseHandoff, scan_lifecycle.ScanCloseHandoff)
         done = []
-        handoff = app.ScanCloseHandoff()
+        handoff = scan_lifecycle.ScanCloseHandoff()
         handoff.begin()
         self.assertTrue(handoff.defer(lambda: done.append("closed")))
         self.assertEqual(done, [])
@@ -64,11 +68,11 @@ class CoreImportsTests(unittest.TestCase):
         def safe():
             calls.append("second")
             return "not connected"
-        result = app.zero_scan_outputs([("A", fail), ("B", safe)])
+        result = scan_lifecycle.zero_scan_outputs([("A", fail), ("B", safe)])
         self.assertEqual(calls, ["first", "second"])
         self.assertIn("zero FAILED", result["A"])
         self.assertEqual(result["B"], "not connected")
-        self.assertIn("check it", app.scan_end_outputs_text(result, outputs=("A", "B")))
+        self.assertIn("check it", scan_lifecycle.scan_end_outputs_text(result, outputs=("A", "B")))
 
 
 class RecordingCompatibilityTests(unittest.TestCase):
@@ -79,7 +83,7 @@ class RecordingCompatibilityTests(unittest.TestCase):
             try:
                 row = json.loads(recorder.log_path.read_text(encoding="utf-8").splitlines()[0])
                 self.assertEqual(row["program"], "Transport_PPMS.py")
-                self.assertEqual(row["app_version"], app.APP_VERSION)
+                self.assertEqual(row["app_version"], APP_VERSION)
                 recorder.append_row({"field": 1, "voltage": 2})
                 self.assertEqual(recorder.rows_written, 1)
             finally:

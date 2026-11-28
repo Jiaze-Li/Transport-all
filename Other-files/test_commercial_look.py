@@ -12,9 +12,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_ppms_motor_debug import app
+from transport.ppms.ui import theme as app
+from transport.ppms.ui.dialogs import ConnectionOverview
 
-PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app.py"
+app.ConnectionOverview = ConnectionOverview
+
+PPMS_DIR = Path(__file__).resolve().parents[1] / "transport" / "ppms"
+# The look lives in the UI package; app_shell.py only composes it.
+PROGRAM_FILES = [PPMS_DIR / "app_shell.py", *sorted((PPMS_DIR / "ui").glob("*.py"))]
 HEX = re.compile(r"#[0-9a-f]{6}")
 
 
@@ -103,7 +108,7 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual(app.THEME_COLORS["plot_background"], "#ffffff")
 
     def test_no_red_or_plot_colour_outside_the_palette(self):
-        source = PROGRAM.read_text(encoding="utf-8")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in PROGRAM_FILES)
         for old in ("#d70018", "#a80012", "#b8c0c8", "#a51c19"):
             self.assertNotIn(old, source)
 
@@ -131,14 +136,17 @@ class ButtonRoleTests(unittest.TestCase):
                 self.assertEqual(app.button_role(text), role)
 
     def test_every_start_and_stop_button_of_the_program_gets_its_role(self):
-        tree = ast.parse(PROGRAM.read_text(encoding="utf-8"))
         texts = set()
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "Button"
-                    and ast.unparse(node.func.value) == "ttk"):
-                for keyword in node.keywords:
-                    if keyword.arg == "text" and isinstance(keyword.value, ast.Constant):
-                        texts.add(keyword.value.value)
+        for path in PROGRAM_FILES:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "Button"
+                        and ast.unparse(node.func.value) == "ttk"):
+                    for keyword in node.keywords:
+                        if keyword.arg == "text" and isinstance(keyword.value, ast.Constant):
+                            texts.add(keyword.value.value)
+        self.assertTrue(any(t.lower().startswith("start") for t in texts), "scan must find the Start buttons")
+        self.assertTrue(any(t.lower().startswith("stop") for t in texts), "scan must find the Stop buttons")
         for text in texts:
             words = re.findall(r"[a-z0-9]+", text.lower())
             if "recording" in words:
@@ -267,26 +275,34 @@ class LampTests(unittest.TestCase):
 
 class OverviewTests(unittest.TestCase):
     def test_text(self):
+        from transport.ppms.ui import dialogs
+
         pages = {"SHHV": ["on", "off", "off"], "PPMS": ["off"], "FMR": []}
-        self.assertEqual(app.connection_overview_text(pages), ("1/4", "1 of 4 instruments connected", "on"))
-        self.assertEqual(app.connection_overview_text({"SHHV": ["off"]})[2], "off")
-        self.assertEqual(app.connection_overview_text({"SHHV": ["on", "fault"]}),
+        self.assertEqual(dialogs.connection_overview_text(pages), ("1/4", "1 of 4 instruments connected", "on"))
+        self.assertEqual(dialogs.connection_overview_text({"SHHV": ["off"]})[2], "off")
+        self.assertEqual(dialogs.connection_overview_text({"SHHV": ["on", "fault"]}),
                          ("2/2", "2 of 2 instruments connected", "fault"))
-        self.assertEqual(app.connection_overview_text({}), ("0/0", "0 of 0 instruments connected", "off"))
+        self.assertEqual(dialogs.connection_overview_text({}), ("0/0", "0 of 0 instruments connected", "off"))
 
     def test_tooltip_lines_skip_pages_without_instruments(self):
+        from transport.ppms.ui import dialogs
+
         pages = {"SHHV": ["on", "off"], "FMR": [], "PPMS": ["fault"]}
-        self.assertEqual(app.connection_overview_lines(pages),
+        self.assertEqual(dialogs.connection_overview_lines(pages),
                          ["SHHV: 1 of 2 connected", "PPMS: 1 of 1 connected (fault)"])
 
     def test_no_status_bar(self):
         # The overview costs no height: placed in the tab row, never gridded
         # or packed into the window (user, 2026-10-18).
-        source = PROGRAM.read_text(encoding="utf-8")
+        from pathlib import Path
+        from transport.ppms.ui import dialogs
+
+        source = Path(dialogs.__file__).read_text(encoding="utf-8")
         body = source[source.index("class ConnectionOverview"):source.index("    def _show_tooltip")]
         self.assertNotIn("self.frame.grid(", body)
         self.assertNotIn("self.frame.pack(", body)
-        self.assertIn("self.frame.place(in_=self.notebook", body)
+        self.assertIn("self.frame.place(", body)
+        self.assertIn("in_=self.notebook", body)
 
 
 class Widget(tk.Misc):

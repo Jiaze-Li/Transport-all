@@ -55,7 +55,7 @@ def build(module, screen_w, screen_h, window_w):
         root = tk.Tk()
         root.tk.call("tk", "scaling", 1.333)  # 96 DPI, as on the lab PC
         root.maxsize(4000, 3000)
-        app = module.CombinedControlApp(root)
+        app = module.AppShell(root)
     finally:
         module.calculate_window_layout = original
     width = window_w or app.window_layout["control"][0]
@@ -194,7 +194,7 @@ def main():
             if root.title() != module.MAIN_WINDOW_TITLE or titles != PAGES:
                 failed.append(f"window {root.title()!r} with pages {titles}")
             panel = app.ppms_panel
-            if type(panel) is not module.PPMSPanel or not panel.ppms_instrument_controllers:
+            if type(panel) is not module.PPMSPanelView or not app.state.ppms_instrument_controllers:
                 failed.append("no PPMS panel with its instrument controllers")
             app.append_log("PPMS checks: the log page shows this line")
             for name in PAGES:

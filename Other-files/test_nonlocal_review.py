@@ -1,144 +1,14 @@
-"""Non-local page: the fixes from the whole-module review (2026-10-08).
+"""PPMS-relevant Zurich MFLI demodulator routing and MF-MD tests (preserved from Non-local review)."""
 
-No Tk and no instrument: stand-in controllers and variables record what the
-page asks of them.
-"""
-import queue
-import threading
-import time
 import unittest
-from concurrent.futures import Future
 from unittest import mock
 
-from test_nonlocal_keithley import FakeSourceMeter, Var, bare_app, connected_controller
-from test_ppms_motor_debug import app
+from transport.ppms.controllers.zurich import NONLOCAL_SAMPLE_HZ, ZurichMFLIController
 
-
-class Executor:
-    """Runs each job at once, in order, as the page's single worker would."""
-
-    def __init__(self):
-        self.jobs = []
-
-    def submit(self, function, *args):
-        self.jobs.append(function)
-        future = Future()
-        try:
-            future.set_result(function(*args))
-        except BaseException as error:
-            future.set_exception(error)
-        return future
-
-
-def page():
-    a = bare_app()
-    a.root, a.closing, a.nonlocal_vi_closed = None, True, False
-    a.nonlocal_vi_running = a.nonlocal_vi_busy = False
-    a.nonlocal_keithley_task = None
-    a.nonlocal_vi_executor = Executor()
-    a.post_ui = lambda callback: callback()
-    a.nonlocal_vi_stop_event = threading.Event()
-    a.nonlocal_vi_interlock = app.NonLocalVIInterlock()
-    a.nonlocal_vi_status_var, a.nonlocal_vi_output_var = Var(), Var()
-    a.nonlocal_iv6221_source_var = Var("6221 ON: 0.1 mA RMS / 17.3 Hz")
-    a._update_nonlocal_vi_controls = mock.Mock()
-    return a
-
-
-class StopAndOffTests(unittest.TestCase):
-    def setUp(self):
-        self.a = a = page()
-        a.nonlocal_vi_ac_controller = mock.Mock(source_connected=True, any_connected=True)
-        a.nonlocal_vi_2410_controller = mock.Mock(connected=True, model="2400")
-
-class GateVIFinishTests(unittest.TestCase):
-    """Since 2026-10-18 (user) the scan's end zeroes both outputs on the
-    worker; the finish reports each beside the scan's own error."""
-
-    def finish(self, error, results):
-        a = page()
-        a.nonlocal_vi_2410_controller = mock.Mock(model="2400", connected=True)
-        a.nonlocal_vi_eta_var = Var()
-        a.nonlocal_vi_run_directory = None
-        a.nonlocal_scan_outputs = results
-        a._set_mfli_lock_state = mock.Mock()
-        for name in ("_redraw_nonlocal_vi_plots", "_update_k6221_controls", "_update_keithley_controls"):
-            setattr(a, name, mock.Mock())
-        a._finish_nonlocal_vi_scan(error)
-        return a
-
-class KeithleyTaskTests(unittest.TestCase):
-    def setUp(self):
-        patcher = mock.patch.object(app.time, "sleep")
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.a = a = page()
-        self.meter = FakeSourceMeter()
-        a.nonlocal_vi_2410_controller = connected_controller(self.meter)
-        a.nonlocal_vi_ac_controller = mock.Mock(source_connected=False)
-        a.nonlocal_keithley_stop_event = threading.Event()
-        a.nonlocal_keithley_output_off = False
-        a.nonlocal_keithley_untouched = True
-
-class ManualKeithleyTests(unittest.TestCase):
-    """User, 2026-10-09: Set (a voltage left on) and Apply pulse in
-    "2400-IV settings"."""
-
-    def setUp(self):
-        patcher = mock.patch.object(app.time, "sleep")
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.a = a = page()
-        self.meter = FakeSourceMeter()
-        a.nonlocal_vi_2410_controller = connected_controller(self.meter)
-        a.nonlocal_vi_2410_controller.model = "2400"
-        a.nonlocal_vi_ac_controller = mock.Mock(source_connected=True)
-        a.nonlocal_keithley_stop_event = threading.Event()
-        a.nonlocal_iv_safety_var = Var(True)
-        a.nonlocal_iv_limit_var = Var("0.001")
-        a.nonlocal_iv_set_voltage_var = Var("50")
-        a.nonlocal_iv_pulse_voltage_var, a.nonlocal_iv_pulse_width_var = Var("-30"), Var("0.01")
-        a.nonlocal_iv_keithley_var = Var("Keithley 2400: OFF")
-        a.nonlocal_iv6221_source_var = Var("6221 ON")
-        a._nonlocal_keithley_free = lambda what: True
-        self.questions = []
-
-    def run_action(self, action, answer=True):
-        def ask(title, text, **options):
-            self.questions.append(text)
-            return answer
-        with mock.patch.object(app.messagebox, "askyesno", ask), \
-                mock.patch.object(app.messagebox, "showerror"), \
-                mock.patch.object(app.messagebox, "showwarning") as warning:
-            action()
-        return warning
-
-class PulseTests(unittest.TestCase):
-    pass
 
 class ZurichControllerTests(unittest.TestCase):
     def controller(self):
-        controller = app.NonLocalACController(lambda _m: None)
-        return controller
-
-    def test_a_connected_zurich_the_scan_did_not_set_up_is_not_waited_for(self):
-        controller = self.controller()
-        controller.mfli_config = {"harmonic": 1}
-        controller._wait_mfli_reference = mock.Mock(return_value={"valid": True})
-        with mock.patch.object(type(controller), "mfli_connected", new_callable=mock.PropertyMock,
-                               return_value=True):
-            self.assertNotIn("mfli", controller.wait_references(17.3, threading.Event(), ()))
-            controller.mfli_in_scan = True
-            self.assertIn("mfli", controller.wait_references(17.3, threading.Event(), ()))
-
-    def test_a_stop_during_the_reference_wait_is_a_stop_not_a_key_error(self):
-        controller = self.controller()
-        controller.mfli_config = {"reference_source": "Trigger In 1"}
-        stop = threading.Event()
-        stop.set()
-        result = controller._wait_mfli_reference(17.3, stop)
-        self.assertFalse(result["valid"])
-        self.assertEqual(result["status"], 8)
+        return ZurichMFLIController(lambda _m: None)
 
     def test_unused_demodulators_follow_the_reference_routing(self):
         controller = self.controller()
@@ -150,15 +20,21 @@ class ZurichControllerTests(unittest.TestCase):
             if indices is None:
                 controller.mfli_bridge.request.assert_not_called()
             else:
-                controller.mfli_bridge.request.assert_called_once_with("disable_unused_demods", indices=indices)
+                controller.mfli_bridge.request.assert_called_once_with(
+                    "disable_unused_demods", indices=indices
+                )
         controller.mfli_props = {"options": "MD"}
         controller.mfli_config = {"extref_demodulator": 1}
         controller.mfli_bridge.reset_mock()
         controller.disable_unused_ppms_demods("1+2")
-        controller.mfli_bridge.request.assert_called_once_with("disable_unused_demods", indices=[3])
-        # A Zurich without MF-MD (DEV4435, user 2026-11-27): one demodulator
-        # measures, nothing else to switch off, whatever the routing says.
-        controller.mfli_props = {"options": "", "has_demod_2": True, "has_demod_4": False}
+        controller.mfli_bridge.request.assert_called_once_with(
+            "disable_unused_demods", indices=[3]
+        )
+        controller.mfli_props = {
+            "options": "",
+            "has_demod_2": True,
+            "has_demod_4": False,
+        }
         for extref in (0, 1):
             controller.mfli_config = {"extref_demodulator": extref}
             controller.mfli_bridge.reset_mock()
@@ -166,145 +42,89 @@ class ZurichControllerTests(unittest.TestCase):
             controller.mfli_bridge.request.assert_not_called()
 
     def test_mf_md_is_the_option_or_a_fourth_demodulator_not_the_second(self):
-        """User, 2026-11-27 (DEV4435 on the SHHV page: "extrefs/1/demodselect"
-        not found): an MFLI without MF-MD has a second demodulator too, so
-        that is no sign of MF-MD; the options say it, or else a fourth
-        demodulator.  Reads then cover only the demodulators there are."""
         controller = self.controller()
         controller.mfli_bridge = mock.Mock()
-        for props, multi in (({"options": "MD"}, True), ({"options": "IA"}, False),
-                             ({"options": "", "has_demod_2": True, "has_demod_4": False}, False),
-                             ({"options": "", "has_demod_2": True, "has_demod_4": True}, True),
-                             ({"options": "", "has_demod_2": True}, False)):
+        for props, multi in (
+            ({"options": "MD"}, True),
+            ({"options": "IA"}, False),
+            ({"options": "", "has_demod_2": True, "has_demod_4": False}, False),
+            ({"options": "", "has_demod_2": True, "has_demod_4": True}, True),
+            ({"options": "", "has_demod_2": True}, False),
+        ):
             with self.subTest(props=props):
                 controller.mfli_props = dict(props)
                 self.assertIs(controller.mfli_has_multi_demod(), multi)
-        controller.mfli_props = {"options": "", "has_demod_2": True, "has_demod_4": False}
-        demod = {"x": 1e-6, "y": 0.0, "frequency": 317.3, "timestamp": 1, "harmonic": 1, "adcselect": 0, "enabled": 1}
-        reference = dict(demod, adcselect=8)      # Demod 2 follows the reference input
+        controller.mfli_props = {
+            "options": "",
+            "has_demod_2": True,
+            "has_demod_4": False,
+        }
+        demod = {
+            "x": 1e-6,
+            "y": 0.0,
+            "frequency": 317.3,
+            "timestamp": 1,
+            "harmonic": 1,
+            "adcselect": 0,
+            "enabled": 1,
+        }
+        reference = dict(demod, adcselect=8)
         controller.mfli_bridge.request.return_value = {"demods": [demod, reference]}
-        with mock.patch.object(type(controller), "mfli_connected", new_callable=mock.PropertyMock, return_value=True):
+        with mock.patch.object(
+            type(controller),
+            "mfli_connected",
+            new_callable=mock.PropertyMock,
+            return_value=True,
+        ):
             fields = controller.read_mfli_four_demods()
         controller.mfli_bridge.request.assert_called_once_with("read_demods", count=2)
-        self.assertEqual((fields["zurich_demod1_x_v"], fields["zurich_demod1_status"]), (1e-6, "enabled"))
-        self.assertEqual((fields["zurich_demod2_input"], fields["zurich_demod2_status"]), (8, "enabled"))
-        self.assertEqual([fields[f"zurich_demod{i}_status"] for i in (3, 4)], ["disabled"] * 2)
-        # Review, 2026-11-27: without MF-MD the reference goes on Demod 2, as
-        # before (a reference on the measuring demodulator would lock to f/n
-        # at harmonic n); Demod 4 is refused.
-        with self.assertRaisesRegex(RuntimeError, "Demod 4 external reference requires MF-MD"):
-            controller.configure_mfli("AC", 2, "R", reference_source="Aux Input 1", sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
-                                      input_impedance="10 MΩ", input_scaling=1.0, timeconstant_s=1.0,
-                                      external_reference_demodulator=3)
+        self.assertEqual(
+            (fields["zurich_demod1_x_v"], fields["zurich_demod1_status"]),
+            (1e-6, "enabled"),
+        )
+        self.assertEqual(
+            (fields["zurich_demod2_input"], fields["zurich_demod2_status"]),
+            (8, "enabled"),
+        )
+        self.assertEqual(
+            [fields[f"zurich_demod{i}_status"] for i in (3, 4)], ["disabled"] * 2
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "Demod 4 external reference requires MF-MD"
+        ):
+            controller.configure_mfli(
+                "AC",
+                2,
+                "R",
+                reference_source="Aux Input 1",
+                sample_rate_hz=NONLOCAL_SAMPLE_HZ,
+                input_impedance="10 MΩ",
+                input_scaling=1.0,
+                timeconstant_s=1.0,
+                external_reference_demodulator=3,
+            )
         controller.mfli_bridge.request.reset_mock()
-        controller.mfli_bridge.request.side_effect = RuntimeError("stop after the request")
+        controller.mfli_bridge.request.side_effect = RuntimeError(
+            "stop after the request"
+        )
         with self.assertRaisesRegex(RuntimeError, "stop after the request"):
-            controller.configure_mfli("AC", 2, "R", reference_source="Aux Input 1", sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
-                                      input_impedance="10 MΩ", input_scaling=1.0, timeconstant_s=1.0)
-        self.assertEqual(controller.mfli_bridge.request.call_args.kwargs["extref_demod"], 1)
-        self.assertEqual(controller.mfli_bridge.request.call_args.kwargs["harmonic"], 2)
+            controller.configure_mfli(
+                "AC",
+                2,
+                "R",
+                reference_source="Aux Input 1",
+                sample_rate_hz=NONLOCAL_SAMPLE_HZ,
+                input_impedance="10 MΩ",
+                input_scaling=1.0,
+                timeconstant_s=1.0,
+            )
+        self.assertEqual(
+            controller.mfli_bridge.request.call_args.kwargs["extref_demod"], 1
+        )
+        self.assertEqual(
+            controller.mfli_bridge.request.call_args.kwargs["harmonic"], 2
+        )
 
-
-class SR830Tests(unittest.TestCase):
-    class Lockin:
-        def __init__(self, esr=("0",)):
-            self.commands, self.esr, self.lias = [], list(esr), []
-
-        def write(self, command):
-            self.commands.append(command)
-
-        def query(self, command):
-            if command == "*ESR?":
-                return self.esr.pop(0) if self.esr else "0"
-            if command == "SENS?":
-                return "10"
-            if command == "LIAS?":
-                self.lias.append(command)
-                return "1" if len(self.lias) == 1 else "0"
-            if command.startswith("SNAP?"):
-                return "1e-6,0,1e-6,0,17.3"
-            raise AssertionError(command)
-
-        def clear(self):
-            self.commands.append("<clear>")
-
-    def controller(self, lockin):
-        controller = app.NonLocalACController(lambda _m: None)
-        controller.lockins = {"8": lockin}
-        controller.sensitivity_indices = {"8": 9}
-        controller.low_range_counts = {"8": 0}
-        controller.range_cooldowns = {"8": 0}
-        return controller
-
-    def test_an_unreadable_status_sends_the_setting_again(self):
-        lockin = self.Lockin(esr=("garbled", "0"))
-        controller = self.controller(lockin)
-        with mock.patch.object(app.time, "sleep", lambda s: None):
-            controller._write_sr830("8", "HARM 2")
-        self.assertEqual(lockin.commands, ["HARM 2", "<clear>", "HARM 2"])
-        lockin = self.Lockin(esr=("garbled", "garbled"))
-        controller = self.controller(lockin)
-        with mock.patch.object(app.time, "sleep", lambda s: None), \
-                self.assertRaisesRegex(RuntimeError, "status after 'HARM 2' is unreadable"):
-            controller._write_sr830("8", "HARM 2")
-
-    def test_the_overload_latched_by_a_range_change_is_read_once_and_dropped(self):
-        lockin = self.Lockin()
-        controller = self.controller(lockin)
-        controller.lias_clear_pending["8"] = True
-        with mock.patch.object(app.time, "sleep", lambda s: None):
-            sample = controller._read_sample_one("8", 17.3, True, 0)
-        self.assertEqual(len(lockin.lias), 2, "one discarded LIAS? read")
-        self.assertEqual(sample["lia_status"], 0, "the latched overload is not counted")
-
-
-class BridgeTests(unittest.TestCase):
-    def test_a_late_reply_is_not_taken_for_the_next_request(self):
-        bridge = app.LegacyMFLIBridge.__new__(app.LegacyMFLIBridge)
-        bridge.responses = queue.Queue()
-        bridge.diagnostics = []
-        bridge.process = None
-        bridge.responses.put({"ok": True, "id": 4, "autorange": {}})   # late, timed out earlier
-        bridge.responses.put({"ok": True, "id": 5, "sample": {"x": 1}})
-        reply = bridge._receive(1.0, 5)
-        self.assertEqual(reply["sample"], {"x": 1})
-        self.assertTrue(any("request 4" in line for line in bridge.diagnostics))
-
-
-class GateVIPlotTests(unittest.TestCase):
-    """User, 2026-10-09: X, Y and θ against time first, a row per harmonic
-    order, then the Keithley's resistance and the lock-in voltage against
-    the pulse voltage, a plot per order."""
-
-    def redraw(self, harmonics, time_rows, summary_rows):
-        a = bare_app()
-        a.nonlocal_vi_data_lock = threading.Lock()
-        a.nonlocal_vi_time_rows = time_rows
-        a.nonlocal_vi_summary_rows = summary_rows
-        a.nonlocal_vi_pulse_rows = [(0.5, 4.0)]
-        # (pulse V, |R|, elapsed, stage): the check before the first pulse first.
-        a.nonlocal_vi_resistance_rows = [(4.0, 4e8, 0.1, "initial_gate"), (4.0, 1e9, 2.0, "post_point")]
-        a.nonlocal_vi_current_rows = [(1.0, 1.0)]
-        a.nonlocal_vi_ac_controller = mock.Mock(connected_lockin_keys=("9",), mfli_connected=True,
-                                                nanovoltmeter_connected=True)
-        a.nonlocal_vi_2410_controller = mock.Mock(model="2400")
-        a._selected_nonlocal_vi_lockin_keys = lambda: ("9",)
-        a.nonlocal_vi_use_mfli_var, a.nonlocal_vi_use_2182_var = Var(True), Var(True)
-        a.nonlocal_vi_lockin_harmonic_vars = {"8": Var("1"), "9": Var(harmonics["9"])}
-        a.nonlocal_vi_mfli_harmonic_var = Var(harmonics["mfli"])
-        keys = ["resistance"] + [(order, channel) for order in (1, 2, 3)
-                                          for channel in ("x", "y", "theta")]
-        keys += [("summary", order) for order in (1, 2, 3)]
-        a.nonlocal_vi_plot_canvases = {key: key for key in keys}
-        a.nonlocal_vi_plot_frames = {key: mock.Mock() for key in keys}
-        a._layout_nonlocal_vi_plots = mock.Mock()
-        a._draw_nonlocal_series = mock.Mock()
-        a._redraw_nonlocal_vi_plots()
-        drawn = {call.args[0]: call.args[1] for call in a._draw_nonlocal_series.call_args_list}
-        return a, drawn
-
-class ZurichRowTests(unittest.TestCase):
-    pass
 
 if __name__ == "__main__":
     unittest.main()

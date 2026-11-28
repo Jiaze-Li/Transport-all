@@ -8,9 +8,9 @@ class OptionalFilters(unittest.TestCase):
     def test_every_line_filter_setup_disables_both_optional_filters(self):
         root = Path(__file__).resolve().parents[1] / 'transport' / 'ppms'
         sources = (
-            root / 'app.py',
+            root / 'ui' / 'panel.py',
+            root / 'engine' / 'runner.py',
             root / 'controllers' / 'sr830.py',
-            root / 'controllers' / 'zurich.py',
         )
         trees = [ast.parse(path.read_text(encoding='utf-8')) for path in sources]
         paths = 0
@@ -24,7 +24,7 @@ class OptionalFilters(unittest.TestCase):
                     paths += 1
                     self.assertIn('SYNC 0', strings, node.name)
                 self.assertFalse(strings.intersection({'ILIN 1', 'ILIN 2', 'ILIN 3', 'SYNC 1'}), node.name)
-        self.assertEqual(paths, 3)  # STFMR, nonlocal, PPMS scan
+        self.assertEqual(paths, 2)  # STFMR, PPMS scan
         initializer = next(n for n in ast.walk(trees[0])
                            if isinstance(n, ast.FunctionDef) and n.name == '_initialize_ppms_sr830')
         pairs = [ast.literal_eval(n) for n in ast.walk(initializer)

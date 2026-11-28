@@ -10,7 +10,11 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from test_ppms_motor_debug import app
+import transport.ppms.controllers.zurich as zurich_ctrl
+from transport.ppms.controllers.zurich import NONLOCAL_MFLI_SERVER_CANDIDATES, ZurichMFLIController
+from transport.ppms.engine.errors import PPMSScanCancelled
+from transport.ppms.engine.planning import PPMS_SR830_KEYS, validate_ppms_transport_scan_settings
+from transport.ppms.ui.panel import PPMS_SR830_HARMONIC_ATTRS
 from test_ppms_two_panels import Var, ImmediateExecutor
 
 
@@ -110,19 +114,19 @@ class RTE(unittest.TestCase):
         return app.validate_ppms_transport_scan_settings(1., 317.3, 50., 1, 2, ('830_a',))
 
     def test_rte_server_override_and_shared_default_are_isolated(self):
-        with patch.object(app.socket, 'create_connection') as connect:
+        with patch.object(zurich_ctrl.socket, 'create_connection') as connect:
             connect.return_value.__enter__.return_value = Mock()
-            servers, _ = app.NonLocalACController._mfli_reachable_servers(candidates=(('192.168.68.250', 8004),))
+            servers, _ = ZurichMFLIController._mfli_reachable_servers(candidates=(('192.168.68.250', 8004),))
             self.assertEqual(servers, [('192.168.68.250', 8004)])
             connect.assert_called_once_with(('192.168.68.250', 8004), 1.2)
             connect.reset_mock()
-            servers, _ = app.NonLocalACController._mfli_reachable_servers()
-            self.assertEqual(servers, list(app.NONLOCAL_MFLI_SERVER_CANDIDATES))
+            servers, _ = ZurichMFLIController._mfli_reachable_servers()
+            self.assertEqual(servers, list(NONLOCAL_MFLI_SERVER_CANDIDATES))
 
     def test_rte_unreachable_message_uses_correct_address(self):
-        controller = app.NonLocalACController(lambda _: None)
+        controller = ZurichMFLIController(lambda _: None)
         controller.mfli_server_candidates = (('192.168.68.250', 8004),)
-        with patch.object(app.socket, 'create_connection', side_effect=TimeoutError('timed out')):
+        with patch.object(zurich_ctrl.socket, 'create_connection', side_effect=TimeoutError('timed out')):
             with self.assertRaises(RuntimeError) as caught:
                 controller.connect_mfli('MF-DEV4414')
         message = str(caught.exception)

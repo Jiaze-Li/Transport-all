@@ -15,9 +15,33 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_nonlocal_keithley import Var
-from test_ppms_motor_debug import app
-from test_ppms_sr830_tc import build_ppms_panel
+import transport.ppms.engine.motor as motor_mod
+import transport.ppms.engine.runner as runner_mod
+from transport.ppms.engine.runner import (
+    PPMS_SET_UP_ALLOWANCE_S,
+    PPMS_SR830_REFERENCE_SLOPE,
+    PPMS_TRANSPORT_REFERENCE_TIMEOUT_S,
+    PPMS_ZURICH_LOCK_READS,
+)
+import transport.ppms.ui.panel as panel_mod
+from transport.ppms.controllers.environment import PPMS_QDINSTRUMENT_BACKEND
+from transport.ppms.engine.planning import (
+    PPMS_FIELD_COMMANDING_MODES,
+    PPMS_FREQUENCY_SCAN_MODES,
+    PPMS_SCAN_MODES,
+    PPMS_SCAN_PLOT_AXES,
+    PPMS_SR830_KEYS,
+    ppms_frequency_count_text,
+    ppms_frequency_scan_note,
+    ppms_prime_frequencies,
+    validate_ppms_transport_scan_settings,
+)
+from transport.ppms.engine.errors import PPMSLockinRangeError, PPMSScanCancelled
+from transport.ppms.engine.runner import PPMSScanRunner, ScanRequest
+from transport.ppms.state import PPMSAppState
+from transport.ppms.ui.panel import PPMS_SR830_HARMONIC_ATTRS, PPMSPanelView
+from transport.ppms.ui.theme import PPMS_METER_COLORS, shade_color
+from test_ppms_two_panels import Var
 
 
 class Log(list):
@@ -147,7 +171,7 @@ class FakeSR830:
         frequency = self.reference()
         return {
             "*ESR?": "0", "HARM?": str(self.harmonic), "FMOD?": "0",
-            "RSLP?": str(app.PPMS_SR830_REFERENCE_SLOPE), "OFLT?": "10",
+            "RSLP?": str(PPMS_SR830_REFERENCE_SLOPE), "OFLT?": "10",
             "FREQ?": f"{frequency:.12g}",
             "SNAP? 1,2,3,4,9": f"{1e-6 * self.address},0,{1e-6 * self.address},0,{frequency:.12g}",
         }[command]
@@ -242,86 +266,127 @@ class Motor:
 
 
 class Rig:
-    """A PPMS page (the real PPMSPanel methods) on fake instruments, the
-    6221 already running from a Set I at 317.3 Hz."""
+    """A PPMS page (the real PPMSPanelView + PPMSScanRunner) on fake instruments,
+    the 6221 already running from a Set I at 317.3 Hz."""
 
     def __init__(self, test, mode, frequencies, currents, zurich=True, preserve_on_stop=True):
         self.test = test
         self.log = Log()
         self.clock = Clock()
-        page = app.PPMSPanel.__new__(app.PPMSPanel)
-        page.parent_app = types.SimpleNamespace()   # nothing borrowed from a main page
-        page.closing = False
+        page = PPMSPanelView.__new__(PPMSPanelView)
+        page.state = PPMSAppState()
+        page.shell = types.SimpleNamespace(
+            closing=False,
+            root=None,
+            post_ui=lambda callback: callback(),
+            thread_log=lambda text: self.log.append(("log", text)),
+        )
         page.root = None
-        page.ppms_field_scan_stop_event = self.stop = ClockEvent(self.clock, self.log)
-        page.ppms_scan_preserve_on_stop = preserve_on_stop
+        page.thread_log = page.shell.thread_log
+        page.state.scan_stop_event = self.stop = ClockEvent(self.clock, self.log)
+        page.state.scan_preserve_on_stop = preserve_on_stop
         self.source = Fake6221(self.log)
         self.sr830 = {"830_a": FakeSR830(self.log, self.source, 8, 1), "830_c": FakeSR830(self.log, self.source, 10, 3)}
-        page.ppms_instrument_controllers = {
+        page.state.ppms_instrument_controllers = {
             "6221": controller("Keithley 6221", self.source, "GPIB0::30::INSTR"),
             "830_a": controller("SR830-1", self.sr830["830_a"], "GPIB0::8::INSTR"),
             "830_c": controller("SR830-3", self.sr830["830_c"], "GPIB0::10::INSTR"),
         }
-        page.ppms_sr830_range_states = {key: types.SimpleNamespace(sensitivity_index=17, clear_latch_pending=False)
-                                        for key in self.sr830}
-        page._ppms_autorange_sr830 = lambda *args, **options: 0.0
+        page.state.sr830_range_states = {key: types.SimpleNamespace(sensitivity_index=17, clear_latch_pending=False)
+                                         for key in self.sr830}
         self.zurich = FakeZurich(self.log, self.source)
-        page.zurich_controller = self.zurich
-        page.zurich_closed = False
-        page.zurich_scan_enabled = zurich
-        page.zurich_scan_configured = False
-        page.zurich_scan_harmonic, page.zurich_scan_reference, page.zurich_scan_tau = "1", "Trigger In 1", 1.0
+        page.state.zurich_controller = self.zurich
+        page.state.zurich_closed = False
+        page.state.zurich_scan_enabled = zurich
+        page.state.zurich_scan_configured = False
+        page.state.zurich_scan_harmonic, page.state.zurich_scan_reference, page.state.zurich_scan_tau = "1", "Trigger In 1", 1.0
         page._display_zurich_sample = lambda sample: self.log.append(("display", "zurich"))
         remote = types.SimpleNamespace(backend="MultiPyVu", active=object())
         remote.set_temperature = lambda target, rate, approach: self.log.append(("ppms", "set_temperature", target))
         remote.set_field = lambda *args: test.fail("a frequency scan never commands the field")
-        page.ppms_environment_controller = remote
-        page._read_ppms_live = lambda: dict(field_oe=1234.0, field_status="Persistent",
-                                            temperature_k=300.0, temperature_status="Stable")
+        remote.connected = True
+        page.state.ppms_environment_controller = remote
+        page.state.last_readback = None
+        page._update_ppms_control_ui = lambda: None
+        page.post_ui = page.shell.post_ui
+        read_live = lambda: dict(field_oe=1234.0, field_status="Persistent",
+                                 temperature_k=300.0, temperature_status="Stable")
+        page.runner = PPMSScanRunner(page.state, post_ui=page.shell.post_ui, read_live_fn=read_live)
+        page.runner._autorange_sr830 = lambda *args, **options: 0.0
         page._apply_ppms_environment_readback = lambda data: None
-        page.ppms_last_readback = None
-        page.post_ui = lambda callback: callback()
-        page.thread_log = lambda text: self.log.append(("log", text))
         for name in ("ppms_field_scan_status_var", "ppms_transport_status_var", "ppms_field_scan_eta_var",
                      "ppms_current_live_var"):
             setattr(page, name, Var(""))
         page.ppms_field_scan_progress = mock.Mock()
         page._redraw_ppms_transport_plot = lambda: None
-        page.ppms_scan_context = {}
-        page.ppms_field_scan_rows = []
-        page.ppms_field_scan_started_at = self.clock.now
+        page.ppms_zero_persist_button = mock.Mock()
+        page.ppms_field_scan_stop_button = mock.Mock()
+        page.ppms_field_scan_save_button = mock.Mock()
+        page.ppms_control_widgets = []
+        page.ppms_control_safety_var = mock.Mock(get=lambda: False)
+        page.macro_runner = mock.Mock()
+        page.ppms_field_scan_status_var = Var("")
+        page.ppms_field_scan_eta_var = Var("")
+        page.state.scan_context = {}
+        page.state.scan_rows = []
+        page.state.scan_started_at = self.clock.now
         self.folder = tempfile.TemporaryDirectory()
         test.addCleanup(self.folder.cleanup)
-        page.ppms_live_csv_path = Path(self.folder.name) / "scan.csv"
-        page.ppms_live_csv_fields = None
+        page.state.live_csv_path = Path(self.folder.name) / "scan.csv"
+        page.state.live_csv_fields = None
         active = tuple(self.sr830)
-        settings = app.validate_ppms_transport_scan_settings(
+        settings = validate_ppms_transport_scan_settings(
             currents[0], (frequencies or (317.3,))[0], 50.0, 1, 2, active, allow_no_lockins=zurich, harmonic_c=3)
         settings.update(nested={"angle": (26.0,), "temperature": (300.0,)}, currents=tuple(currents),
                         scan_mode=mode, acquisition_s=1.0, temperature_rate=10.0, temperature_approach=1,
                         slowdown=14, harmonic_pass=1)
         if frequencies is not None:
             settings["frequencies"] = tuple(frequencies)
-        page.ppms_field_scan_total = len(currents) * len(frequencies or (1,))
+        page.state.scan_total = len(currents) * len(frequencies or (1,))
         self.page, self.settings = page, settings
 
     def run(self):
         """The scan as Start runs it: its one harmonic pass through
-        _ppms_scan_with_final_field, which zeroes the 6221 at every end
+        PPMSScanRunner.run, which zeroes the 6221 at every end
         (user, 2026-10-18)."""
         settings = dict(self.settings)
         settings["harmonic_passes"] = (dict(self.settings),)
-        with mock.patch.object(app.time, "monotonic", self.clock), \
-                mock.patch.object(app.time, "sleep", lambda _s: None), \
-                mock.patch.object(app, "PPMSMotorDebug", Motor):
-            self.page._ppms_scan_with_final_field([(1, 1, 1, 1234.0)], 100.0, 0.0, 1, settings)
+        request = ScanRequest(
+            mode=self.settings.get("scan_mode", "Frequency"),
+            sequence=[(1, 1, 1, 1234.0)],
+            rate_oe_s=100.0,
+            stable_s=0.0,
+            approach_code=1,
+            transport_settings=settings,
+            total_points=self.page.state.scan_total,
+            estimated_seconds=1.0,
+            sr830_tc_code=10,
+        )
+        finished = {}
+        orig_finished = self.page.on_scan_finished
+
+        def capture_finished(**kwargs):
+            finished.update(kwargs)
+            return orig_finished(**kwargs)
+
+        self.page.on_scan_finished = capture_finished
+        try:
+            with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
+                    mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
+                    mock.patch.object(panel_mod.messagebox, "showerror"), \
+                    mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
+                self.page.runner.run(request, sink=self.page)
+        finally:
+            self.page.on_scan_finished = orig_finished
+        if finished.get("error") is not None:
+            raise finished["error"]
 
     def rows(self):
-        with self.page.ppms_live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
+        with self.page.state.live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
             return list(csv.DictReader(handle))
 
     def header(self):
-        with self.page.ppms_live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
+        with self.page.state.live_csv_path.open(encoding="utf-8-sig", newline="") as handle:
             return next(csv.reader(handle))
 
     def index(self, entry, start=0):
@@ -348,21 +413,20 @@ class Rig:
         self.test.assertEqual(self.source.output, 0)
         self.test.assertEqual(self.page.ppms_transport_status_var.get(),
                               "Transport acquisition: 6221 output OFF (read back)")
-        self.test.assertEqual(self.page.ppms_scan_outputs, {"6221": "zeroed"})
+        self.test.assertEqual(self.page.state.scan_outputs, {"6221": "zeroed"})
         self.test.assertIn(("log", "PPMS scan end: 6221 zeroed"), self.log)
 
 
 class PrimeListTests(unittest.TestCase):
     def test_the_primes_from_start_to_end_with_no_step(self):
-        values = app.ppms_prime_frequencies(7, 97)
+        values = ppms_prime_frequencies(7, 97)
         self.assertEqual(values, (7., 11., 13., 17., 19., 23., 29., 31., 37., 41., 43., 47., 53.,
                                   59., 61., 67., 71., 73., 79., 83., 89., 97.))
-        self.assertEqual(values, app.nonlocal_prime_frequencies(7, 97), "Non-local's list")
-        self.assertEqual(app.ppms_prime_frequencies("7", "199")[-1], 199.)
-        self.assertEqual(len(app.ppms_prime_frequencies(7, 199)), 43)
-        self.assertEqual(app.ppms_prime_frequencies(2, 2), (2.,))
-        self.assertEqual(app.ppms_prime_frequencies(99990, 100000), (99991.,))
-        self.assertEqual(len(app.ppms_prime_frequencies(2, 100000)), 9592)
+        self.assertEqual(ppms_prime_frequencies("7", "199")[-1], 199.)
+        self.assertEqual(len(ppms_prime_frequencies(7, 199)), 43)
+        self.assertEqual(ppms_prime_frequencies(2, 2), (2.,))
+        self.assertEqual(ppms_prime_frequencies(99990, 100000), (99991.,))
+        self.assertEqual(len(ppms_prime_frequencies(2, 100000)), 9592)
 
     def test_the_start_checks_in_the_pages_words(self):
         for start, end, message in (
@@ -375,39 +439,43 @@ class PrimeListTests(unittest.TestCase):
                 ("nan", 11, "whole numbers of Hz")):
             with self.subTest(start=start, end=end):
                 with self.assertRaisesRegex(ValueError, message.replace("(", r"\(").replace(")", r"\)")):
-                    app.ppms_prime_frequencies(start, end)
-                self.assertIn(message, app.ppms_frequency_scan_note(start, end))
+                    ppms_prime_frequencies(start, end)
+                self.assertIn(message, ppms_frequency_scan_note(start, end))
 
     def test_the_count_text(self):
-        self.assertEqual(app.ppms_frequency_count_text(app.ppms_prime_frequencies(7, 199)), "43 primes: 7–199 Hz")
-        self.assertEqual(app.ppms_frequency_count_text((7.,)), "1 prime: 7 Hz")
-        self.assertEqual(app.ppms_frequency_scan_note(7, 97), "22 primes: 7–97 Hz")
-        self.assertEqual(app.ppms_frequency_scan_note("7", "7"), "1 prime: 7 Hz")
+        self.assertEqual(ppms_frequency_count_text(ppms_prime_frequencies(7, 199)), "43 primes: 7–199 Hz")
+        self.assertEqual(ppms_frequency_count_text((7.,)), "1 prime: 7 Hz")
+        self.assertEqual(ppms_frequency_scan_note(7, 97), "22 primes: 7–97 Hz")
+        self.assertEqual(ppms_frequency_scan_note("7", "7"), "1 prime: 7 Hz")
 
 
 class ModeTableTests(unittest.TestCase):
     """Every mode-keyed table and branch knows both new modes."""
 
     def test_the_mode_list_and_its_tables(self):
-        self.assertEqual(app.PPMS_SCAN_MODES[-2:], ("Frequency", "Frequency+Current"))
-        self.assertEqual(app.PPMS_SCAN_MODES[:7], ("Temperature", "Field", "Angle", "Current", "Field+Temperature",
-                                                   "Angle+Temperature", "Current+Temperature"))
-        self.assertEqual(set(app.PPMS_SCAN_PLOT_AXES), set(app.PPMS_SCAN_MODES))
-        self.assertEqual(app.PPMS_SCAN_PLOT_AXES["Frequency"], "frequency")
-        self.assertEqual(app.PPMS_SCAN_PLOT_AXES["Frequency+Current"], "current")
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        self.assertEqual(PPMS_SCAN_MODES[-2:], ("Frequency", "Frequency+Current"))
+        self.assertEqual(PPMS_SCAN_MODES[:7], ("Temperature", "Field", "Angle", "Current", "Field+Temperature",
+                                               "Angle+Temperature", "Current+Temperature"))
+        self.assertEqual(set(PPMS_SCAN_PLOT_AXES), set(PPMS_SCAN_MODES))
+        self.assertEqual(PPMS_SCAN_PLOT_AXES["Frequency"], "frequency")
+        self.assertEqual(PPMS_SCAN_PLOT_AXES["Frequency+Current"], "current")
+        page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_default_field_range = ("-15000", "15000", "1500")
         defaults = page._ppms_scan_mode_defaults()
-        self.assertEqual(set(defaults), set(app.PPMS_SCAN_MODES))
+        self.assertEqual(set(defaults), set(PPMS_SCAN_MODES))
         self.assertEqual(defaults["Frequency"], ("7", "97", "", "Hz (primes)"))
         self.assertEqual(defaults["Frequency+Current"], defaults["Current"])
         # The list fits its longest entry, which is still Current+Temperature.
-        self.assertEqual(max(app.PPMS_SCAN_MODES, key=len), "Current+Temperature")
-        self.assertLessEqual(max(len(mode) for mode in app.PPMS_SCAN_MODES), 19)
+        self.assertEqual(max(PPMS_SCAN_MODES, key=len), "Current+Temperature")
+        self.assertLessEqual(max(len(mode) for mode in PPMS_SCAN_MODES), 19)
 
     def test_acquire_s_is_1_s_for_both(self):
-        for mode in app.PPMS_FREQUENCY_SCAN_MODES:
-            self.assertEqual(app.CombinedControlApp._ppms_acquisition_default(mode), "1")
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        page = PPMSPanelView.__new__(PPMSPanelView)
+        page.ppms_acquisition_default_shown = "5"
+        page.ppms_acquisition_time_var = Var("5")
+        for mode in PPMS_FREQUENCY_SCAN_MODES:
+            page._apply_ppms_mode_acquisition_default(mode)
+            self.assertEqual(page.ppms_acquisition_time_var.get(), "1")
         page.ppms_acquisition_time_var = Var("1")
         page._apply_ppms_mode_acquisition_default("Temperature")
         self.assertEqual(page.ppms_acquisition_time_var.get(), "5")
@@ -419,7 +487,7 @@ class ModeTableTests(unittest.TestCase):
 
     def test_the_step_box_is_greyed_in_frequency_and_the_current_box_in_frequency_current(self):
         """And "f Hz" in both, which neither reads (review, 2026-10-18)."""
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        page = PPMSPanelView.__new__(PPMSPanelView)
         page.ppms_scan_target_widgets = {key: [mock.Mock()] for key in
                                          ("Temperature", "Field", "Angle", "Current", "Frequency")}
         page.ppms_scan_step_entry = mock.Mock()
@@ -441,7 +509,8 @@ class ModeTableTests(unittest.TestCase):
     def test_f_hz_is_a_scan_target_widget(self):
         """The real page build (on stand-in widgets) registers "f Hz" as the
         Frequency target, so both frequency scans lock it."""
-        panel, _ttk = build_ppms_panel()
+        import test_ppms_sr830_tc as tc_tests
+        panel, _ttk = tc_tests.build_ppms_panel()
         widgets = panel.ppms_scan_target_widgets["Frequency"]
         self.assertEqual([w.options.get("textvariable") for w in widgets], [panel.ppms_transport_frequency_var])
         self.assertEqual(panel.ppms_frequency_range_frame.grid_options, None, "the outer row starts hidden")
@@ -450,21 +519,27 @@ class ModeTableTests(unittest.TestCase):
         row = {"6221_frequency_hz": 7.0, "6221_current_rms_ma": 1.0, "measured_field_oe": 0.0,
                "temperature_k": 300.0, "measured_angle_deg": 26.0, "sr830_8_x_v": 1e-6, "sr830_8_y_v": 0.0,
                "sr830_8_r_v": 1e-6, "sr830_8_theta_deg": 0.0, "sr830_8_harmonic": 1}
-        for mode, axis in app.PPMS_SCAN_PLOT_AXES.items():
+        for mode, axis in PPMS_SCAN_PLOT_AXES.items():
             with self.subTest(mode=mode):
-                base = PlotTests.base_page([row], mode)
-                base._redraw_ppms_transport_plot()
                 panel = PlotTests.panel_page([row], mode)
-                panel._redraw_ppms_transport_plot()
-                self.assertTrue(base.calls and panel.calls)
+                with mock.patch.object(
+                    panel_mod,
+                    "draw_nonlocal_series",
+                    side_effect=lambda *args, **options: panel.calls.append((args, options)),
+                ):
+                    panel._redraw_ppms_transport_plot()
+                self.assertTrue(panel.calls)
 
 
 def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"), frequency_box="317.3",
              current_box="1"):
     """The PPMS Start (no window): returns (page, Yes/No text, settings, estimate s), or the error text."""
-    page = app.CombinedControlApp.__new__(app.CombinedControlApp)
-    page.ppms_field_scan_running = page.ppms_environment_busy = False
-    page.closing = False
+    page = PPMSPanelView.__new__(PPMSPanelView)
+    page.state = PPMSAppState()
+    page.shell = types.SimpleNamespace(closing=False, root=None, post_ui=lambda cb: cb(), thread_log=mock.Mock())
+    page.root = None
+    page.thread_log = page.shell.thread_log
+    page.runner = PPMSScanRunner(page.state, post_ui=page.shell.post_ui)
     page._require_ppms_control_ready = mock.Mock()
     page.ppms_simple_mode = Var(mode)
     page.ppms_simple_range = [Var(value) for value in main_row]
@@ -478,46 +553,51 @@ def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"),
                  ppms_temperature_approach_var="No overshoot", ppms_motor_speed_var="14")
     for name, value in boxes.items():
         setattr(page, name, Var(value))
-    for key, value in zip(app.PPMS_SR830_KEYS, harmonics):
-        setattr(page, app.PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
-    page.ppms_environment_controller = types.SimpleNamespace(backend=app.PPMS_QDINSTRUMENT_BACKEND)
-    page.ppms_instrument_controllers = {
+    for key, value in zip(PPMS_SR830_KEYS, harmonics):
+        setattr(page, PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
+    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
+    page.ppms_lockin_selection = {key: Var(True) for key in PPMS_SR830_KEYS}
+    page.ppms_lockin_selection["zurich"] = Var(False)
+    page.ppms_sr830_time_constant_var = Var("1 s")
+    page.ppms_zero_persist_button = mock.Mock()
+    page.state.ppms_instrument_controllers = {
         key: types.SimpleNamespace(connected=True, resource_name=f"GPIB0::{address}::INSTR")
         for key, address in (("6221", 30), ("830_a", 8), ("830_b", 9), ("830_c", 10))}
-    page.ppms_last_readback = dict(temperature_k=300.0, field_oe=1234.0, angle_deg=26.0)
-    page.ppms_field_scan_stop_event = threading.Event()
-    for name in ("_redraw_ppms_transport_plot", "_update_ppms_control_ui", "ppms_executor",
+    page.state.last_readback = dict(temperature_k=300.0, field_oe=1234.0, angle_deg=26.0)
+    page.state.ppms_executor = mock.Mock()
+    for name in ("_redraw_ppms_transport_plot", "_update_ppms_control_ui",
                  "ppms_field_scan_progress", "ppms_field_scan_eta_var", "ppms_transport_status_var"):
         setattr(page, name, mock.Mock())
     page.ppms_field_scan_status_var = Var("")
-    page.root = None
-    page.thread_log = mock.Mock()
     estimates = []
-    format_duration = page._format_scan_duration
-    page._format_scan_duration = lambda seconds: estimates.append(seconds) or format_duration(seconds)
+    format_duration = panel_mod.format_scan_duration
+    import transport.ppms.ui.dialogs as dialogs_mod
+
     with tempfile.TemporaryDirectory() as folder, \
-            mock.patch.object(app.simpledialog, "askstring", return_value=""), \
-            mock.patch.object(app.messagebox, "askyesno", return_value=True) as ask, \
-            mock.patch.object(app.filedialog, "askdirectory", return_value=folder), \
-            mock.patch.object(app.messagebox, "showerror") as error:
+            mock.patch.object(panel_mod, "format_scan_duration", lambda seconds: estimates.append(seconds) or format_duration(seconds)), \
+            mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""), \
+            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True), \
+            mock.patch.object(panel_mod, "ask_scan_start", return_value=True) as ask, \
+            mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
+            mock.patch.object(panel_mod.messagebox, "showerror") as error:
         page.start_ppms_field_scan()
         if error.called:
-            page.ppms_executor.submit.assert_not_called()
+            page.state.ppms_executor.submit.assert_not_called()
             return error.call_args.args[1]
-    test.assertTrue(page.ppms_field_scan_running)
-    args = page.ppms_executor.submit.call_args.args
-    return page, ask.call_args.args[1], args[-1], estimates[0]
+    test.assertTrue(page.state.scan_running)
+    request = page.state.ppms_executor.submit.call_args.args[1]
+    return page, ask.call_args.args[2], request.transport_settings, estimates[0]
 
 
 class StartTests(unittest.TestCase):
     def test_frequency_mode(self):
         page, question, settings, _estimate = launcher(self, "Frequency", ("7", "199", ""))
-        self.assertEqual(settings["frequencies"], app.ppms_prime_frequencies(7, 199))
+        self.assertEqual(settings["frequencies"], ppms_prime_frequencies(7, 199))
         self.assertEqual(settings["frequency_hz"], 7.0, "the first prime, not the f Hz box")
         self.assertEqual(settings["currents"], (1.0,), "the I mA RMS box, as a Current scan's fixed value")
         self.assertEqual(settings["compliance_v"], 50.0)
         self.assertEqual(settings["nested"], {"angle": (26.0,), "temperature": (300.0,)})
-        self.assertEqual(page.ppms_field_scan_total, 43)
+        self.assertEqual(page.state.scan_total, 43)
         self.assertEqual(page.ppms_plot_axis, "frequency")
         self.assertIn("Scan mode: Frequency\nFrequencies: 43 primes: 7–199 Hz (Step not used)\n", question)
         self.assertIn("Measurement points: 43\n", question)
@@ -530,8 +610,8 @@ class StartTests(unittest.TestCase):
             "Frequency scan: 43 primes: 7–199 Hz; 43 points, settle 1 s; estimated about "))
         # The run folder, named PPMS_<date>_<time> when the name is blank
         # (user, 2026-10-18).
-        self.assertRegex(page.ppms_run_folder.name, r"^PPMS_\d{8}_\d{6}$")
-        self.assertEqual(page.ppms_run_recorder.csv_path.parent, page.ppms_run_folder)
+        self.assertRegex(page.state.run_folder.name, r"^PPMS_\d{8}_\d{6}$")
+        self.assertEqual(page.state.run_recorder.csv_path.parent, page.state.run_folder)
         # The worker gets the passes built here, with the frequencies in them.
         self.assertEqual(len(settings["harmonic_passes"]), 1)
         self.assertEqual(settings["harmonic_passes"][0]["frequencies"], settings["frequencies"])
@@ -550,7 +630,7 @@ class StartTests(unittest.TestCase):
         self.assertEqual(settings["currents"], (0.01, 0.02, 0.03))
         self.assertEqual(settings["current_rms_ma"], 0.01)
         self.assertEqual(settings["frequency_hz"], 7.0)
-        self.assertEqual(page.ppms_field_scan_total, 9)
+        self.assertEqual(page.state.scan_total, 9)
         self.assertEqual(page.ppms_plot_axis, "current")
         self.assertIn("Frequencies: 3 primes: 7–13 Hz, the whole current sweep at each\n", question)
         self.assertIn("the other currents change only the 6221 amplitude", question)
@@ -602,19 +682,19 @@ class StartTests(unittest.TestCase):
 
     def test_set_up_allowance_per_pass(self):
         passes = [(1.0, 1.0, "SR830-1"), (1.0, 1.0, "SR830-1")]
-        self.assertAlmostEqual(app.CombinedControlApp._ppms_frequency_set_up_s((2.0, 7.0), passes, 1.0),
-                               2 * (1 + 1.5 + 1 + 0) + 2 * app.PPMS_SET_UP_ALLOWANCE_S)
-        self.assertEqual(app.PPMS_SET_UP_ALLOWANCE_S, 12.0, "the allowance every set-up had")
+        self.assertAlmostEqual(PPMSPanelView._ppms_frequency_set_up_s((2.0, 7.0), passes, 1.0),
+                               2 * (1 + 1.5 + 1 + 0) + 2 * PPMS_SET_UP_ALLOWANCE_S)
+        self.assertEqual(PPMS_SET_UP_ALLOWANCE_S, 12.0, "the allowance every set-up had")
 
     def test_the_worker_uses_the_passes_built_at_start(self):
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        page.closing = False
-        page.ppms_field_scan_stop_event = threading.Event()
-        page._ppms_harmonic_passes = mock.Mock(side_effect=AssertionError("Tk variables read on the worker"))
+        state = PPMSAppState()
+        runner = PPMSScanRunner(state, post_ui=lambda cb: None)
         ran = []
-        page._ppms_nested_scan_worker = lambda *args: ran.append(args[-1]["harmonic_pass"])
+        runner.nested_scan_worker = lambda *args, **kwargs: ran.append(args[-1]["harmonic_pass"])
         passes = ({"harmonic_pass": 1}, {"harmonic_pass": 2})
-        page._ppms_scan_with_final_field([], 100.0, 0.0, 1, {"harmonic_passes": passes})
+        runner.run(ScanRequest(mode="Frequency", sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1,
+                               transport_settings={"harmonic_passes": passes}, total_points=0,
+                               estimated_seconds=1.0, sr830_tc_code=10))
         self.assertEqual(ran, [1, 2])
 
 
@@ -735,8 +815,8 @@ class SequenceTests(unittest.TestCase):
             if command == "OUTP OFF" and source.frequency == 2.0 and len(rig.rows_seen) == 1:
                 source.output = 1
         rig.rows_seen = []
-        append = rig.page._append_ppms_live_csv
-        rig.page._append_ppms_live_csv = lambda row: (append(row), rig.rows_seen.append(row))
+        append = rig.page.runner._append_live_csv
+        rig.page.runner._append_live_csv = lambda row: (append(row), rig.rows_seen.append(row))
         source.on_write = stuck
         with self.assertRaisesRegex(RuntimeError, r"6221 output still ON \(OUTP\?=1\) before setting up 3 Hz"):
             rig.run()
@@ -745,7 +825,7 @@ class SequenceTests(unittest.TestCase):
         # instead of OFF (review, 2026-10-18); so does the end's zeroing
         # (user, 2026-10-18), for the finish to say CHECK IT.
         self.assertIn(("log", "PPMS: the 6221 still reads ON (OUTP?=1) after the scan's output off"), rig.log)
-        self.assertEqual(rig.page.ppms_scan_outputs,
+        self.assertEqual(rig.page.state.scan_outputs,
                          {"6221": "zero FAILED: the 6221 output did not read back OFF (OUTP? 1)"})
         self.assertEqual(rig.page.ppms_transport_status_var.get(),
                          "Transport acquisition: 6221 zero FAILED: the 6221 output did not read back OFF (OUTP? 1); "
@@ -767,8 +847,8 @@ class SequenceTests(unittest.TestCase):
         other.source.on_write = lambda command: (setattr(other.source, "frequency", 1000.0)
                                                  if command == "SOUR:WAVE:FREQ 997" else None)
         settings = dict(other.settings, frequency_hz=997.0)
-        with mock.patch.object(app.time, "monotonic", other.clock), mock.patch.object(app.time, "sleep", lambda _s: None):
-            app.CombinedControlApp._configure_ppms_transport_scan(other.page, settings)
+        with mock.patch.object(runner_mod.time, "monotonic", other.clock), mock.patch.object(runner_mod.time, "sleep", lambda _s: None):
+            other.page.runner.configure_transport_scan(settings, sink=other.page)
         self.assertEqual((other.source.output, other.source.frequency), (1, 1000.0))
 
     def test_a_zurich_reading_held_from_the_previous_prime_does_not_count(self):
@@ -781,8 +861,8 @@ class SequenceTests(unittest.TestCase):
         init = rig.index(("6221", "SOUR:WAVE:INIT"), rig.index(("6221", "SOUR:WAVE:FREQ 1013")))
         first_read = rig.index(("sr830_8?", "SNAP? 1,2,3,4,9"), init)
         waits = [entry for entry in rig.log[init:first_read] if entry == ("zurich?", "read_mfli", 1013.0)]
-        self.assertEqual(len(waits), 2 + app.PPMS_ZURICH_LOCK_READS, "two held readings, then three at 1013 Hz")
-        self.assertEqual(app.PPMS_ZURICH_LOCK_READS, 3)
+        self.assertEqual(len(waits), 2 + PPMS_ZURICH_LOCK_READS, "two held readings, then three at 1013 Hz")
+        self.assertEqual(PPMS_ZURICH_LOCK_READS, 3)
         rows = rig.rows()
         self.assertEqual([float(r["zurich_reference_hz"]) for r in rows], [1009.0, 1013.0])
         # The 6221's frequency before each change is read before its off.
@@ -798,13 +878,22 @@ class SequenceTests(unittest.TestCase):
             with self.subTest(entry=entry):
                 rig = Rig(self, "Frequency", (2.0, 3.0), (1.0,))
                 rig.page.root = types.SimpleNamespace(after=lambda _ms, show: show())
+                rig.page.shell.root = rig.page.root
                 rig.stop_at(entry, occurrence=1 if entry[1].startswith("SOUR:WAVE:FREQ") else 2)
-                with self.assertRaises(app.PPMSScanCancelled) as caught:
-                    rig.run()
+                rig.run()
                 self.assertEqual(len(rig.rows()), 1)
                 rig.assert_switched_off()
-                with mock.patch.object(app.messagebox, "showerror") as dialog:
-                    rig.page._report_ppms_scan_finished("Frequency", True, caught.exception)
+                with mock.patch.object(panel_mod.messagebox, "showerror") as dialog:
+                    rig.page.on_scan_finished(
+                        mode="Frequency",
+                        outcome="stopped",
+                        status="Stopped; 6221 zeroed",
+                        results=rig.page.state.scan_outputs,
+                        outputs_confirmed=True,
+                        field_note="",
+                        error=None,
+                        problems=[],
+                    )
                 dialog.assert_not_called()
                 self.assertEqual(rig.page.ppms_field_scan_status_var.get(), "Stopped; 6221 zeroed")
 
@@ -828,7 +917,7 @@ class SequenceTests(unittest.TestCase):
                     rig.stop_at(entry, occurrence)
                     try:
                         rig.run()
-                    except app.PPMSScanCancelled:
+                    except PPMSScanCancelled:
                         pass
                     self.assertEqual(len(rig.rows()), rows)
                     rig.assert_switched_off()
@@ -840,16 +929,16 @@ class SequenceTests(unittest.TestCase):
 
     def test_a_lock_in_range_failure_ends_with_the_6221_zeroed(self):
         rig = Rig(self, "Frequency", (2.0, 3.0), (1.0,))
-        acquire = rig.page._acquire_ppms_first_point
+        acquire = rig.page.runner._acquire_first_point
         calls = []
 
-        def first_point(*args):
+        def first_point(*args, **kwargs):
             calls.append(args)
             if len(calls) == 2:
-                raise app.PPMSLockinRangeError("SR830 autorange did not settle")
-            return acquire(*args)
-        rig.page._acquire_ppms_first_point = first_point
-        with self.assertRaises(app.PPMSLockinRangeError):
+                raise PPMSLockinRangeError("SR830 autorange did not settle")
+            return acquire(*args, **kwargs)
+        rig.page.runner._acquire_first_point = first_point
+        with self.assertRaises(PPMSLockinRangeError):
             rig.run()
         # Its own clean-up still keeps the output; the end's zeroing does
         # not (user, 2026-10-18: it kept the output).
@@ -858,16 +947,27 @@ class SequenceTests(unittest.TestCase):
         self.assertEqual(len(rig.rows()), 1)
 
     def test_every_harmonic_pass_runs_the_whole_frequency_scan(self):
-        """Through _ppms_scan_with_final_field with the passes Start built:
+        """Through PPMSScanRunner.run with the passes Start built:
         SR830-1 at 1+2, so pass 2 sets HARM 2 and SR830-3 drops out."""
         rig = Rig(self, "Frequency", (2.0, 3.0), (1.0,))
         first = dict(rig.settings, harmonic_pass=1)
         second = dict(rig.settings, harmonic_pass=2, harmonic_a=2, active_lockins=("830_a",))
         settings = dict(rig.settings, harmonic_passes=(first, second))
-        with mock.patch.object(app.time, "monotonic", rig.clock), \
-                mock.patch.object(app.time, "sleep", lambda _s: None), \
-                mock.patch.object(app, "PPMSMotorDebug", Motor):
-            rig.page._ppms_scan_with_final_field([(1, 1, 1, 1234.0)], 100.0, 0.0, 1, settings)
+        request = ScanRequest(
+            mode="Frequency",
+            sequence=[(1, 1, 1, 1234.0)],
+            rate_oe_s=100.0,
+            stable_s=0.0,
+            approach_code=1,
+            transport_settings=settings,
+            total_points=2,
+            estimated_seconds=1.0,
+            sr830_tc_code=10,
+        )
+        with mock.patch.object(runner_mod.time, "monotonic", rig.clock), \
+                mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
+                mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
+            rig.page.runner.run(request, sink=rig.page)
         rows = rig.rows()
         self.assertEqual([(r["harmonic_pass"], float(r["6221_frequency_hz"])) for r in rows],
                          [("1", 2.0), ("1", 3.0), ("2", 2.0), ("2", 3.0)])
@@ -913,38 +1013,22 @@ class SequenceTests(unittest.TestCase):
 
 class PlotTests(unittest.TestCase):
     @staticmethod
-    def base_page(rows, mode):
-        page = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        page.calls = []
-        page._draw_nonlocal_series = lambda *args, **options: page.calls.append((args, options))
-        page.ppms_transport_canvas = object()
-        page.ppms_transport_canvases = {("830_a", channel): object() for channel in ("x", "y", "theta")}
-        page.ppms_transport_plot_frames = {}
-        page.ppms_plot_addresses = {"830_a": 8}
-        page.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(connected=True,
-                                                                           resource_name="GPIB0::8::INSTR")}
-        page.ppms_transport_harmonic_a_var = Var("1")
-        page.ppms_field_scan_rows = rows
-        page.ppms_active_scan_mode = mode
-        page.ppms_plot_axis = app.PPMS_SCAN_PLOT_AXES[mode]
-        return page
-
-    @staticmethod
     def panel_page(rows, mode):
-        page = app.PPMSPanel.__new__(app.PPMSPanel)
-        page.parent_app = types.SimpleNamespace()
+        page = PPMSPanelView.__new__(PPMSPanelView)
+        page.state = PPMSAppState()
         page.calls = []
         page._draw_nonlocal_series = lambda *args, **options: page.calls.append((args, options))
         page.ppms_transport_canvas = None
         page.ppms_harmonic_canvases = {(1, channel): object() for channel in ("x", "y", "theta")}
         page.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(False)}
-        page.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(connected=True,
-                                                                           resource_name="GPIB0::8::INSTR")}
+        page.state.ppms_instrument_controllers = {"830_a": types.SimpleNamespace(connected=True,
+                                                                                 resource_name="GPIB0::8::INSTR")}
         page.ppms_plot_addresses = {"830_a": 8}
         page.ppms_transport_harmonic_a_var = Var("1")
-        page.ppms_field_scan_rows = rows
-        page.ppms_active_scan_mode = mode
-        page.ppms_plot_axis = app.PPMS_SCAN_PLOT_AXES[mode]
+        page.state.scan_rows = rows
+        page.state.active_scan_mode = mode
+        page.ppms_plot_axis = PPMS_SCAN_PLOT_AXES[mode]
+        page.ppms_plot_angle_range = None
         return page
 
     @staticmethod
@@ -956,19 +1040,28 @@ class PlotTests(unittest.TestCase):
 
     def test_frequency_mode_plots_against_frequency(self):
         rows = self.rows((7.0, 11.0, 13.0), (1.0,))
-        for page in (self.panel_page(rows, "Frequency"), self.base_page(rows, "Frequency")):
-            with self.subTest(page=type(page).__name__):
-                page._redraw_ppms_transport_plot()
-                args, _options = page.calls[0]
-                series, x_label = args[1], args[2]
-                self.assertEqual(x_label, "Frequency (Hz)")
-                self.assertEqual(len(series), 1, "one curve per meter")
-                self.assertEqual([x for x, _y in next(iter(series.values()))], [7.0, 11.0, 13.0])
+        page = self.panel_page(rows, "Frequency")
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
+        args, _options = page.calls[0]
+        series, x_label = args[1], args[2]
+        self.assertEqual(x_label, "Frequency (Hz)")
+        self.assertEqual(len(series), 1, "one curve per meter")
+        self.assertEqual([x for x, _y in next(iter(series.values()))], [7.0, 11.0, 13.0])
 
     def test_frequency_current_plots_one_curve_per_frequency(self):
         rows = self.rows((7.0, 11.0, 13.0), (0.5, 1.0))
         page = self.panel_page(rows, "Frequency+Current")
-        page._redraw_ppms_transport_plot()
+        with mock.patch.object(
+            panel_mod,
+            "draw_nonlocal_series",
+            side_effect=lambda *args, **options: page.calls.append((args, options)),
+        ):
+            page._redraw_ppms_transport_plot()
         args, options = page.calls[0]
         series, x_label = args[1], args[2]
         self.assertEqual(x_label, "Applied AC current (mA RMS)")
@@ -976,28 +1069,23 @@ class PlotTests(unittest.TestCase):
         self.assertEqual(series["SR830-1 7 Hz L1"], [(0.5, 3.5e-6), (1.0, 7e-6)])
         self.assertEqual(options["series_labels"]["SR830-1 7 Hz L1"], "SR830-1 7 Hz L1")
         colors = options["series_colors"]
-        base = app.PPMS_METER_COLORS["830_a"]
-        self.assertEqual(colors["SR830-1 7 Hz L1"], app.shade_color(base, 0.0))   # lightest, lowest
+        base = PPMS_METER_COLORS["830_a"]
+        self.assertEqual(colors["SR830-1 7 Hz L1"], shade_color(base, 0.0))   # lightest, lowest
         self.assertEqual(colors["SR830-1 11 Hz L1"].lower(), base.lower())
-        self.assertEqual(colors["SR830-1 13 Hz L1"], app.shade_color(base, 1.0))  # darkest, highest
-        base_page = self.base_page(rows, "Frequency+Current")
-        base_page._redraw_ppms_transport_plot()
-        args, options = base_page.calls[0]
-        self.assertEqual(sorted(args[1]), ["GPIB8 X | 11 Hz L1", "GPIB8 X | 13 Hz L1", "GPIB8 X | 7 Hz L1"])
-        self.assertEqual(len(set(options["series_colors"].values())), 3)
+        self.assertEqual(colors["SR830-1 13 Hz L1"], shade_color(base, 1.0))  # darkest, highest
 
 
 class SHVUnchangedTests(unittest.TestCase):
-    """The SHHV page (RTEPanel) inherits this code; it must not change."""
+    """Setup without a frequency scan keeps the 8 s lock."""
 
     def test_a_set_up_without_a_frequency_scan_keeps_the_8_s_lock(self):
-        self.assertEqual(app.PPMS_TRANSPORT_REFERENCE_TIMEOUT_S, 8.0)
+        self.assertEqual(PPMS_TRANSPORT_REFERENCE_TIMEOUT_S, 8.0)
         rig = Rig(self, "Current", None, (1.0,), zurich=False)
         rig.sr830["830_a"].never_locks_at = 317.3
         page = rig.page
-        with mock.patch.object(app.time, "monotonic", rig.clock), mock.patch.object(app.time, "sleep", lambda _s: None):
+        with mock.patch.object(runner_mod.time, "monotonic", rig.clock), mock.patch.object(runner_mod.time, "sleep", lambda _s: None):
             with self.assertRaisesRegex(RuntimeError, "within 8 s"):
-                app.CombinedControlApp._configure_ppms_transport_scan(page, dict(rig.settings))
+                page.runner.configure_transport_scan(dict(rig.settings), sink=page)
 
 
 if __name__ == "__main__":

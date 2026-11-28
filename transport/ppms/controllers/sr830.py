@@ -328,9 +328,6 @@ class SR830Controller(SafeVisaIdentityController):
         }
 
 
-# Temporary compatibility alias for mechanical extraction (M1); remove in Batch 2 (M4).
-STFMRSR830Controller = SR830Controller
-
 __all__ = [
     "LOCKIN_DOWNRANGE_FRACTION",
     "LOCKIN_DOWNRANGE_READINGS",
@@ -341,7 +338,6 @@ __all__ = [
     "SR830Controller",
     "SR830_DISPLAY_XY_COMMANDS",
     "SR830_TIME_CONSTANTS_S",
-    "STFMRSR830Controller",
     "STFMR_LOCKIN_SR830_DEFAULT_REFERENCE_INPUT",
     "STFMR_LOCKIN_SR830_REFERENCE_INPUTS",
     "STFMR_LOCKIN_SR830_SENSITIVITY_CODE",

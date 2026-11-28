@@ -32,7 +32,7 @@ from transport.common import (
     DEFAULT_SR830_MIN_HARMONIC,
     validate_transport_scan_settings,
 )
-import transport.ppms.app as app
+import transport.ppms.engine.planning as app
 
 
 class ReferenceOriginalValidation:
@@ -442,24 +442,28 @@ class TestHardwareSafetyGuards(unittest.TestCase):
     """AC5: Ensure invalid settings reject before prohibited hardware operations."""
 
     def test_worker_configure_transport_scan_aborts_before_hardware_commands(self):
-        """_configure_ppms_transport_scan must fail at validation before calling *RST or safe_output_off."""
-        harness = object.__new__(app.CombinedControlApp)
-        harness.ppms_field_scan_stop_event = mock.Mock()
-        harness.ppms_field_scan_stop_event.is_set.return_value = False
-        harness.ppms_last_current_trip = False
-        harness._ppms_clear_sr830_range_floor = mock.Mock()
+        """configure_transport_scan must fail at validation before calling *RST or safe_output_off."""
+        from transport.ppms.engine.runner import PPMSScanRunner
+        from transport.ppms.state import PPMSAppState
+
+        state = PPMSAppState.__new__(PPMSAppState)
+        state.scan_stop_event = mock.Mock()
+        state.scan_stop_event.is_set.return_value = False
+        state.last_current_trip = False
+        state.zurich_scan_enabled = False
+        state.zurich_scan_configured = False
+        state.sr830_range_states = {}
 
         mock_6221 = mock.Mock()
         mock_6221.connected = True
         mock_lockin = mock.Mock()
         mock_lockin.connected = True
-
-        harness.ppms_instrument_controllers = {
+        state.ppms_instrument_controllers = {
             "6221": mock_6221,
             "830_a": mock_lockin,
         }
+        runner = PPMSScanRunner(state, post_ui=lambda cb: cb())
 
-        # Invalid settings: 80 mA RMS exceeds 105 mA peak
         invalid_settings = {
             "current_rms_ma": 80.0,
             "frequency_hz": 100.0,
@@ -471,21 +475,23 @@ class TestHardwareSafetyGuards(unittest.TestCase):
         }
 
         with self.assertRaises(ValueError):
-            harness._configure_ppms_transport_scan(invalid_settings)
+            runner.configure_transport_scan(invalid_settings)
 
-        # Prohibited hardware operations must NOT have occurred
         mock_6221.safe_output_off.assert_not_called()
         mock_6221.instrument.write.assert_not_called()
 
     def test_worker_update_transport_current_aborts_before_scpi(self):
-        """_update_ppms_transport_current must fail at validation before SOUR:WAVE:AMPL."""
-        harness = object.__new__(app.CombinedControlApp)
-        harness.ppms_field_scan_stop_event = mock.Mock()
-        harness.ppms_field_scan_stop_event.is_set.return_value = False
-        harness.closing = False
-        harness._ppms_write_6221_checked = mock.Mock()
+        """update_transport_current must fail at validation before SOUR:WAVE:AMPL."""
+        from transport.ppms.engine.runner import PPMSScanRunner
+        from transport.ppms.state import PPMSAppState
 
-        # Invalid settings: current <= 0
+        state = PPMSAppState.__new__(PPMSAppState)
+        state.scan_stop_event = mock.Mock()
+        state.scan_stop_event.is_set.return_value = False
+        state.closed = False
+        runner = PPMSScanRunner(state, post_ui=lambda cb: cb())
+        runner.write_6221_checked = mock.Mock()
+
         invalid_settings = {
             "current_rms_ma": -5.0,
             "frequency_hz": 100.0,
@@ -498,9 +504,9 @@ class TestHardwareSafetyGuards(unittest.TestCase):
         }
 
         with self.assertRaises(ValueError):
-            harness._update_ppms_transport_current(invalid_settings)
+            runner.update_transport_current(invalid_settings)
 
-        harness._ppms_write_6221_checked.assert_not_called()
+        runner.write_6221_checked.assert_not_called()
 
 
 if __name__ == "__main__":

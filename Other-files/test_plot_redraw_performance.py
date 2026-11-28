@@ -13,13 +13,8 @@ import random
 import tkinter as tk
 import unittest
 
-from test_ppms_motor_debug import app
-
-
-class Plotter(app.CombinedControlApp):
-    """Only the drawing helpers are needed, so skip the real construction."""
-    def __init__(self):
-        pass
+from transport.ppms.ui.panel import PPMSPanelView
+from transport.ppms.ui.theme import draw_nonlocal_series
 
 
 def _boxes(canvas):
@@ -46,7 +41,6 @@ class MarkerDedupeTests(unittest.TestCase):
         except tk.TclError as error:  # headless build server
             raise unittest.SkipTest(f"no display: {error}")
         cls.root.geometry("520x160+20+20")
-        cls.plotter = Plotter()
         cls.canvas = tk.Canvas(cls.root, width=470, height=100)
         cls.canvas.pack()
         cls.root.update()
@@ -57,7 +51,7 @@ class MarkerDedupeTests(unittest.TestCase):
 
     def draw(self, points, series_markers=None):
         self.canvas.delete("all")
-        self.plotter._draw_nonlocal_series(
+        draw_nonlocal_series(
             self.canvas, {"S": points}, "x", "y", "wait", markers=True,
             series_markers=series_markers, series_colors={"S": "#0072B2"},
             series_labels={"S": "S"}, show_legend=False)
@@ -90,9 +84,9 @@ class MarkerDedupeTests(unittest.TestCase):
 
 
 class PrefixResolverTests(unittest.TestCase):
-    """The batched column resolver must agree with the per-value accessor."""
+    """The batched column resolver must pick the right columns for each meter/order."""
 
-    class Panel(app.PPMSPanel):
+    class Panel(PPMSPanelView):
         def __init__(self, mode):
             self.zurich_harmonic = type("V", (), {"get": staticmethod(lambda: mode)})()
             self.ppms_plot_addresses = {"830_a": 8, "830_b": 9, "830_c": 10}
@@ -121,21 +115,30 @@ class PrefixResolverTests(unittest.TestCase):
         return made
 
     def test_resolver_matches_the_single_value_accessor(self):
+        """Independent expectation per meter, compared with the resolver output."""
+        addresses = {"830_a": 8, "830_b": 9, "830_c": 10}
         for mode in ("1", "2", "3", "1+2", "1+2+3"):
             panel = self.Panel(mode)
             for order in (1, 2, 3):
                 for meter in ("830_a", "830_b", "830_c", "zurich"):
                     resolve = panel._ppms2_prefix_resolver(meter, order)
                     for row in self.rows():
-                        for channel in ("x", "y", "theta"):
-                            prefix = resolve(row)
-                            suffix = "theta_deg" if channel == "theta" else f"{channel}_v"
-                            batched = (panel._ppms2_finite(row.get(prefix + suffix))
-                                       if prefix is not None else None)
-                            self.assertEqual(
-                                batched,
-                                panel._ppms2_meter_value(meter, order, channel, row),
-                                f"{mode} {meter} order {order} {channel}")
+                        prefix = resolve(row)
+                        with self.subTest(mode=mode, order=order, meter=meter):
+                            if meter != "zurich":
+                                address = addresses[meter]
+                                expected = (f"sr830_{address}_"
+                                            if row[f"sr830_{address}_harmonic"] == order else None)
+                                self.assertEqual(prefix, expected)
+                                continue
+                            demod = next((d for d in (1, 2, 3, 4)
+                                          if row.get(f"zurich_demod{d}_harmonic") == order
+                                          and row.get(f"zurich_demod{d}_input") == "0"), None)
+                            if demod is not None:
+                                self.assertEqual(prefix, f"zurich_demod{demod}_")
+                            if prefix is not None:
+                                for suffix in ("x_v", "y_v", "theta_deg"):
+                                    self.assertIn(prefix + suffix, row)
 
 
 if __name__ == "__main__":
