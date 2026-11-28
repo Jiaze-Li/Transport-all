@@ -12,8 +12,9 @@ from pathlib import Path
 from unittest import mock
 
 import test_ppms_run_save_zero as ppms_runs
-from test_nonlocal_keithley import bare_app
-from test_ppms_motor_debug import app
+from transport.ppms.ui import theme as ui_theme
+from transport.ppms.ui.dialogs import ScanRunRecorder
+import tkinter as tk
 
 NOT_SHOWN = "The plot is not visible; cannot capture a snapshot"
 
@@ -39,9 +40,9 @@ class Grabs:
     def __init__(self, test, hidden=()):
         self.calls, self.hidden = [], list(hidden)
         patcher = mock.patch.object(
-            app.CombinedControlApp,
+            ui_theme,
             "save_plot_canvas_snapshot",
-            lambda page, widget, path: self.grab(widget, path),
+            lambda root, widget, path: self.grab(widget, path),
         )
         patcher.start()
         test.addCleanup(patcher.stop)
@@ -60,20 +61,21 @@ class RoutineTests(unittest.TestCase):
     def setUp(self):
         super().setUp()
         for patcher in (
-            mock.patch.object(app.tk, "Tk", side_effect=AssertionError("tests must not open a window")),
-            mock.patch.object(app.tk, "Toplevel", side_effect=AssertionError("tests must not open a window")),
+            mock.patch.object(tk, "Tk", side_effect=AssertionError("tests must not open a window")),
+            mock.patch.object(tk, "Toplevel", side_effect=AssertionError("tests must not open a window")),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.folder = Path(self._tmp.name)
-        self.a = bare_app()
-        self.a.closing = False
-        self.a.root = mock.Mock()
+        self.a = mock.Mock(closing=False, root=mock.Mock())
         self.log = []
         self.a.thread_log = self.log.append
-        self.recorder = app.ScanRunRecorder(self.folder, "PAGE", "run", {}, label="Page")
+        self.a.save_scan_plot_snapshots = lambda rec, plots, **kw: ui_theme.save_scan_plot_snapshots(
+            self.a.root, rec, plots, closing=self.a.closing, log_fn=self.a.thread_log, **kw
+        )
+        self.recorder = ScanRunRecorder(self.folder, "PAGE", "run", {}, label="Page")
         self.addCleanup(lambda: self.recorder.close("completed"))
         self.grabs = Grabs(self)
 
@@ -124,7 +126,7 @@ class RoutineTests(unittest.TestCase):
 
     def test_nothing_without_a_point_a_run_folder_a_plot_or_while_closing(self):
         plots = (("plot", object()),)
-        closed = app.ScanRunRecorder(self.folder, "PAGE", "closed", {}, label="Page")
+        closed = ScanRunRecorder(self.folder, "PAGE", "closed", {}, label="Page")
         closed.close("completed")
         cases = (
             ("no run folder", dict(recorder=None, plots=plots)),

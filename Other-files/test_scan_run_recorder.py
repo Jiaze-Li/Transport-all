@@ -22,7 +22,7 @@ from unittest import mock
 _HERE = Path(__file__).resolve().parent
 if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
-import transport.ppms.app as app
+import transport.ppms.ui.dialogs as app
 
 BOM = "﻿".encode("utf-8")
 

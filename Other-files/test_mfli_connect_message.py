@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 from test_ppms_motor_debug import app
 
-Controller = app.NonLocalACController
+from transport.ppms.controllers.zurich import ZurichMFLIController as Controller
 SERVERS = [("127.0.0.1", 8004)]
 
 

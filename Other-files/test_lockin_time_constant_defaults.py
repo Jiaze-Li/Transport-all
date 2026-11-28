@@ -26,8 +26,10 @@ for _path in (_HERE, _HERE.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import transport.ppms.app as app  # noqa: E402
-import test_ppms_two_panels as two_panels  # noqa: E402  (its own copy of the program)
+from transport.ppms.controllers.sr830 import SR830Controller
+from transport.ppms.controllers.zurich import ZurichMFLIController
+from transport.ppms.engine.runner import PPMS_ZURICH_TIME_CONSTANT_S
+import test_ppms_two_panels as two_panels  # noqa: E402
 
 
 class NoWindows(unittest.TestCase):
@@ -41,9 +43,9 @@ class DefaultsAreOneSecond(NoWindows):
 
     def test_the_methods_default_to_1_s(self):
         """What the program sends when the caller gives no time constant."""
-        self.assertEqual(inspect.signature(app.STFMRSR830Controller.configure)
+        self.assertEqual(inspect.signature(SR830Controller.configure)
                          .parameters["time_constant_code"].default, 10)
-        self.assertEqual(inspect.signature(app.NonLocalACController.configure_mfli)
+        self.assertEqual(inspect.signature(ZurichMFLIController.configure_mfli)
                          .parameters["timeconstant_s"].default, 1.0)
 
     def test_the_ppms_and_rte_zurich_box_shows_1(self):
@@ -111,7 +113,7 @@ class DefaultSetupsAtTheNewTc(NoWindows):
         """The idle readout (after Set 6221 with a current) ranges under the
         Zurich lock, so Zurich actions and a scan Start's Zurich set-up wait
         for it: up to 4 x 10 s at the 1 s default, 4 x 1 s at 0.1 s."""
-        for tc_s, held_s in ((app.PPMS_ZURICH_TIME_CONSTANT_S, 40.0), (0.1, 4.0)):
+        for tc_s, held_s in ((PPMS_ZURICH_TIME_CONSTANT_S, 40.0), (0.1, 4.0)):
             with self.subTest(tc_s=tc_s):
                 _parent, panel, controller = two_panels.TwoPanelTests.make_panel(None)
                 panel.connect_ppms2_zurich()

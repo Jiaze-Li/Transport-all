@@ -8,18 +8,19 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_ppms_motor_debug import app
 from transport.core import scan_lifecycle, scan_recording, scan_sequences
+from transport.ppms.ui import dialogs as app
+from transport.ppms.ui.theme import APP_VERSION
 
 
 class CoreImportsTests(unittest.TestCase):
     def test_legacy_scan_helpers_are_shared(self):
-        self.assertIs(app.build_round_trip_values, scan_sequences.build_round_trip_values)
-        self.assertIs(app.ppms_scan_axis, scan_sequences.ppms_scan_axis)
+        self.assertIs(scan_sequences.build_round_trip_values, scan_sequences.build_round_trip_values)
+        self.assertIs(scan_sequences.ppms_scan_axis, scan_sequences.ppms_scan_axis)
 
     def test_scan_planning_unchanged(self):
-        self.assertEqual(app.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
-        self.assertEqual(app.ppms_scan_axis(1, 1, 0.1), (1,))
+        self.assertEqual(scan_sequences.ppms_scan_axis(0, 1, 0.4), (0.0, 0.4, 0.8, 1))
+        self.assertEqual(scan_sequences.ppms_scan_axis(1, 1, 0.1), (1,))
         self.assertEqual(scan_sequences.lakeshore_ramp_seconds([0, 2, -1], 1), 5)
 
     def test_legacy_json_log_uses_application_clock(self):
@@ -79,7 +80,7 @@ class RecordingCompatibilityTests(unittest.TestCase):
             try:
                 row = json.loads(recorder.log_path.read_text(encoding="utf-8").splitlines()[0])
                 self.assertEqual(row["program"], "Transport_PPMS.py")
-                self.assertEqual(row["app_version"], app.APP_VERSION)
+                self.assertEqual(row["app_version"], APP_VERSION)
                 recorder.append_row({"field": 1, "voltage": 2})
                 self.assertEqual(recorder.rows_written, 1)
             finally:

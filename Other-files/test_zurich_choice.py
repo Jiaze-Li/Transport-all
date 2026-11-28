@@ -122,7 +122,8 @@ class ZurichChoiceTests(unittest.TestCase):
                  ("192.168.69.78", "192.168.69.77")),
                 ("dev4435", None, ('"DEV4414 (Super)"', "192.168.68.250", "192.168.69.78"), ())):
             with self.subTest(device=device):
-                controller = app.NonLocalACController(lambda _message: None)
+                from transport.ppms.controllers.zurich import ZurichMFLIController
+                controller = ZurichMFLIController(lambda _message: None)
                 controller.mfli_server_candidates = servers
                 with self.assertRaises(RuntimeError) as caught:
                     controller.connect_mfli(device)

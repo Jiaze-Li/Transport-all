@@ -66,8 +66,10 @@ class ReferenceOriginalImplementation:
         return passes
 
 
+from transport.ppms.ui.panel import PPMSPanelView, PPMS_SR830_HARMONIC_ATTRS
+
 class DummyPanel:
-    """Mock panel instance for testing CombinedControlApp and RTEPanel harmonic methods."""
+    """Mock panel instance for testing PPMSPanelView harmonic methods."""
 
     def __init__(self, harmonic_choices=None):
         self.ppms_transport_harmonic_a_var = DummyVar("1")
@@ -75,13 +77,13 @@ class DummyPanel:
         self.ppms_transport_harmonic_c_var = DummyVar("3")
         if harmonic_choices:
             for key, choice in harmonic_choices.items():
-                attr = app.PPMS_SR830_HARMONIC_ATTRS[key]
+                attr = PPMS_SR830_HARMONIC_ATTRS[key]
                 setattr(self, attr, DummyVar(choice))
 
-    _ppms_harmonic_var = app.CombinedControlApp._ppms_harmonic_var
-    _ppms_harmonic_orders = app.CombinedControlApp._ppms_harmonic_orders
-    _ppms_harmonic_value = app.CombinedControlApp._ppms_harmonic_value
-    _ppms_harmonic_passes = app.CombinedControlApp._ppms_harmonic_passes
+    _ppms_harmonic_var = PPMSPanelView._ppms_harmonic_var
+    _ppms_harmonic_orders = PPMSPanelView._ppms_harmonic_orders
+    _ppms_harmonic_value = PPMSPanelView._ppms_harmonic_value
+    _ppms_harmonic_passes = PPMSPanelView._ppms_harmonic_passes
 
 
 class TestTransportCommonHarmonics(unittest.TestCase):

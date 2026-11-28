@@ -11,7 +11,7 @@ test_ppms_two_panels and test_ppms_nested.
 import unittest
 from unittest.mock import Mock
 
-from test_ppms_motor_debug import app
+from transport.ppms.ui.theme import angle_axis_ticks, draw_nonlocal_series
 
 WIDTH, HEIGHT = 600, 300
 LEFT, RIGHT, TOP, BOTTOM = 86, 24, 24, 52
@@ -20,10 +20,10 @@ PLOT_WIDTH, AXIS_Y = WIDTH - LEFT - RIGHT, HEIGHT - BOTTOM
 
 class AngleTickTests(unittest.TestCase):
     def test_a_full_turn_has_a_tick_every_90_degrees(self):
-        self.assertEqual(app.angle_axis_ticks(0, 360), (0.0, 360.0, [0.0, 90.0, 180.0, 270.0, 360.0], 90.0))
+        self.assertEqual(angle_axis_ticks(0, 360), (0.0, 360.0, [0.0, 90.0, 180.0, 270.0, 360.0], 90.0))
         # The SHHV page's own scan, 0 to -360 deg, either way round.
         for low, high in ((-360, 0), (0, -360)):
-            self.assertEqual(app.angle_axis_ticks(low, high),
+            self.assertEqual(angle_axis_ticks(low, high),
                              (-360.0, 0.0, [-360.0, -270.0, -180.0, -90.0, 0.0], 90.0))
 
     def test_shorter_and_longer_scans_get_round_angles_too(self):
@@ -38,28 +38,26 @@ class AngleTickTests(unittest.TestCase):
                 (-370, 370, 180, [-360, -180, 0, 180, 360]),
                 (-5, 355, 90, [0, 90, 180, 270])):
             with self.subTest(low=low, high=high):
-                self.assertEqual(app.angle_axis_ticks(low, high),
+                self.assertEqual(angle_axis_ticks(low, high),
                                  (float(low), float(high), [float(t) for t in ticks], float(step)))
 
     def test_a_few_degrees_keep_the_scans_limits(self):
-        low, high, ticks, step = app.angle_axis_ticks(0, 2)
+        low, high, ticks, step = angle_axis_ticks(0, 2)
         self.assertEqual((low, high, step), (0.0, 2.0, 0.5))
         self.assertEqual(ticks, [0.0, 0.5, 1.0, 1.5, 2.0])
         # One angle only: the usual axis around it.
-        low, high, _ticks, _step = app.angle_axis_ticks(30, 30)
+        low, high, _ticks, _step = angle_axis_ticks(30, 30)
         self.assertLess(low, 30)
         self.assertGreater(high, 30)
 
 
 class AnglePlotTests(unittest.TestCase):
     def draw(self, points, **options):
-        panel = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        panel._draw_plot_grid = Mock()
         canvas = Mock(ppms_compact_plot=False, ppms_hide_x_labels=False, compact_legend_strip=False)
         canvas.winfo_width.return_value = WIDTH
         canvas.winfo_height.return_value = HEIGHT
-        panel._draw_nonlocal_series(canvas, {"SR830-1 P1 L1": points}, "Sample angle (°)", "X voltage",
-                                    "waiting", markers=True, show_legend=False, **options)
+        draw_nonlocal_series(canvas, {"SR830-1 P1 L1": points}, "Sample angle (°)", "X voltage",
+                             "waiting", markers=True, show_legend=False, **options)
         ticks = [(call.args[0], None) for call in canvas.create_line.call_args_list
                  if len(call.args) == 4 and call.args[1] == AXIS_Y and call.args[3] == AXIS_Y + 4]
         labels = [call.kwargs["text"] for call in canvas.create_text.call_args_list

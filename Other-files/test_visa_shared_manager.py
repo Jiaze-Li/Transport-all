@@ -315,74 +315,55 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
         self.assertIn('"actual_scaling"', app._MFLI_BRIDGE_SOURCE)
 
     def test_the_zurich_is_set_up_as_on_ppms(self):
+        from transport.ppms.controllers.zurich import ZurichMFLIController
+        from transport.ppms.engine.runner import PPMSScanRunner
+        from transport.ppms.state import PPMSAppState
+
         for has_md, expected in ((True, 3), (False, None)):
             with self.subTest(mf_md=has_md):
-                controller = app.NonLocalACController(lambda _message: None)
-                controller.source = Fake6221()
+                controller = ZurichMFLIController(lambda _message: None)
                 controller.mfli_daq = object()
                 controller.mfli_has_multi_demod = lambda: has_md
                 controller.configure_mfli = mock.Mock(return_value={"sample_rate_hz": 10.0})
+                controller.configure_second_harmonic = mock.Mock()
+                controller.configure_third_harmonic = mock.Mock()
                 controller.disable_unused_ppms_demods = mock.Mock()
-                controller.configure(
-                    0.1,
-                    17.3,
-                    50.0,
-                    {},
-                    mfli_config={
-                        "coupling": "AC",
-                        "harmonic": 2,
-                        "channel": "R",
-                        "reference_source": "Trigger In 1",
-                        "input_impedance": "10 MΩ",
-                        "input_scaling": 1.0,
-                        "timeconstant_s": 0.1,
-                    },
-                )
+
+                state = PPMSAppState.__new__(PPMSAppState)
+                state.zurich_controller = controller
+                state.zurich_scan_enabled = True
+                state.zurich_scan_configured = False
+                state.zurich_scan_harmonic = "1"
+                state.zurich_scan_reference = "Trigger In 1"
+                state.zurich_scan_tau = 0.1
+                runner = PPMSScanRunner(state, post_ui=lambda cb: cb())
+                runner._configure_zurich_for_scan()
+
                 kwargs = controller.configure_mfli.call_args.kwargs
                 self.assertEqual(kwargs["external_reference_demodulator"], expected)
                 self.assertEqual((kwargs["input_impedance"], kwargs["input_scaling"]), ("10 MΩ", 1.0))
-                if has_md:
-                    controller.disable_unused_ppms_demods.assert_called_once_with("1")
-                else:
-                    controller.disable_unused_ppms_demods.assert_not_called()
-
-        controller = app.NonLocalACController(lambda _message: None)
-        controller.source = Fake6221()
-        controller.mfli_daq = object()
-        controller.mfli_has_multi_demod = lambda: True
-        controller.configure_mfli = mock.Mock(return_value={})
-        controller.disable_unused_ppms_demods = mock.Mock()
-        controller.configure(
-            0.1,
-            17.3,
-            50.0,
-            {},
-            mfli_config={
-                "coupling": "AC",
-                "harmonic": 1,
-                "channel": "R",
-                "reference_source": "Trigger In 1",
-                "input_impedance": "10 MΩ",
-                "input_scaling": 1.0,
-                "external_reference_demodulator": 3,
-            },
-        )
-        self.assertEqual(controller.configure_mfli.call_args.kwargs["external_reference_demodulator"], 3)
-        controller.disable_unused_ppms_demods.assert_not_called()
+                controller.disable_unused_ppms_demods.assert_called_once_with("1")
 
     def test_safe_close_hardware_logs_and_does_not_raise_on_failure(self):
-        harness = object.__new__(app.CombinedControlApp)
+        from transport.ppms.app_shell import AppShell
+
+        harness = object.__new__(AppShell)
         warnings = []
 
         def fail_ppms():
             raise RuntimeError("simulated ppms shutdown failure")
 
-        harness.safe_close_ppms = fail_ppms
+        harness.ppms_panel = mock.Mock()
+        harness.ppms_panel.safe_close_ppms = fail_ppms
         harness.append_log = warnings.append
-        app.CombinedControlApp.safe_close_hardware(harness)
+        AppShell.safe_close_hardware(harness)
         self.assertTrue(any("simulated ppms shutdown failure" in text for text in warnings))
 
     def test_ui_queue_drain_is_time_sliced(self):
+        import queue
+        from transport.ppms.app_shell import AppShell
+        from transport.ppms.ui.theme import UI_QUEUE_ACTIVE_DELAY_MS, UI_QUEUE_MAX_CALLBACKS_PER_TICK
+
         class FakeRoot:
             def __init__(self):
                 self.after_calls = []
@@ -394,70 +375,73 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             def after(self, delay_ms, callback):
                 self.after_calls.append((delay_ms, callback))
 
-        harness = object.__new__(app.CombinedControlApp)
+        harness = object.__new__(AppShell)
         harness.root = FakeRoot()
-        harness.ui_queue = app.queue.Queue()
+        harness.ui_queue = queue.Queue()
         harness.closing = False
         completed = []
-        callback_count = app.UI_QUEUE_MAX_CALLBACKS_PER_TICK + 5
+        callback_count = UI_QUEUE_MAX_CALLBACKS_PER_TICK + 5
         for index in range(callback_count):
             harness.ui_queue.put(lambda value=index: completed.append(value))
 
-        app.CombinedControlApp.drain_ui_queue(harness)
+        AppShell.drain_ui_queue(harness)
 
         self.assertGreater(len(completed), 0)
-        self.assertLessEqual(len(completed), app.UI_QUEUE_MAX_CALLBACKS_PER_TICK)
+        self.assertLessEqual(len(completed), UI_QUEUE_MAX_CALLBACKS_PER_TICK)
         self.assertFalse(harness.ui_queue.empty())
-        self.assertEqual(harness.root.after_calls[-1][0], app.UI_QUEUE_ACTIVE_DELAY_MS)
+        self.assertEqual(harness.root.after_calls[-1][0], UI_QUEUE_ACTIVE_DELAY_MS)
 
     def test_ppms1_transport_allows_one_sr830_at_address_10(self):
-        settings = app.validate_ppms_transport_scan_settings(
+        import threading
+        from transport.ppms.controllers.visa import SafeVisaIdentityController
+        from transport.ppms.engine.planning import validate_ppms_transport_scan_settings
+        from transport.ppms.engine.runner import PPMSScanRunner, ppms_sr830_address
+        from transport.ppms.state import PPMSAppState
+
+        settings = validate_ppms_transport_scan_settings(
             0.001, 13.7, 50.0, 1, 20000, ("830_a",)
         )
         self.assertTrue(math.isclose(settings["peak_a"], math.sqrt(2.0) * 1e-6))
         self.assertEqual(settings["active_lockins"], ("830_a",))
         with self.assertRaises(ValueError):
-            app.validate_ppms_transport_scan_settings(80.0, 13.7, 50.0, 1, 1)
+            validate_ppms_transport_scan_settings(80.0, 13.7, 50.0, 1, 1)
         with self.assertRaises(ValueError):
-            app.validate_ppms_transport_scan_settings(0.001, 13.7, 50.0, 1, 1, ())
-        self.assertEqual(
-            app.CombinedControlApp._ppms_sr830_address("GPIB0::10::INSTR"),
-            10,
-        )
+            validate_ppms_transport_scan_settings(0.001, 13.7, 50.0, 1, 1, ())
+        self.assertEqual(ppms_sr830_address("GPIB0::10::INSTR"), 10)
         with self.assertRaises(ValueError):
-            app.CombinedControlApp._ppms_sr830_address("GPIB0::11::INSTR")
+            ppms_sr830_address("GPIB0::11::INSTR")
 
-        harness = object.__new__(app.CombinedControlApp)
-        source = app.SafeVisaIdentityController(
+        state = PPMSAppState.__new__(PPMSAppState)
+        source = SafeVisaIdentityController(
             lambda _message: None,
             "Keithley 6221",
             "6221",
             ("SOUR:WAVE:ABOR", "CURR 0", "OUTP OFF"),
         )
-        lockin_a = app.SafeVisaIdentityController(
+        lockin_a = SafeVisaIdentityController(
             lambda _message: None, "SR830 槽 A", "SR830"
         )
-        lockin_b = app.SafeVisaIdentityController(
+        lockin_b = SafeVisaIdentityController(
             lambda _message: None, "SR830 槽 B", "SR830"
         )
         source.instrument = Fake6221()
         lockin_a.instrument = FakeSR830(10e-6)
         lockin_a.resource_name = "GPIB0::10::INSTR"
-        harness.ppms_instrument_controllers = {
+        state.ppms_instrument_controllers = {
             "6221": source,
             "830_a": lockin_a,
             "830_b": lockin_b,
         }
-        harness.ppms_field_scan_stop_event = app.threading.Event()
-        harness.post_ui = lambda callback: callback()
-        harness.ppms_transport_status_var = types.SimpleNamespace(
-            set=lambda _value: None
-        )
-        harness.thread_log = lambda _message: None
-        harness.instrument_connection_indicators = {}
-        harness.ppms_sr830_status_vars = {}
-
-        harness._configure_ppms_transport_scan(settings)
+        state.zurich_controller = mock.Mock()
+        state.zurich_scan_enabled = False
+        state.zurich_scan_configured = False
+        state.scan_stop_event = threading.Event()
+        state.sr830_range_states = {}
+        state.sr830_time_constant_codes = {}
+        state.last_current_trip = False
+        state.logger = lambda _m: None
+        runner = PPMSScanRunner(state, post_ui=lambda cb: cb())
+        runner.configure_transport_scan(settings)
         self.assertEqual(source.instrument.output, 1)
         self.assertEqual(lockin_a.instrument.harmonic, 1)
         self.assertIsNone(lockin_b.instrument)

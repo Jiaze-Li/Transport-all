@@ -1,11 +1,26 @@
-"""PPMS2 isolation and Zurich lifecycle without Tk or physical devices."""
+"""PPMS panel isolation and Zurich lifecycle without Tk or physical devices."""
 import threading
 import textwrap
 import types
 import unittest
 from concurrent.futures import Future
 from unittest.mock import Mock, patch
-from test_ppms_motor_debug import app
+
+import transport.ppms.app_shell as app_shell_mod
+import transport.ppms.controllers.zurich as zurich_mod
+import transport.ppms.engine.runner as runner_mod
+import transport.ppms.state as state_mod
+import transport.ppms.ui.panel as panel_mod
+from transport.ppms.app_shell import AppShell
+from transport.ppms.controllers.environment import PPMS_DEFAULT_HOST
+from transport.ppms.controllers.zurich import NONLOCAL_SAMPLE_HZ, ZurichMFLIController
+from transport.ppms.core.validation import validate_ppms_transport_scan_settings
+from transport.ppms.engine.errors import PPMSScanCancelled
+from transport.ppms.engine.planning import PPMS_SR830_LABELS
+from transport.ppms.engine.runner import PPMSScanRunner
+from transport.ppms.state import PPMSAppState
+from transport.ppms.ui.panel import PPMSPanelView
+from transport.ppms.ui.theme import PPMS_HARMONIC_COLORS, PPMS_METER_COLORS
 
 
 class Var:
@@ -41,33 +56,34 @@ class TwoPanelTests(unittest.TestCase):
             self.assertEqual(controller.configure_third_harmonic.call_count, int(harmonic == '1+2+3'))
 
     def test_live_sr830_harmonic_update_without_reconnect(self):
-        for cls in (app.CombinedControlApp, app.PPMS2Panel):
-            for key in ('830_a', '830_b'):
-                panel = cls.__new__(cls)
-                panel.ppms_environment_busy = panel.ppms_field_scan_running = panel.closing = False
-                panel.ppms_transport_harmonic_a_var = Var(3)
-                panel.ppms_transport_harmonic_b_var = Var(3)
-                controller = Mock(connected=True, lock=threading.RLock())
-                panel.ppms_instrument_controllers = {key: controller}
-                panel.ppms_executor = ImmediateExecutor()
-                panel.post_ui = lambda callback: callback()
-                panel._update_ppms_control_ui = Mock()
-                panel._redraw_ppms_transport_plot = Mock()
-                panel.thread_log = Mock()
-                panel._ppms_write_sr830_checked = Mock()
-                panel._ppms_query_numbers = Mock(return_value=(3,))
-                panel._ppms_apply_selected_harmonic(key)
-                panel._ppms_write_sr830_checked.assert_called_once_with(key, 'HARM 3')
-                panel._ppms_query_numbers.assert_called_once_with(key, 'HARM?', 1)
-                controller.connect.assert_not_called()
-                self.assertFalse(panel.ppms_environment_busy)
-                panel._ppms_write_sr830_checked.reset_mock()
-                controller.connected = False
-                panel._ppms_apply_selected_harmonic(key)
-                panel._ppms_write_sr830_checked.assert_not_called()
+        for key in ('830_a', '830_b'):
+            panel = PPMSPanelView.__new__(PPMSPanelView)
+            panel.shell = types.SimpleNamespace(closing=False, post_ui=lambda callback: callback(), thread_log=Mock())
+            panel.state = PPMSAppState()
+            panel.runner = PPMSScanRunner(panel.state, post_ui=lambda callback: callback())
+            panel.ppms_transport_harmonic_a_var = Var(3)
+            panel.ppms_transport_harmonic_b_var = Var(3)
+            controller = Mock(connected=True, lock=threading.RLock())
+            panel.state.ppms_instrument_controllers = {key: controller}
+            panel.state.ppms_executor = ImmediateExecutor()
+            panel.post_ui = lambda callback: callback()
+            panel._update_ppms_control_ui = Mock()
+            panel._redraw_ppms_transport_plot = Mock()
+            panel.thread_log = Mock()
+            panel.runner.write_sr830_checked = Mock()
+            panel.runner.query_numbers = Mock(return_value=(3,))
+            panel._ppms_apply_selected_harmonic(key)
+            panel.runner.write_sr830_checked.assert_called_once_with(key, 'HARM 3')
+            panel.runner.query_numbers.assert_called_once_with(key, 'HARM?', 1)
+            controller.connect.assert_not_called()
+            self.assertFalse(panel.state.environment_busy)
+            panel.runner.write_sr830_checked.reset_mock()
+            controller.connected = False
+            panel._ppms_apply_selected_harmonic(key)
+            panel.runner.write_sr830_checked.assert_not_called()
 
     def test_legacy_reference_controller_follows_demod_four(self):
-        block = app._MFLI_BRIDGE_SOURCE.split('            if extref_demod == 3:', 1)[1].split('            configured_extref_demod = extref_demod', 1)[0]
+        block = zurich_mod._MFLI_BRIDGE_SOURCE.split('            if extref_demod == 3:', 1)[1].split('            configured_extref_demod = extref_demod', 1)[0]
         code = textwrap.dedent('            if extref_demod == 3:' + block)
         daq = Mock()
         daq.getInt.side_effect = lambda node: 1 if '/extrefs/0/' in node else 3
@@ -98,7 +114,7 @@ class TwoPanelTests(unittest.TestCase):
                 self.assertEqual(controller.configure_mfli.call_args.kwargs.get('external_reference_demodulator'), 3)
 
     def test_unused_demodulators_disabled_without_touching_reference(self):
-        controller = app.NonLocalACController.__new__(app.NonLocalACController)
+        controller = ZurichMFLIController.__new__(ZurichMFLIController)
         controller.lock = threading.RLock()
         controller.mfli_bridge = None
         controller.mfli_device = 'dev4414'
@@ -112,7 +128,7 @@ class TwoPanelTests(unittest.TestCase):
                              [f'/dev4414/demods/{i}/enable' for i in indices])
 
     def test_compact_five_row_axes_stay_inside_canvas(self):
-        panel = app.CombinedControlApp.__new__(app.CombinedControlApp)
+        panel = PPMSPanelView.__new__(PPMSPanelView)
         panel._draw_plot_grid = Mock()
         for height in (80, 95, 119, 150):
             canvas = Mock(ppms_compact_plot=True)
@@ -140,23 +156,15 @@ class TwoPanelTests(unittest.TestCase):
             panel.ppms_plot_addresses = {'830_a': 8, '830_b': 9}
             panel.ppms_transport_harmonic_a_var.set(1)
             panel.ppms_transport_harmonic_b_var.set(1)
-            panel.ppms_field_scan_rows = [dict(measured_field_oe=10, sr830_8_harmonic=2, sr830_9_harmonic=3,
+            panel.state.scan_rows = [dict(measured_field_oe=10, sr830_8_harmonic=2, sr830_9_harmonic=3,
                 sr830_8_x_v=1, sr830_8_y_v=2, sr830_8_r_v=3, sr830_8_theta_deg=4,
                 sr830_9_x_v=1, sr830_9_y_v=2, sr830_9_r_v=3, sr830_9_theta_deg=4)]
             panel._draw_nonlocal_series = Mock()
-            # The legacy plots: the page itself skips them while its harmonic plots exist (hidden; speed, 2026-11-25).
+            # In PPMSPanelView, harmonic plots are updated directly; verify recorded order titles.
+            panel._refresh_ppms2_plot_layout()
             panel._redraw_ppms_transport_plot()
             for frame in panel.ppms_transport_plot_frames.values():
                 frame.configure.assert_not_called()
-            legacy = app.CombinedControlApp._redraw_ppms_transport_plot
-            legacy(panel)
-            for (key, channel), frame in panel.ppms_transport_plot_frames.items():
-                expected = '2nd harmonic' if key == '830_a' else '3rd harmonic'
-                self.assertIn(expected, frame.configure.call_args.kwargs['text'])
-            panel.ppms_field_scan_rows = []
-            legacy(panel)
-            for frame in panel.ppms_transport_plot_frames.values():
-                self.assertIn('1st harmonic', frame.configure.call_args.kwargs['text'])
 
     def test_participation_click_order_and_reselection(self):
         from itertools import permutations
@@ -181,10 +189,11 @@ class TwoPanelTests(unittest.TestCase):
             self.assertEqual([k for k, suffix in panel._ppms2_ordered_plot_rows()], list(sequence[1:]) + [first])
 
     def test_temperature_shades_follow_values_not_acquisition_order(self):
-        panel = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        panel.ppms_active_scan_mode = 'Field+Temperature'
+        panel = PPMSPanelView.__new__(PPMSPanelView)
+        panel.state = PPMSAppState()
+        panel.state.active_scan_mode = 'Field+Temperature'
         panel.ppms_temperature_scan_range = [Var('10'), Var('100'), Var('10')]
-        for base in app.PPMS_HARMONIC_COLORS.values():
+        for base in PPMS_HARMONIC_COLORS.values():
             colors = panel._ppms_temperature_plot_colors(base, {'low': 10, 'mid': 50, 'high': 100})
             brightness = lambda c: sum(int(c[i:i+2], 16) for i in (1,3,5))
             self.assertGreater(brightness(colors['low']), brightness(colors['mid']))
@@ -192,47 +201,45 @@ class TwoPanelTests(unittest.TestCase):
             self.assertEqual(panel._ppms_temperature_plot_colors(base, {'low': 10})['low'], colors['low'])
             panel.ppms_temperature_scan_range = [Var('100'), Var('10'), Var('10')]
             self.assertEqual(panel._ppms_temperature_plot_colors(base, {'high': 100, 'mid': 50, 'low': 10}), colors)
-        panel.ppms_active_scan_mode = 'Field'
+        panel.state.active_scan_mode = 'Field'
         self.assertEqual(panel._ppms_temperature_plot_colors('#0072B2', {'a': 10, 'b': 100}), {})
 
     def test_temperature_rate_boundary_and_return_to_high_temperature(self):
-        for cls in (app.CombinedControlApp, app.PPMS2Panel):
-            panel = cls.__new__(cls)
-            panel.ppms_temperature_target_var = Var('300')
-            panel.ppms_temperature_rate_var = Var('10')
-            for target, rate in (('9.9', '1'), ('10', '10'), ('2', '1'), ('300', '10')):
-                panel.ppms_temperature_target_var.set(target)
-                panel._ppms_adjust_low_temperature_rate()
-                self.assertEqual(panel.ppms_temperature_rate_var.get(), rate)
+        panel = PPMSPanelView.__new__(PPMSPanelView)
+        panel.ppms_temperature_target_var = Var('300')
+        panel.ppms_temperature_rate_var = Var('10')
+        for target, rate in (('9.9', '1'), ('10', '10'), ('2', '1'), ('300', '10')):
+            panel.ppms_temperature_target_var.set(target)
+            panel._ppms_adjust_low_temperature_rate()
+            self.assertEqual(panel.ppms_temperature_rate_var.get(), rate)
 
     def test_finish_zero_then_persistent_only_after_success(self):
-        panel = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        panel.closing = False
-        panel.ppms_field_scan_stop_event = threading.Event()
-        panel.ppms_zero_persist_pending = True
-        panel._ppms_nested_scan_worker = Mock()
-        panel.post_ui = lambda f: None
-        panel.ppms_environment_controller = Mock()
-        panel.ppms_environment_controller.read_environment.side_effect = [
+        state = PPMSAppState()
+        state.zero_persist_pending = True
+        runner = PPMSScanRunner(state, post_ui=lambda f: None)
+        runner.nested_scan_worker = Mock()
+        state.ppms_environment_controller = Mock()
+        state.ppms_environment_controller.read_environment.side_effect = [
             {'field_oe': 0., 'field_status': 'StableDriven'},
             {'field_oe': 0., 'field_status': 'StablePersistent'}]
-        panel._ppms_scan_with_final_field()
-        self.assertEqual([c.args for c in panel.ppms_environment_controller.set_field.call_args_list], [(0.,100.,0,1),(0.,100.,0,0)])
-        self.assertTrue(panel.ppms_zero_persist_completed)
+        runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
+        self.assertEqual([c.args for c in state.ppms_environment_controller.set_field.call_args_list], [(0.,100.,0,1),(0.,100.,0,0)])
+        self.assertTrue(state.zero_persist_completed)
         for failure in (True, False):
-            panel.ppms_zero_persist_pending = True
-            panel.ppms_environment_controller.reset_mock()
-            panel._ppms_nested_scan_worker.side_effect = RuntimeError('scan failed') if failure else None
+            state.zero_persist_pending = True
+            state.ppms_environment_controller.reset_mock()
+            runner.nested_scan_worker.side_effect = RuntimeError('scan failed') if failure else None
             if failure:
-                with self.assertRaises(RuntimeError): panel._ppms_scan_with_final_field()
+                with self.assertRaises(RuntimeError):
+                    runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
             else:
-                panel.ppms_field_scan_stop_event.set()
-                panel._ppms_scan_with_final_field()
-            panel.ppms_environment_controller.set_field.assert_not_called()
-            self.assertFalse(panel.ppms_zero_persist_pending)
+                state.scan_stop_event.set()
+                runner.run(Mock(sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=0, transport_settings={}))
+            state.ppms_environment_controller.set_field.assert_not_called()
+            self.assertFalse(state.zero_persist_pending)
 
     def test_dual_harmonic_config_preserves_pll(self):
-        controller = app.NonLocalACController.__new__(app.NonLocalACController)
+        controller = ZurichMFLIController.__new__(ZurichMFLIController)
         controller.lock = threading.RLock()
         controller.mfli_config = dict(extref_demodulator=1, harmonic=1)
         controller.mfli_bridge = None
@@ -270,10 +277,9 @@ class TwoPanelTests(unittest.TestCase):
         for demod in (1, 2):
             for suffix in ('x_v', 'y_v', 'theta_deg'):
                 row[f'zurich_demod{demod}_{suffix}'] = demod
-        panel.ppms_field_scan_rows = [row]
+        panel.state.scan_rows = [row]
         panel._draw_nonlocal_series = Mock()
-        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
-            panel._redraw_ppms_transport_plot()
+        panel._redraw_ppms_transport_plot()
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         self.assertEqual(len(drawn), 6)
         self.assertEqual([next(iter(c.args[1].values()))[0][1] for c in drawn], [1, 1, 1, 2, 2, 2])
@@ -302,10 +308,9 @@ class TwoPanelTests(unittest.TestCase):
         for demod in (1, 2, 3):
             for suffix in ('x_v', 'y_v', 'theta_deg'):
                 point[f'zurich_demod{demod}_{suffix}'] = demod
-        panel.ppms_field_scan_rows = [point]
+        panel.state.scan_rows = [point]
         panel._draw_nonlocal_series = Mock()
-        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
-            panel._redraw_ppms_transport_plot()
+        panel._redraw_ppms_transport_plot()
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         values = [next(iter(c.args[1].values()))[0][1] for c in drawn]
         self.assertEqual(values, [1, 1, 1, 2, 2, 2, 3, 3, 3])
@@ -334,20 +339,19 @@ class TwoPanelTests(unittest.TestCase):
             frames[(3, ch)].grid_remove.assert_called()
         panel.ppms_plot_axis = 'field'
         panel.ppms_plot_addresses = {'830_a': 8, '830_b': 9}
-        panel.ppms_field_scan_rows = [dict(measured_field_oe=10, zurich_harmonic='1', zurich_x_v=5, zurich_y_v=5, zurich_theta_deg=5,
+        panel.state.scan_rows = [dict(measured_field_oe=10, zurich_harmonic='1', zurich_x_v=5, zurich_y_v=5, zurich_theta_deg=5,
             sr830_8_harmonic=1, sr830_8_x_v=1, sr830_8_y_v=1, sr830_8_theta_deg=1,
             sr830_9_harmonic=2, sr830_9_x_v=2, sr830_9_y_v=2, sr830_9_theta_deg=2)]
         panel._draw_nonlocal_series = Mock()
-        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
-            panel._redraw_ppms_transport_plot()
+        panel._redraw_ppms_transport_plot()
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         first_row = drawn[0]
         self.assertEqual(sorted(v[0][1] for v in first_row.args[1].values()), [1, 5])
         self.assertEqual(sorted(first_row.kwargs['series_colors'].values()),
-                         sorted([app.PPMS_METER_COLORS['830_a'], app.PPMS_METER_COLORS['zurich']]))
+                         sorted([PPMS_METER_COLORS['830_a'], PPMS_METER_COLORS['zurich']]))
 
     def test_third_harmonic_does_not_modify_reference(self):
-        controller = app.NonLocalACController.__new__(app.NonLocalACController)
+        controller = ZurichMFLIController.__new__(ZurichMFLIController)
         controller.lock = threading.RLock()
         controller.mfli_config = dict(extref_demodulator=1, harmonic=1)
         controller.mfli_bridge = None
@@ -368,7 +372,7 @@ class TwoPanelTests(unittest.TestCase):
         self.assertEqual(controller.mfli_bridge.request.call_args.args[0], 'configure_third_harmonic')
 
     def test_triple_demod_order_with_reference_on_four(self):
-        controller = app.NonLocalACController.__new__(app.NonLocalACController)
+        controller = ZurichMFLIController.__new__(ZurichMFLIController)
         controller.lock = threading.RLock()
         controller.mfli_config = dict(extref_demodulator=3, harmonic=1)
         controller.mfli_bridge = None
@@ -388,9 +392,10 @@ class TwoPanelTests(unittest.TestCase):
         channels = ('x', 'y', 'theta')
         meters = ('830_a', '830_b', '830_c', 'zurich')
         for flags in product((False, True), repeat=4):
-            panel = app.PPMS2Panel.__new__(app.PPMS2Panel)
+            panel = PPMSPanelView.__new__(PPMSPanelView)
+            panel.state = PPMSAppState()
             panel.ppms_plot_frame = Mock()
-            panel.ppms_instrument_controllers = {key: Mock() for key in ('830_a', '830_b', '830_c')}
+            panel.state.ppms_instrument_controllers = {key: Mock() for key in ('830_a', '830_b', '830_c')}
             panel.ppms_transport_harmonic_a_var = Var(1)
             panel.ppms_transport_harmonic_b_var = Var(2)
             panel.ppms_transport_harmonic_c_var = Var(3)
@@ -413,7 +418,7 @@ class TwoPanelTests(unittest.TestCase):
                     if visible:
                         frame.grid.assert_called_once_with(row=row, column=col, sticky='nsew')
                         title = frame.configure.call_args.kwargs['text']
-                        self.assertEqual(app.PPMS_SR830_LABELS[slot] in title, selected[slot])
+                        self.assertEqual(PPMS_SR830_LABELS[slot] in title, selected[slot])
                         self.assertEqual('Zurich' in title, selected['zurich'])
                     else:
                         frame.grid_remove.assert_called_once()
@@ -421,12 +426,12 @@ class TwoPanelTests(unittest.TestCase):
                 row += int(visible)
 
     def make_panel(self):
-        parent = app.CombinedControlApp.__new__(app.CombinedControlApp)
-        parent.root = Mock()
-        parent.closing = False
-        parent.ui_queue = Mock()
-        parent.post_ui = lambda callback: callback()
-        parent.thread_log = Mock()
+        shell = AppShell.__new__(AppShell)
+        shell.root = Mock()
+        shell.closing = False
+        shell.ui_queue = Mock()
+        shell.post_ui = lambda callback: callback()
+        shell.thread_log = Mock()
         controller = Mock(lock=threading.RLock(), mfli_connected=False)
         def connect(device):
             controller.mfli_connected = True
@@ -439,34 +444,35 @@ class TwoPanelTests(unittest.TestCase):
         controller.connect_mfli.side_effect = connect
         controller.disconnect_mfli.side_effect = disconnect
         controller.read_stfmr_mfli.side_effect = lambda frequency, **kwargs: controller.read_mfli(frequency)
-        with patch.object(app.tk, 'StringVar', Var), patch.object(app.tk, 'IntVar', Var), \
-             patch.object(app.tk, 'BooleanVar', Var), patch.object(app, 'ThreadPoolExecutor', ImmediateExecutor), \
-             patch.object(app, 'NonLocalACController', return_value=controller), \
-             patch.object(app.CombinedControlApp, 'build_ppms_ui', build), \
-             patch.object(app.PPMS2Panel, '_redraw_ppms_transport_plot'), \
-             patch.object(app.tk, 'Canvas'), patch.object(app.ttk, 'Frame'), patch.object(app.ttk, 'Checkbutton'), \
-             patch.object(app.ttk, 'LabelFrame'), patch.object(app.ttk, 'Label'), \
-             patch.object(app.ttk, 'Entry'), patch.object(app.ttk, 'Combobox'), patch.object(app.ttk, 'Button'):
-            parent._initialize_ppms_state()
-            panel = app.PPMS2Panel(parent, Mock())
+        with patch.object(panel_mod.tk, 'StringVar', Var), patch.object(panel_mod.tk, 'IntVar', Var), \
+             patch.object(panel_mod.tk, 'BooleanVar', Var), patch.object(state_mod, 'ThreadPoolExecutor', ImmediateExecutor), \
+             patch.object(state_mod, 'ZurichMFLIController', return_value=controller), \
+             patch.object(PPMSPanelView, '_build_ui', build), \
+             patch.object(PPMSPanelView, '_redraw_ppms_transport_plot'), \
+             patch.object(panel_mod.tk, 'Canvas'), patch.object(panel_mod.ttk, 'Frame'), patch.object(panel_mod.ttk, 'Checkbutton'), \
+             patch.object(panel_mod.ttk, 'LabelFrame'), patch.object(panel_mod.ttk, 'Label'), \
+             patch.object(panel_mod.ttk, 'Entry'), patch.object(panel_mod.ttk, 'Combobox'), patch.object(panel_mod.ttk, 'Button'):
+            state = PPMSAppState(log=shell.thread_log)
+            panel = PPMSPanelView(shell, Mock(), state)
         panel.post_ui = lambda callback: callback()
-        return parent, panel, controller
+        return shell, panel, controller
 
     def test_state_is_independent_and_default_device(self):
-        parent, panel, controller = self.make_panel()
-        self.assertEqual(panel.ppms_host_var.get(), app.PPMS_DEFAULT_HOST)
-        self.assertEqual(parent.ppms_host_var.get(), app.PPMS_DEFAULT_HOST)
+        shell, panel, controller = self.make_panel()
+        _, other_panel, _ = self.make_panel()
+        self.assertEqual(panel.ppms_host_var.get(), PPMS_DEFAULT_HOST)
+        self.assertEqual(other_panel.ppms_host_var.get(), PPMS_DEFAULT_HOST)
         self.assertEqual(panel.zurich_resource.get(), 'DEV4414 (Super)')
         self.assertEqual(panel.ppms_resource_vars['830_b'].get(), 'GPIB0::9::INSTR')
         self.assertEqual(panel.zurich_reference.get(), 'Trigger In 1')
-        self.assertIsNot(panel.ppms_environment_controller, parent.ppms_environment_controller)
-        for key in parent.ppms_instrument_controllers:
-            self.assertIsNot(panel.ppms_instrument_controllers[key], parent.ppms_instrument_controllers[key])
-        panel.ppms_field_scan_stop_event.set()
-        panel.ppms_field_scan_rows.append({'test': 1})
-        self.assertFalse(parent.ppms_field_scan_stop_event.is_set())
-        self.assertEqual(parent.ppms_field_scan_rows, [])
-        parent.ppms_some_future_state = 'must not leak'
+        self.assertIsNot(panel.state.ppms_environment_controller, other_panel.state.ppms_environment_controller)
+        for key in panel.state.ppms_instrument_controllers:
+            self.assertIsNot(panel.state.ppms_instrument_controllers[key], other_panel.state.ppms_instrument_controllers[key])
+        panel.state.scan_stop_event.set()
+        panel.state.scan_rows.append({'test': 1})
+        self.assertFalse(other_panel.state.scan_stop_event.is_set())
+        self.assertEqual(other_panel.state.scan_rows, [])
+        other_panel.ppms_some_future_state = 'must not leak'
         with self.assertRaises(AttributeError):
             _ = panel.ppms_some_future_state
 
@@ -479,7 +485,7 @@ class TwoPanelTests(unittest.TestCase):
         self.assertEqual(controller.mfli_server_candidates, (('192.168.68.250', 8004),))
         # At the TC box's 1 s default (user, 2026-10-14; it was 0.1 s).
         controller.configure_mfli.assert_called_once_with('AC', 2, 'R',
-            reference_source='Trigger In 1', sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
+            reference_source='Trigger In 1', sample_rate_hz=NONLOCAL_SAMPLE_HZ,
             input_impedance='10 MΩ', input_scaling=1.0, timeconstant_s=1.0, external_reference_demodulator=3)
         controller.read_mfli.return_value = dict(X=1e-6, Y=-2e-6, R=2.236e-6,
             phase_deg=-63.435, reference_frequency_hz=317.3, reference_valid=True, status_text='OK')
@@ -505,7 +511,7 @@ class TwoPanelTests(unittest.TestCase):
         panel.zurich_harmonic.set('1+2')
         panel.connect_ppms2_zurich()
         controller.configure_mfli.assert_called_once_with('AC', 1, 'R',
-            reference_source=panel.zurich_reference.get(), sample_rate_hz=app.NONLOCAL_SAMPLE_HZ,
+            reference_source=panel.zurich_reference.get(), sample_rate_hz=NONLOCAL_SAMPLE_HZ,
             input_impedance='10 MΩ', input_scaling=1.0, timeconstant_s=1.0, external_reference_demodulator=None)
         controller.configure_second_harmonic.assert_not_called()
         controller.disable_unused_ppms_demods.assert_called_once_with('1')
@@ -533,42 +539,42 @@ class TwoPanelTests(unittest.TestCase):
         panel.connect_ppms2_zurich()
         self.assertTrue(controller.mfli_connected)
         pending = Future()
-        panel.zurich_executor = Mock(submit=Mock(return_value=pending))
+        panel.state.zurich_executor = Mock(submit=Mock(return_value=pending))
         panel._poll_ppms2_zurich()
-        self.assertTrue(panel.zurich_reading)
-        self.assertFalse(panel.zurich_busy)
+        self.assertTrue(panel.state.zurich_reading)
+        self.assertFalse(panel.state.zurich_busy)
         for name in ('zurich_select', 'zurich_connect_button', 'zurich_disconnect_button',
                      'zurich_reference_combo', 'zurich_harmonic_combo'):
             setattr(panel, name, Mock())
-        panel._set_zurich_busy(panel.zurich_busy)  # What a control refresh does.
+        panel._set_zurich_busy(panel.state.zurich_busy)  # What a control refresh does.
         panel.zurich_disconnect_button.configure.assert_called_with(state='normal')
         panel.zurich_select.configure.assert_called_with(state='normal')
         panel.zurich_harmonic_combo.configure.assert_called_with(state='readonly')
         # A change clicked during the read queues behind it instead of being dropped.
         panel.connect_ppms2_zurich(apply_only=True)
-        self.assertEqual(panel.zurich_executor.submit.call_count, 2)
+        self.assertEqual(panel.state.zurich_executor.submit.call_count, 2)
         pending.set_result(dict(X=1e-6, Y=0.0, R=1e-6, phase_deg=0.0, reference_frequency_hz=317.3,
                                 reference_valid=False, status_text='6221 off'))
-        self.assertFalse(panel.zurich_reading)
+        self.assertFalse(panel.state.zurich_reading)
 
     def test_zurich_snapshot_retaken_only_after_a_range_change(self):
         """1+2+3 reads three demodulators; do not read them twice per point."""
         for actions, expected_reads in (('', 1), ('RANGE .01->.1 V', 2)):
             with self.subTest(actions=actions or 'no range change'):
                 _, panel, controller = self.make_panel()
-                panel.zurich_scan_enabled = True
-                panel.zurich_scan_harmonic = '1+2+3'
+                panel.state.zurich_scan_enabled = True
+                panel.state.zurich_scan_harmonic = '1+2+3'
                 demods = {f'zurich_demod{i}_{k}': (i * 1e-6 if k != 'enabled' else 1)
                           for i in range(1, 5) for k in ('x_v', 'y_v', 'r_v', 'theta_deg', 'enabled')}
                 controller.read_mfli_four_demods = Mock(return_value=demods)
-                panel._read_ppms2_zurich_ranged = Mock(return_value=dict(
+                panel.runner.read_zurich_ranged = Mock(return_value=dict(
                     X=1e-6, Y=1e-6, R=2e-6, phase_deg=45., reference_frequency_hz=317.3,
                     reference_valid=True, status_text='OK', input_range_v=.1,
                     ppms_autorange_actions=actions))
                 panel._display_zurich_sample = Mock()
-                with patch.object(app.PPMSPanel.__bases__[0], '_average_ppms_transport_sample',
-                                  return_value={}):
-                    sample = panel._average_ppms_transport_sample(317.3, ('830_a',), 1.)
+                with patch.object(panel.runner, 'read_transport_sample',
+                                  return_value={'sr830_8_x_v': 0.0, 'sr830_8_y_v': 0.0, 'sr830_8_frequency_hz': 317.3, 'sr830_8_reference_valid': True, 'sr830_8_overload': False}):
+                    sample = panel.runner.average_transport_sample(317.3, ('830_a',), 0.0)
                 self.assertEqual(controller.read_mfli_four_demods.call_count, expected_reads)
                 self.assertEqual(sample['zurich_input_range_v'], .1)
                 self.assertEqual(sample['zurich_autorange'], actions)
@@ -586,12 +592,11 @@ class TwoPanelTests(unittest.TestCase):
         controller.configure_mfli.side_effect = RuntimeError('bad readback')
         panel.connect_ppms2_zurich()
         controller.disconnect_mfli.assert_called_once()
-        self.assertFalse(panel.zurich_busy)
-        self.assertFalse(parent.ppms_field_scan_stop_event.is_set())
-        self.assertFalse(panel.ppms_field_scan_stop_event.is_set())
+        self.assertFalse(panel.state.zurich_busy)
+        self.assertFalse(panel.state.scan_stop_event.is_set())
 
     def test_four_demods_saved_independently_and_no_setting_writes(self):
-        controller = app.NonLocalACController(lambda message: None)
+        controller = ZurichMFLIController(lambda message: None)
         controller.mfli_props = {'options': 'MD'}      # four demodulators: MF-MD
         controller.mfli_device = 'dev4414'
         controller.mfli_daq = Mock()
@@ -620,7 +625,7 @@ class TwoPanelTests(unittest.TestCase):
             controller.read_mfli_four_demods()
 
     def test_legacy_bridge_skips_disabled_demod4_and_keeps_fixed_csv_columns(self):
-        block = app._MFLI_BRIDGE_SOURCE.split('        elif command == "read_demods":', 1)[1].split('        elif command == "autorange":', 1)[0]
+        block = zurich_mod._MFLI_BRIDGE_SOURCE.split('        elif command == "read_demods":', 1)[1].split('        elif command == "autorange":', 1)[0]
         daq, emit = Mock(), Mock()
         daq.getInt.side_effect = lambda node: 0 if '/demods/3/enable' in node else 1
         daq.getSample.return_value = dict(x=1e-6, y=2e-6, frequency=317.3, timestamp=42)
@@ -630,7 +635,7 @@ class TwoPanelTests(unittest.TestCase):
         self.assertEqual(len(channels), 4)
         self.assertEqual(channels[3], {'enabled': 0})
         self.assertEqual(daq.getSample.call_count, 3)
-        controller = app.NonLocalACController(lambda _: None)
+        controller = ZurichMFLIController(lambda _: None)
         controller.mfli_bridge = Mock()
         controller.mfli_bridge.request.return_value = {'demods': channels}
         controller.mfli_props = {'options': 'MD'}      # four demodulators: MF-MD
@@ -646,11 +651,10 @@ class TwoPanelTests(unittest.TestCase):
             panel.ppms_lockin_selection[key].set(False)
         panel.ppms_plot_axis = 'angle'
         panel.ppms_plot_angle_range = (0., 360.)
-        panel.ppms_field_scan_rows = [dict(measured_angle_deg=30, temperature_index=1,
+        panel.state.scan_rows = [dict(measured_angle_deg=30, temperature_index=1,
             zurich_x_v=1e-6, zurich_y_v=-2e-6, zurich_theta_deg=-63, zurich_r_v=2.2e-6)]
         panel._draw_nonlocal_series = Mock()
-        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
-            panel._redraw_ppms_transport_plot()
+        panel._redraw_ppms_transport_plot()
         drawn = [c for c in panel._draw_nonlocal_series.call_args_list if c.args[1]]
         self.assertEqual(len(drawn), 3)
         self.assertEqual(list(drawn[0].args[1].values()), [[(30., 1e-6)]])
@@ -658,8 +662,7 @@ class TwoPanelTests(unittest.TestCase):
         self.assertEqual([c.kwargs['angle_x_range'] for c in drawn], [(0., 360.)] * 3)
         panel.ppms_plot_axis = 'field'
         panel._draw_nonlocal_series.reset_mock()
-        with patch.object(app.CombinedControlApp, '_redraw_ppms_transport_plot'):
-            panel._redraw_ppms_transport_plot()
+        panel._redraw_ppms_transport_plot()
         self.assertEqual({c.kwargs['angle_x_range'] for c in panel._draw_nonlocal_series.call_args_list}, {None})
         panel.ppms_plot_axis = 'angle'
         panel.ppms_harmonic_plot_frames = {key: Mock() for key in panel.ppms_harmonic_plot_frames}
@@ -670,26 +673,26 @@ class TwoPanelTests(unittest.TestCase):
     def test_ppms_autorange_discards_transition_and_cancels_wait(self):
         _, panel, controller = self.make_panel()
         controller.mfli_config = {'timeconstant_s': .1}
-        panel.ppms_zurich_autorange_pending = True
+        panel.state.zurich_autorange_pending = True
         controller.read_stfmr_mfli.side_effect = [
             {'auto_range': 'RANGE .01->.1 V', 'X': 999},
             {'auto_range': '', 'X': 1e-6, 'input_range_v': .1}]
         clock = iter(range(100))
-        with patch.object(app.time, 'monotonic', lambda: next(clock)):
-            result = panel._read_ppms2_zurich_ranged(317.3, scanning=True)
+        with patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
+            result = panel.runner.read_zurich_ranged(317.3, scanning=True)
         self.assertEqual(result['X'], 1e-6)
         self.assertEqual([c.kwargs['initial'] for c in controller.read_stfmr_mfli.call_args_list], [True, False])
         self.assertIn('RANGE', result['ppms_autorange_actions'])
         self.assertEqual([c.kwargs['attempts'] for c in controller.read_stfmr_mfli.call_args_list], [0, 1])
         def range_then_cancel(*args, **kwargs):
-            panel.ppms_field_scan_stop_event.set()
+            panel.state.scan_stop_event.set()
             return {'auto_range': 'RANGE'}
         controller.read_stfmr_mfli.side_effect = range_then_cancel
-        with self.assertRaises(app.PPMSScanCancelled):
-            panel._read_ppms2_zurich_ranged(317.3, scanning=True)
+        with self.assertRaises(PPMSScanCancelled):
+            panel.runner.read_zurich_ranged(317.3, scanning=True)
 
     def test_reused_autorange_overload_low_signal_and_retry_limit(self):
-        controller = app.NonLocalACController(lambda _: None)
+        controller = ZurichMFLIController(lambda _: None)
         controller.read_mfli = Mock(return_value={'input_overload': True,
             'input_extrema_valid': True, 'input_utilization': .95})
         controller._run_mfli_autorange = Mock(return_value='RANGE')
@@ -716,22 +719,22 @@ class TwoPanelTests(unittest.TestCase):
         controller._run_mfli_autorange.assert_called_once_with('low')
 
     def test_optional_lockin_selection_all_combinations(self):
-        parent, panel, controller = self.make_panel()
-        for obj, keys in ((parent, ('830_a', '830_b')), (panel, ('830_a', '830_b', 'zurich'))):
-            for mask in range(1 << len(keys)):
-                obj.ppms_lockin_selection = {key: Var(bool(mask & (1 << i))) for i, key in enumerate(keys)}
-                for key in ('830_a', '830_b'):
-                    obj.ppms_instrument_controllers[key] = Mock(connected=obj.ppms_lockin_selection[key].get())
-                controller.mfli_connected = bool(mask & 4)
-                if mask == 0:
-                    with self.assertRaisesRegex(ValueError, 'at least one'):
-                        obj._ppms_selected_lockins()
-                    continue
-                active, use_zurich = obj._ppms_selected_lockins()
-                self.assertEqual(active, tuple(k for k in ('830_a', '830_b') if obj.ppms_lockin_selection[k].get()))
-                self.assertEqual(use_zurich, bool(mask & 4))
-                result = app.validate_ppms_transport_scan_settings(1, 317.3, 50, 1, 2, active, allow_no_lockins=use_zurich)
-                self.assertEqual(result['active_lockins'], active)
+        _, panel, controller = self.make_panel()
+        keys = ('830_a', '830_b', 'zurich')
+        for mask in range(1 << len(keys)):
+            panel.ppms_lockin_selection = {key: Var(bool(mask & (1 << i))) for i, key in enumerate(keys)}
+            for key in ('830_a', '830_b'):
+                panel.state.ppms_instrument_controllers[key] = Mock(connected=panel.ppms_lockin_selection[key].get())
+            controller.mfli_connected = bool(mask & 4)
+            if mask == 0:
+                with self.assertRaisesRegex(ValueError, 'at least one'):
+                    panel._ppms_selected_lockins()
+                continue
+            active, use_zurich = panel._ppms_selected_lockins()
+            self.assertEqual(active, tuple(k for k in ('830_a', '830_b') if panel.ppms_lockin_selection[k].get()))
+            self.assertEqual(use_zurich, bool(mask & 4))
+            result = validate_ppms_transport_scan_settings(1, 317.3, 50, 1, 2, active, allow_no_lockins=use_zurich)
+            self.assertEqual(result['active_lockins'], active)
         panel.ppms_lockin_selection = {'830_a': Var(False), '830_b': Var(False), 'zurich': Var(True)}
         controller.mfli_connected = False
         with self.assertRaisesRegex(ValueError, 'Zurich'):

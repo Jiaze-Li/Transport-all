@@ -12,9 +12,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_ppms_motor_debug import app
+from transport.ppms.ui import theme as app
+from transport.ppms.ui.dialogs import ConnectionOverview
 
-PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app.py"
+app.ConnectionOverview = ConnectionOverview
+
+PROGRAM = Path(__file__).resolve().parents[1] / "transport" / "ppms" / "app_shell.py"
 HEX = re.compile(r"#[0-9a-f]{6}")
 
 
