@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:22:48.398Z",
+  "updatedAt": "2026-11-28T02:23:11.690Z",
   "task": {
     "id": "design/ppms-modular-architecture",
     "branch": "design/ppms-modular-architecture",
@@ -19,7 +19,14 @@
         "message": "docs(ppms): scaffold D1 modular architecture design"
       }
     ],
-    "pr": null,
+    "pr": {
+      "number": 4,
+      "state": "open",
+      "title": "design(ppms): D1 modular architecture and responsibility contracts",
+      "url": "https://github.com/Jiaze-Li/Transport-all/pull/4",
+      "merged": false,
+      "updatedAt": "2026-11-28T02:22:58Z"
+    },
     "completed": null,
     "outcome": null
   }
