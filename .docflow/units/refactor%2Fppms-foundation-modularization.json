@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T03:14:54.780Z",
+  "updatedAt": "2026-11-28T05:41:50.327Z",
   "task": {
     "id": "refactor/ppms-foundation-modularization",
     "branch": "refactor/ppms-foundation-modularization",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-foundation-modularization",
     "started": "2026-11-28T10:59:05+08:00",
     "status": "In progress",
-    "current": "fix(tests): align remaining lease and validation patch targets with split modules",
+    "current": "fix(ppms): implement setDouble/getDouble on LabOne adapters and mark D1 §2 historical",
     "next": "Review Draft PR #5 (Batch 1 foundation modularization) and authorize Ready for review",
     "history": [
       {
@@ -22,6 +22,10 @@
       {
         "at": "2026-11-28T11:14:37+08:00",
         "text": "fix(ppms): restore MFLI server/numpy bindings and align test patch targets with split modules"
+      },
+      {
+        "at": "2026-11-28T13:41:37+08:00",
+        "text": "fix(tests): align remaining lease and validation patch targets with split modules"
       }
     ],
     "commits": [
@@ -48,6 +52,12 @@
         "branch": "refactor/ppms-foundation-modularization",
         "timestamp": "2026-11-28T11:14:37+08:00",
         "message": "fix(tests): align remaining lease and validation patch targets with split modules"
+      },
+      {
+        "sha": "e26defe86f244439d7892207044d75f6a169371d",
+        "branch": "refactor/ppms-foundation-modularization",
+        "timestamp": "2026-11-28T13:41:37+08:00",
+        "message": "fix(ppms): implement setDouble/getDouble on LabOne adapters and mark D1 §2 historical"
       }
     ],
     "pr": {
