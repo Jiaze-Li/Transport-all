@@ -360,6 +360,7 @@ class FieldScanEndTests(unittest.TestCase):
         obj.ppms_field_scan_stop_button = mock.Mock()
         obj.ppms_field_scan_save_button = mock.Mock()
         obj.ppms_control_widgets = []
+        obj.state.ppms_environment_controller.connected = True
         obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
         dialogs = []
@@ -394,6 +395,7 @@ class FieldScanEndTests(unittest.TestCase):
         obj.ppms_field_scan_stop_button = mock.Mock()
         obj.ppms_field_scan_save_button = mock.Mock()
         obj.ppms_control_widgets = []
+        obj.state.ppms_environment_controller.connected = True
         obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
         obj.state.scan_outputs = {"6221": "zeroed"}

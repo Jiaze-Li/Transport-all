@@ -148,6 +148,9 @@ class ModeTests(unittest.TestCase):
         obj.macro_runner = Mock()
         obj.ppms_zero_persist_button = Mock()
         obj.ppms_scan_target_widgets = {}
+        obj.zurich_harmonic = Mock(get=lambda: "1")
+        obj.zurich_reference = Mock(get=lambda: "Trigger In 1")
+        obj.zurich_timeconstant = Mock(get=lambda: "1")
         obj.state.ppms_executor = Mock()
         self.durations = []
         obj._format_scan_duration = lambda seconds: (self.durations.append(seconds), f"{seconds:g} s")[1]
@@ -218,11 +221,11 @@ class ModeTests(unittest.TestCase):
         for entered, expected in (("sampleA", "sampleA"), ("sampleA.csv", "sampleA")):
             obj, _, _ = self.launch("Angle", (0, 10, 5), filename=entered)
             self.assertEqual(obj.state.run_folder.name, expected)
-            self.assertEqual(obj.ppms_run_recorder.csv_path.name, f"{expected}.csv")
-            self.assertEqual(obj.ppms_run_recorder.log_path.name, f"{expected}.log")
+            self.assertEqual(obj.state.run_recorder.csv_path.name, f"{expected}.csv")
+            self.assertEqual(obj.state.run_recorder.log_path.name, f"{expected}.log")
         obj, _, _ = self.launch("Angle", (0, 10, 5), filename="sampleA.csv", existing="sampleA")
         self.assertEqual(obj.state.run_folder.name, "sampleA_01")
-        self.assertEqual(obj.ppms_run_recorder.csv_path.name, "sampleA_01.csv")
+        self.assertEqual(obj.state.run_recorder.csv_path.name, "sampleA_01.csv")
         obj, _, _ = self.launch("Angle", (0, 10, 5), filename=" ")
         self.assertRegex(obj.state.run_folder.name, r"^PPMS_\d{8}_\d{6}$")
         self.launch("Angle", (0, 10, 5), filename=None)

@@ -309,6 +309,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel.ppms_field_scan_save_button = Mock()
         panel.ppms_control_widgets = []
         panel.ppms_control_safety_var = Var(True)
+        panel.ppms_zero_persist_button = Mock()
         panel.state.zero_persist_pending = True
         panel.runner.nested_scan_worker = Mock()
         panel.state.ppms_environment_controller.connected = True
@@ -366,6 +367,7 @@ class PersistentSetpointTests(unittest.TestCase):
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
         panel.ppms_control_safety_var = Var(True)
+        panel.ppms_zero_persist_button = Mock()
         panel.state.ppms_environment_controller.disconnect = Mock()
         panel.disconnect_ppms_environment()
         self.assertIsNone(panel.state.persistent_watch)

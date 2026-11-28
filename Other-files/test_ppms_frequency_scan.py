@@ -542,7 +542,11 @@ def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"),
         setattr(page, name, Var(value))
     for key, value in zip(PPMS_SR830_KEYS, harmonics):
         setattr(page, PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
-    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
+    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
+    page.ppms_lockin_selection = {key: Var(True) for key in PPMS_SR830_KEYS}
+    page.ppms_lockin_selection["zurich"] = Var(False)
+    page.ppms_sr830_time_constant_var = Var("1 s")
+    page.ppms_zero_persist_button = mock.Mock()
     page.state.ppms_instrument_controllers = {
         key: types.SimpleNamespace(connected=True, resource_name=f"GPIB0::{address}::INSTR")
         for key, address in (("6221", 30), ("830_a", 8), ("830_b", 9), ("830_c", 10))}

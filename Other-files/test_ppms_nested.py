@@ -466,7 +466,7 @@ class NestedTests(unittest.TestCase):
                 captured.append((context['temperature_index'], context['target_temperature_k'], point[3]))
         obj._ppms_field_scan_worker = capture
         clock = iter(range(10000))
-        with patch.object(app, 'PPMSMotorDebug', motor), patch.object(app.time, 'monotonic', lambda: next(clock)):
+        with patch.object(runner_mod, 'PPMSMotorDebug', motor), patch.object(runner_mod.time, 'monotonic', lambda: next(clock)):
             obj._ppms_nested_scan_worker(sequence, 100., 0., 1, settings)
         self.assertEqual(captured, [(i, t, b) for i, t in enumerate((300,295,290), 1) for b in (-100,0,100)])
         self.assertNotIn(('off',), events)
@@ -515,7 +515,8 @@ class NestedTests(unittest.TestCase):
         settings.update(nested=dict(angle=(26.,), temperature=(300., 295.)), currents=(.001,),
                         scan_mode="Field+Temperature", temperature_delay_s=120.0)
         self.recording_stop(obj, events, stop_on_delay=True)
-        with self.assertRaises(app.PPMSScanCancelled):
+        from transport.ppms.engine.errors import PPMSScanCancelled
+        with self.assertRaises(PPMSScanCancelled):
             self.run_worker(obj, motor, settings)
         self.assertNotIn('plane', [e[0] for e in events], "no field sweep after the Stop")
         # As any Stop of a field-commanding scan: the field to 0 Oe, then the 6221 off.

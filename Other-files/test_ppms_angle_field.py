@@ -289,6 +289,10 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
                  "ppms_field_scan_progress", "ppms_field_scan_eta_var", "ppms_transport_status_var"):
         setattr(page, name, mock.Mock())
     page.ppms_field_scan_status_var = Var("")
+    page.ppms_lockin_selection = {key: Var(True) for key in PPMS_SR830_KEYS}
+    page.ppms_lockin_selection["zurich"] = Var(False)
+    page.ppms_sr830_time_constant_var = Var("1 s")
+    page.ppms_zero_persist_button = mock.Mock()
     estimates = []
     import transport.ppms.ui.dialogs as dialogs_mod
 

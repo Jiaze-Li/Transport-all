@@ -436,6 +436,7 @@ class PPMSStartTests(NoWindows):
         obj.ppms_macro_editor = None
         obj.ppms_macro_edit_buttons = []
         obj.ppms_macro_window = None
+        obj.ppms_zero_persist_button = mock.Mock()
         obj.state.ppms_executor = mock.Mock()
         obj.ppms_field_scan_status_var = Var("")
         obj.ppms_field_scan_eta_var = Var("")
