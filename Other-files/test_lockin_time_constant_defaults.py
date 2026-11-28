@@ -95,15 +95,6 @@ def _step_seen(t_s, tau_s):
     return 1.0 - math.exp(-x) * (1.0 + x)
 
 
-def _iv6221_sample_times(settle_s, acquire_s):
-    """When _nonlocal_iv6221_read_point reads after a step (no read delay):
-    after Settle s, every NONLOCAL_IV6221_SAMPLE_INTERVAL_S until Acquire s
-    has passed since the first reading."""
-    interval = app.NONLOCAL_IV6221_SAMPLE_INTERVAL_S
-    count = int(math.ceil(acquire_s / interval - 1e-9)) + 1
-    return [settle_s + k * interval for k in range(count)]
-
-
 class DefaultSetupsAtTheNewTc(NoWindows):
     """Settle s, Acquire s and Wait/pt do not follow the TC, so these
     out-of-the-box setups read before a 1 s TC has settled (reviewed,

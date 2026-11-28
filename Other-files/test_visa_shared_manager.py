@@ -239,10 +239,10 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             "GPIB0::10::INSTR": "Stanford_Research_Systems,SR830,TEST,1",
         })
         visa_ctrl.pyvisa = FakePyVisaModule(manager)
-        k6221 = app.SafeVisaIdentityController(
+        k6221 = visa_ctrl.SafeVisaIdentityController(
             lambda _message: None, "Keithley 6221", "6221", owner_scope="PPMS"
         )
-        sr830 = app.SafeVisaIdentityController(
+        sr830 = visa_ctrl.SafeVisaIdentityController(
             lambda _message: None, "SR830", "SR830", owner_scope="PPMS"
         )
         try:
@@ -275,10 +275,10 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             "GPIB0::16::INSTR": "UNEXPECTED,DEVICE,TEST,1",
         })
         visa_ctrl.pyvisa = FakePyVisaModule(manager)
-        k6221 = app.SafeVisaIdentityController(
+        k6221 = visa_ctrl.SafeVisaIdentityController(
             lambda _message: None, "Keithley 6221", "6221", owner_scope="PPMS"
         )
-        other = app.SafeVisaIdentityController(
+        other = visa_ctrl.SafeVisaIdentityController(
             lambda _message: None, "SR830", "SR830", owner_scope="PPMS"
         )
         try:
@@ -299,20 +299,21 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             visa_ctrl.pyvisa = original_pyvisa
 
     def test_legacy_labone_bridge_source_still_compiles(self):
-        compile(app._MFLI_BRIDGE_SOURCE, "<mfli_bridge>", "exec")
+        from transport.ppms.controllers.zurich import _MFLI_BRIDGE_SOURCE
+        compile(_MFLI_BRIDGE_SOURCE, "<mfli_bridge>", "exec")
         self.assertIn(
             'requested_imp50 = int(request.get("input_imp50", 0))',
-            app._MFLI_BRIDGE_SOURCE,
+            _MFLI_BRIDGE_SOURCE,
         )
         self.assertIn(
             "daq.setInt(imp50_node, requested_imp50)",
-            app._MFLI_BRIDGE_SOURCE,
+            _MFLI_BRIDGE_SOURCE,
         )
         self.assertIn(
             "daq.setDouble(scaling_node, requested_scaling)",
-            app._MFLI_BRIDGE_SOURCE,
+            _MFLI_BRIDGE_SOURCE,
         )
-        self.assertIn('"actual_scaling"', app._MFLI_BRIDGE_SOURCE)
+        self.assertIn('"actual_scaling"', _MFLI_BRIDGE_SOURCE)
 
     def test_the_zurich_is_set_up_as_on_ppms(self):
         from transport.ppms.controllers.zurich import ZurichMFLIController

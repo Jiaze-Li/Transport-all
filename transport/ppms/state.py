@@ -52,30 +52,25 @@ class PPMSAppState:
 
         self.ppms_instrument_controllers: dict[str, SafeVisaIdentityController] = {
             "6221": SafeVisaIdentityController(
-                "Keithley 6221",
-                ("KEITHLEY", "6221"),
                 logger,
-                output_off_commands=("SOUR:WAVE:ABOR", "OUTP OFF"),
+                "Keithley 6221",
+                "6221",
+                safe_off_commands=("SOUR:WAVE:ABOR", "OUTP OFF"),
                 owner_scope="PPMS",
             ),
-            "830_a": SR830Controller(
-                PPMS_SR830_LABELS["830_a"], ("STANFORD", "SR830"), logger
-            ),
-            "830_b": SR830Controller(
-                PPMS_SR830_LABELS["830_b"], ("STANFORD", "SR830"), logger
-            ),
-            "830_c": SR830Controller(
-                PPMS_SR830_LABELS["830_c"], ("STANFORD", "SR830"), logger
-            ),
+            "830_a": SR830Controller(logger),
+            "830_b": SR830Controller(logger),
+            "830_c": SR830Controller(logger),
             "2400": SafeVisaIdentityController(
-                "Keithley 2400",
-                ("KEITHLEY", "2400"),
                 logger,
-                output_off_commands=(":OUTP OFF",),
+                "Keithley 2400",
+                "2400",
+                safe_off_commands=(":OUTP OFF",),
                 owner_scope="PPMS",
             ),
         }
         for key in PPMS_SR830_KEYS:
+            self.ppms_instrument_controllers[key].label = PPMS_SR830_LABELS[key]
             self.ppms_instrument_controllers[key].owner_scope = "PPMS"
 
         self.ppms_environment_controller = PPMSRemoteReadbackController(logger)
