@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T10:20:19.362Z",
+  "updatedAt": "2026-11-28T11:43:29.039Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Document Batch 2 (PR #6) module map, lifecycle contracts, and CI evidence",
+    "current": "fix(ppms): close queued-scan, macro-handoff, and inflight-shutdown races",
     "next": "Review and accept Draft PR #6 after CI verification",
     "history": [
       {
@@ -114,6 +114,10 @@
       {
         "at": "2026-11-28T18:18:30+08:00",
         "text": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow"
+      },
+      {
+        "at": "2026-11-28T19:43:17+08:00",
+        "text": "Document Batch 2 (PR #6) module map, lifecycle contracts, and CI evidence"
       }
     ],
     "commits": [
@@ -278,6 +282,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T18:18:30+08:00",
         "message": "Document Batch 2 (PR #6) module map, lifecycle contracts, and CI evidence"
+      },
+      {
+        "sha": "44e8daa7ab9e83a701f4163eef0c620b8ed2c4c5",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T19:43:17+08:00",
+        "message": "fix(ppms): close queued-scan, macro-handoff, and inflight-shutdown races"
       }
     ],
     "pr": {
