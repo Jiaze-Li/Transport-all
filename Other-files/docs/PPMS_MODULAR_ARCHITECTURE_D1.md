@@ -286,4 +286,18 @@ The following milestone table defines the technical scope, regardless of PR grou
 
 ## 6. Decision Status
 
-Updated to reflect human feedback on **Q1–Q3**, the three design principles (`PPMSAppState` registry-not-god-object, separate scan vs. macro stop events, window-independent finalization/close handoff), and `M0–M4` technical milestones consolidated into two implementation PRs as agreed by the user. Pending final user sign-off on PR #4. No production-code, test, workflow, or generator changes are authorized by this document.
+Updated to reflect human feedback on **Q1–Q3**, the three design principles (`PPMSAppState` registry-not-god-object, separate scan vs. macro stop events, window-independent finalization/close handoff), and `M0–M4` technical milestones consolidated into two implementation PRs as agreed by the user. D1 approved and merged in PR #4 (`ebe825d`). Implementation proceeds only within separately authorized batch scopes. The agreed source authority is now the standalone `Transport-PPMS` branch; M0 must enforce the freeze against accidental regeneration. `main` remains the original reference/backup.
+
+
+## 7. D2 implementation record — Batch 1 (PR #5)
+
+Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **Implementation pending**.
+
+Scope: D2 dependency-based execution plan, M0 source-authority enforcement, M1 controller extraction, and independently extractable M2 planning/pure logic. Opportunistic Q2/M4 cleanup only with demonstrated dependency evidence. Keep lifecycle/ownership and UI restructuring for Batch 2.
+
+Complete this concise record in the same PR (no separate planning PR or duplicated D1 design):
+- Actual dependency order and checkpoints, with Batch 2 deferrals.
+- Source authority, regeneration guard and affected build/documentation references.
+- Extracted modules, dependency direction, behavior-preserving contracts, any temporary aliases and their removal conditions.
+- Removed legacy functionality/tests, if any, with dependency evidence; no fixed deletion targets.
+- Final HEAD, Linux/Windows CI evidence, packaging checks, deviations and remaining limitations. No local Mac tests without explicit authorization; no hardware acceptance claimed.
