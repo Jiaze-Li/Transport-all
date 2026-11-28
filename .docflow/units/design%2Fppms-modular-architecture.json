@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T02:42:42.830Z",
+  "updatedAt": "2026-11-28T02:54:50.356Z",
   "task": {
     "id": "design/ppms-modular-architecture",
     "branch": "design/ppms-modular-architecture",
     "title": "design/ppms-modular-architecture",
     "task": "Development branch: design/ppms-modular-architecture",
     "started": "2026-11-28T10:22:37+08:00",
-    "status": "In progress",
+    "status": "Completed",
     "current": "docs(ppms): consolidate approved D2 implementation into two batches",
     "next": "Review converged D1 architecture in PR #4 and authorize Ready or M0 start",
     "history": [
@@ -52,13 +52,15 @@
     ],
     "pr": {
       "number": 4,
-      "state": "open",
+      "state": "closed",
       "title": "design(ppms): D1 modular architecture and responsibility contracts",
       "url": "https://github.com/Jiaze-Li/Transport-all/pull/4",
-      "merged": false,
-      "updatedAt": "2026-11-28T02:42:32Z"
+      "merged": true,
+      "mergedAt": "2026-11-28T02:54:39Z",
+      "closedAt": "2026-11-28T02:54:39Z",
+      "updatedAt": "2026-11-28T02:54:39Z"
     },
-    "completed": null,
-    "outcome": null
+    "completed": "2026-11-28T02:54:39Z",
+    "outcome": "Merged"
   }
 }
