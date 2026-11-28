@@ -38,7 +38,7 @@ if "--package-self-test" in sys.argv:
 
     def _application():
         module = importlib.import_module("transport.ppms.app")
-        return f"version {module.APP_VERSION}, {len(module.PPMSPanel.__mro__)} classes behind the page"
+        return f"version {module.APP_VERSION}, shell {module.AppShell.__name__}, panel {module.PPMSPanelView.__name__}"
 
     checks = (
         ("Tcl/Tk", _tcl),
