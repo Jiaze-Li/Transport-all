@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T13:09:32.431Z",
+  "updatedAt": "2026-11-28T13:10:02.452Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -9,7 +9,7 @@
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
     "current": "test(ppms): re-point commercial-look and resolver tests at the split UI modules, refresh README",
-    "next": "Review queued-scan, macro handoff, and inflight-shutdown fixes in Draft PR #6 for acceptance",
+    "next": "Bot review budget for PR #6 is nearly spent (PR too large to finish a full bot pass); decide whether to split the PR or accept it after CI and manual review",
     "history": [
       {
         "at": "2026-11-28T15:29:23+08:00",
