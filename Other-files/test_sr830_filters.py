@@ -6,20 +6,26 @@ import unittest
 
 class OptionalFilters(unittest.TestCase):
     def test_every_line_filter_setup_disables_both_optional_filters(self):
-        source = Path(__file__).resolve().parents[1] / 'transport' / 'ppms' / 'app.py'
-        tree = ast.parse(source.read_text(encoding='utf-8'))
+        root = Path(__file__).resolve().parents[1] / 'transport' / 'ppms'
+        sources = (
+            root / 'app.py',
+            root / 'controllers' / 'sr830.py',
+            root / 'controllers' / 'zurich.py',
+        )
+        trees = [ast.parse(path.read_text(encoding='utf-8')) for path in sources]
         paths = 0
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            strings = {n.value for n in ast.walk(node)
-                       if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-            if 'ILIN 0' in strings:
-                paths += 1
-                self.assertIn('SYNC 0', strings, node.name)
-            self.assertFalse(strings.intersection({'ILIN 1', 'ILIN 2', 'ILIN 3', 'SYNC 1'}), node.name)
+        for tree in trees:
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef):
+                    continue
+                strings = {n.value for n in ast.walk(node)
+                           if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+                if 'ILIN 0' in strings:
+                    paths += 1
+                    self.assertIn('SYNC 0', strings, node.name)
+                self.assertFalse(strings.intersection({'ILIN 1', 'ILIN 2', 'ILIN 3', 'SYNC 1'}), node.name)
         self.assertEqual(paths, 3)  # STFMR, nonlocal, PPMS scan
-        initializer = next(n for n in ast.walk(tree)
+        initializer = next(n for n in ast.walk(trees[0])
                            if isinstance(n, ast.FunctionDef) and n.name == '_initialize_ppms_sr830')
         pairs = [ast.literal_eval(n) for n in ast.walk(initializer)
                  if isinstance(n, ast.Tuple) and len(n.elts) == 2

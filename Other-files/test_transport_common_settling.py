@@ -162,7 +162,8 @@ class TestTransportCommonSettling(unittest.TestCase):
 
     def test_patching_app_lockin_settle_taus_affects_wrappers(self):
         """Requirement 4: Preserve runtime behavior of monkeypatching Transport_all.LOCKIN_SETTLE_TAUS."""
-        with mock.patch.object(app, "LOCKIN_SETTLE_TAUS", 7.0):
+        import transport.ppms.engine.planning as planning
+        with mock.patch.object(planning, "LOCKIN_SETTLE_TAUS", 7.0):
             self.assertEqual(app.ppms_lockin_settle_s(0.5, [0.1]), 0.7)
             self.assertEqual(str(app.ppms_lockin_settle_s(0.5, [0.1])), "0.7")
             text = app.ppms_lockin_settle_text(0.5, 0.7, 0.1, "SR830-1")

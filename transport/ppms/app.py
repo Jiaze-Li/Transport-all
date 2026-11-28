@@ -65,6 +65,7 @@ from transport.ppms.controllers.visa import (
     INSTRUMENT_LEASE_PROGRAM,
     INSTRUMENT_LEASE_TEXT_BYTES,
     SafeVisaIdentityController,
+    _INSTRUMENT_LEASES,
     acquire_instrument_lease,
     acquire_shared_visa_manager,
     hold_instrument_for_this_process,

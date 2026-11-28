@@ -320,7 +320,8 @@ class TestDynamicMonkeypatchCompatibility(unittest.TestCase):
     """AC3: Monkeypatching Transport_all constants dynamically affects wrapper at call time."""
 
     def test_patch_max_current(self):
-        with mock.patch.object(app, "K6221_MAX_ABS_CURRENT_A", 0.05):
+        import transport.ppms.engine.planning as planning
+        with mock.patch.object(planning, "K6221_MAX_ABS_CURRENT_A", 0.05):
             # 0.05 A peak limit corresponds to RMS limit ~35.3553 mA
             with self.assertRaisesRegex(ValueError, r"6221 sine-wave peak must not exceed 50 mA; the GUI RMS current limit is about 35\.3553 mA"):
                 app.validate_ppms_transport_scan_settings(40.0, 100.0, 10.0, 1, 1)

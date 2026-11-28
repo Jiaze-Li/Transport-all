@@ -223,9 +223,9 @@ class FakeSR830:
 
 class SharedVisaAndSafetyTests(unittest.TestCase):
     def setUp(self):
-        app._INSTRUMENT_LEASES.clear()
-        app._SHARED_VISA_MANAGER = None
-        app._SHARED_VISA_MANAGER_USERS = 0
+        visa_ctrl._INSTRUMENT_LEASES.clear()
+        visa_ctrl._SHARED_VISA_MANAGER = None
+        visa_ctrl._SHARED_VISA_MANAGER_USERS = 0
 
     def tearDown(self):
         visa_ctrl._INSTRUMENT_LEASES.clear()
