@@ -1,11 +1,8 @@
-"""The host window of the standalone PPMS application, and what steers its
-extraction from the main program (tools/extract_app.py reads this file;
-it is not imported by the application).
+"""FROZEN LEGACY ARTIFACT (D1/M0 — scheduled for removal in Batch 2).
 
-* Methods of ``CombinedControlApp`` below replace the main program's methods
-  of the same name: the window with the PPMS page and the log only, and a
-  close that shuts down the PPMS page only.
-* Top-level definitions below replace, or add to, the main program's.
+Formerly the host window and extraction spec for tools/extract_app.py.
+Transport-PPMS (transport/ppms, transport/common, transport/core) is now the
+sole authoritative source for PPMS; this file is not imported or executed.
 """
 # What is extracted, and where to.
 PAGE_CLASS = "PPMSPanel"

@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from test_ppms_motor_debug import app
+import transport.ppms.controllers.visa as visa_ctrl
 
 
 class FakeSharedVisaInstrument:
@@ -227,17 +228,17 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
         app._SHARED_VISA_MANAGER_USERS = 0
 
     def tearDown(self):
-        app._INSTRUMENT_LEASES.clear()
-        app._SHARED_VISA_MANAGER = None
-        app._SHARED_VISA_MANAGER_USERS = 0
+        visa_ctrl._INSTRUMENT_LEASES.clear()
+        visa_ctrl._SHARED_VISA_MANAGER = None
+        visa_ctrl._SHARED_VISA_MANAGER_USERS = 0
 
     def test_shared_visa_manager_survives_one_controller_disconnect(self):
-        original_pyvisa = app.pyvisa
+        original_pyvisa = visa_ctrl.pyvisa
         manager = FakeSharedVisaManager({
             "GPIB0::12::INSTR": "KEITHLEY INSTRUMENTS INC.,MODEL 6221,TEST,1",
             "GPIB0::10::INSTR": "Stanford_Research_Systems,SR830,TEST,1",
         })
-        app.pyvisa = FakePyVisaModule(manager)
+        visa_ctrl.pyvisa = FakePyVisaModule(manager)
         k6221 = app.SafeVisaIdentityController(
             lambda _message: None, "Keithley 6221", "6221", owner_scope="PPMS"
         )
@@ -248,32 +249,32 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             k6221.connect("GPIB0::12::INSTR")
             sr830.connect("GPIB0::10::INSTR")
             self.assertIs(k6221.resource_manager, sr830.resource_manager)
-            self.assertEqual(app._SHARED_VISA_MANAGER_USERS, 2)
+            self.assertEqual(visa_ctrl._SHARED_VISA_MANAGER_USERS, 2)
 
             k6221.disconnect()
             self.assertEqual(manager.close_calls, 0)
-            self.assertEqual(app._SHARED_VISA_MANAGER_USERS, 1)
+            self.assertEqual(visa_ctrl._SHARED_VISA_MANAGER_USERS, 1)
             self.assertIn("SR830", sr830.instrument.query("*IDN?"))
 
             sr830.disconnect()
             self.assertEqual(manager.close_calls, 1)
-            self.assertEqual(app._SHARED_VISA_MANAGER_USERS, 0)
-            self.assertIsNone(app._SHARED_VISA_MANAGER)
+            self.assertEqual(visa_ctrl._SHARED_VISA_MANAGER_USERS, 0)
+            self.assertIsNone(visa_ctrl._SHARED_VISA_MANAGER)
         finally:
             for ctrl in (k6221, sr830):
                 try:
                     ctrl.disconnect()
                 except BaseException:
                     pass
-            app.pyvisa = original_pyvisa
+            visa_ctrl.pyvisa = original_pyvisa
 
     def test_failed_visa_identity_check_does_not_close_other_session(self):
-        original_pyvisa = app.pyvisa
+        original_pyvisa = visa_ctrl.pyvisa
         manager = FakeSharedVisaManager({
             "GPIB0::12::INSTR": "KEITHLEY INSTRUMENTS INC.,MODEL 6221,TEST,1",
             "GPIB0::16::INSTR": "UNEXPECTED,DEVICE,TEST,1",
         })
-        app.pyvisa = FakePyVisaModule(manager)
+        visa_ctrl.pyvisa = FakePyVisaModule(manager)
         k6221 = app.SafeVisaIdentityController(
             lambda _message: None, "Keithley 6221", "6221", owner_scope="PPMS"
         )
@@ -285,7 +286,7 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 other.connect("GPIB0::16::INSTR")
             self.assertEqual(manager.close_calls, 0)
-            self.assertEqual(app._SHARED_VISA_MANAGER_USERS, 1)
+            self.assertEqual(visa_ctrl._SHARED_VISA_MANAGER_USERS, 1)
             self.assertIn("6221", k6221.instrument.query("*IDN?"))
             k6221.disconnect()
             self.assertEqual(manager.close_calls, 1)
@@ -295,7 +296,7 @@ class SharedVisaAndSafetyTests(unittest.TestCase):
                     ctrl.disconnect()
                 except BaseException:
                     pass
-            app.pyvisa = original_pyvisa
+            visa_ctrl.pyvisa = original_pyvisa
 
     def test_legacy_labone_bridge_source_still_compiles(self):
         compile(app._MFLI_BRIDGE_SOURCE, "<mfli_bridge>", "exec")

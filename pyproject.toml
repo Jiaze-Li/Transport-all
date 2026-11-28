@@ -1,7 +1,7 @@
 # The standalone PPMS application as an installable package: Transport_PPMS.py
 # plus the transport package beside it.  `pip install transport_ppms-<version>-py3-none-any.whl`
 # adds the `transport-ppms` command; `python Transport_PPMS.py` in a copied
-# folder works too.  The version is APP_VERSION of tools/ppms_host.py.
+# folder works too.  The version is APP_VERSION of transport/ppms/app.py.
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
@@ -39,4 +39,5 @@ packages = [
     "transport.core",
     "transport.ppms",
     "transport.ppms.controllers",
+    "transport.ppms.engine",
 ]

@@ -291,13 +291,24 @@ Updated to reflect human feedback on **Q1–Q3**, the three design principles (`
 
 ## 7. D2 implementation record — Batch 1 (PR #5)
 
-Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **Implementation pending**.
+Baseline: `Transport-PPMS@ebe825d2180a5b7af77f67a2d659bd78ea8f6dfb`. Status: **Batch 1 implemented (M0 + M1 + independent M2; awaiting GitHub Actions CI & human acceptance)**.
 
-Scope: D2 dependency-based execution plan, M0 source-authority enforcement, M1 controller extraction, and independently extractable M2 planning/pure logic. Opportunistic Q2/M4 cleanup only with demonstrated dependency evidence. Keep lifecycle/ownership and UI restructuring for Batch 2.
+### Dependency Order & Checkpoints
+1. **M0 (Source Authority):** Froze `tools/extract_app.py` (raises `SystemExit` on execution), marked `tools/ppms_host.py` and `tools/ppms_package_glue.py` as frozen legacy artifacts (removal condition: Batch 2 / PR #6), updated `transport/ppms/app.py`, `README.md`, `pyproject.toml`, and `.github/workflows/ppms-windows-exe.yml` to declare `Transport-PPMS` (`transport/ppms`, `transport/common`, `transport/core`) as the sole authoritative source. Preserved `tools/prune_tests.py`.
+2. **M1 (Controllers under `transport/ppms/controllers/`):**
+   - `visa.py`: `SafeVisaIdentityController`, `acquire_shared_visa_manager` / `release_shared_visa_manager`, and OS-level `acquire_instrument_lease` / `release_instrument_lease`.
+   - `sr830.py`: `SR830Controller` (renamed from `STFMRSR830Controller`), `SR830_DISPLAY_XY_COMMANDS`, `show_sr830_x_and_y`.
+   - `qdinstrument.py`: `PPMSQDInstrumentReadbackController`, `QDCommandUncertain`.
+   - `environment.py`: `PPMSRemoteReadbackController` (delegates to `qdinstrument.py` and `multivu.py`).
+   - `zurich.py`: `ZurichMFLIController` (from `NonLocalACController`), `LabOneDotNetAdapter`, `LabOneCAPIAdapter`, `LegacyMFLIBridge`, `_MFLI_BRIDGE_SOURCE`, `_find_mfli_legacy_python`, `zurich_mfli_choice`, `zurich_mfli_label`, `zurich_choice_hint`.
+3. **Independent M2 (`transport/ppms/engine/planning.py`):**
+   - Extracted `PPMSScanAxisPlan`, `plan_ppms_scan_axes`, `ppms_prime_frequencies`, `nonlocal_prime_frequencies`, `ppms_frequency_count_text`, `ppms_frequency_scan_note`, `parse_ppms_macro`, `build_ppms_field_scan_sequence`, `ppms_lockin_settle_s`, `ppms_settle_status_text`, `ppms_lockin_settle_text`, `validate_ppms_transport_scan_settings`, and scan-mode constants. `app.py:start_ppms_field_scan` delegates axis/mode planning to `plan_ppms_scan_axes` without altering live readback sampling or scan startup.
+4. **Packaging & Test Patch Migration:** Added `transport.ppms.engine` to `pyproject.toml`; updated patch targets in `Other-files/test_visa_shared_manager.py`, `Other-files/test_sr830_display_xy.py`, and `Other-files/test_lockin_settle_rte_ppms.py` so mocks intercept the new owning modules without weakening assertions.
 
-Complete this concise record in the same PR (no separate planning PR or duplicated D1 design):
-- Actual dependency order and checkpoints, with Batch 2 deferrals.
-- Source authority, regeneration guard and affected build/documentation references.
-- Extracted modules, dependency direction, behavior-preserving contracts, any temporary aliases and their removal conditions.
-- Removed legacy functionality/tests, if any, with dependency evidence; no fixed deletion targets.
-- Final HEAD, Linux/Windows CI evidence, packaging checks, deviations and remaining limitations. No local Mac tests without explicit authorization; no hardware acceptance claimed.
+### Module Boundaries, Temporary Aliases & Batch 2 Deferrals
+- **Dependency direction verified (static AST check):** `transport/core/*`, `transport/common/*`, `transport/ppms/protocol.py`, `transport/ppms/controllers/*`, and `transport/ppms/engine/*` contain **zero** `tkinter` imports and **zero** imports of `transport.ppms.app` or `ui`.
+- **Temporary compatibility aliases (removal condition: Batch 2 / M4 after test migration):**
+  - `STFMRSR830Controller = SR830Controller` (`controllers/sr830.py`, re-exported in `app.py` for `test_lockin_downrange.py`, `test_lockin_time_constant_defaults.py`, `test_review_fixes.py`, `test_sr830_display_xy.py`).
+  - `NonLocalACController = ZurichMFLIController` (`controllers/zurich.py`, re-exported in `app.py` for `test_ppms_sr830_tc.py`, `test_ppms_two_panels.py`, `test_ppms_zurich_close_order.py`, `test_lockin_downrange.py`, `test_mfli_connect_message.py`, `test_nonlocal_review.py`, `test_rte_panel.py`, `test_sr830_display_xy.py`, `test_visa_shared_manager.py`, `test_zurich_choice.py`).
+- **Legacy cleanup (Q2) & Batch 2 deferrals:** Deferred pruning of unused Non-local 6221/2182A/SR830 methods on `ZurichMFLIController` and their dedicated tests to Batch 2 (M4) to avoid breaking existing test coverage prematurely. Deferred remaining M2 (`PPMSMotorService`, `MacroRunner`), M3 (`PPMSScanRunner`, `AppShell`, `PPMSPanelView`, `PPMSAppState` single ownership), and M4 (`tools/` extraction retirement, `PPMSPanel(CombinedControlApp)` / `__getattr__` removal) to Batch 2 (PR #6).
+- **Testing policy:** All formal test suites, layout checks, wheel install, and Windows `.exe` checks run on GitHub Actions CI only (no local Mac suite execution; no physical hardware acceptance claimed).

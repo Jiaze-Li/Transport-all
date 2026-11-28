@@ -26,7 +26,7 @@ with its MOKE, CIDWM, Non-local, SHHV & Switch, FMR and ST-FMR pages, stays on
 
 Both are rebuilt from this branch after every push that passes its checks; the
 release notes give the commit and the SHA-256 of each file. The version is this
-program's own (`APP_VERSION` in [`tools/ppms_host.py`](tools/ppms_host.py)), not the main
+program's own (`APP_VERSION` in [`transport/ppms/app.py`](transport/ppms/app.py)), not the main
 program's. Raising it starts a new release, once the owner has pushed the tag
 `ppms-v<version>` (only the owner can make tags in this repository).
 
@@ -74,42 +74,19 @@ per instrument address; it goes when the holder disconnects, closes or dies).
 | Part | What it holds |
 |---|---|
 | [`Transport_PPMS.py`](Transport_PPMS.py) | The entry script: starts `transport.ppms.app.main`. |
-| [`transport/ppms/app.py`](transport/ppms/app.py) | The application: the PPMS page, its instrument controllers and the window. Generated (see below). |
+| [`transport/ppms/app.py`](transport/ppms/app.py) | The application shell, UI panel, and scan orchestration. |
 | [`transport/ppms/protocol.py`](transport/ppms/protocol.py) | PPMS limits and the checks of field and temperature commands. |
-| [`transport/ppms/controllers/multivu.py`](transport/ppms/controllers/multivu.py) | The MultiPyVu read-back controller. |
+| [`transport/ppms/controllers`](transport/ppms/controllers) | Instrument controllers (VISA/lease, SR830, Zurich MFLI, QDInstrument, MultiPyVu, remote environment). |
+| [`transport/ppms/engine`](transport/ppms/engine) | Hardware- and Tk-independent scan planning, macro parsing, and validation helpers. |
 | [`transport/core`](transport/core) | Scan sequences, the run recorder (run folder, live CSV, JSON-lines log), and the end-of-scan zeroing and close hand-off. |
 | [`transport/common`](transport/common) | Harmonic planning, lock-in settling, and the check of the 6221 / SR830 scan settings. |
 
-The modules in `transport/core`, `transport/common`, `transport/ppms/protocol.py`
-and `transport/ppms/controllers` are Jiaze Li's, separated from the program in
-November 2026. The application imports them; it holds no second copy of that
-logic. The main program's own versions of those functions had not changed
-since the split, so they were reused as they are. The one addition is in the
-run recorder: the extra save folders and the open-run hook the main program
-gained later.
+### Standalone package authority
 
-### The application module is generated
-
-`transport/ppms/app.py` is derived from the main program by
-[`tools/extract_app.py`](tools/extract_app.py):
-
-```bash
-python tools/extract_app.py tools/ppms_host.py /path/to/main/Transport_all.py
-```
-
-Starting from the PPMS panel, it keeps every function, class, constant and
-method the page reaches, and nothing of the other pages. The first extraction
-kept about 10,800 of the main program's 40,500 lines. Two small files steer it:
-
-- [`tools/ppms_host.py`](tools/ppms_host.py): the window of this program (the
-  PPMS and Log pages, its own close), and the list of parts left out.
-- [`tools/ppms_package_glue.py`](tools/ppms_package_glue.py): which names come
-  from the `transport` package, and the thin wrappers that keep the main
-  program's names and signatures.
-
-To bring a later change of the main program's PPMS page here, run the tool
-again on the new `Transport_all.py`, then the tests. Do not edit `app.py` by
-hand: change the two steering files.
+The `Transport-PPMS` branch (`transport/ppms`, `transport/common`, `transport/core`)
+is the sole authoritative source for this application. Edit the package modules
+directly; `tools/extract_app.py` is frozen and must not be used to overwrite
+`transport/ppms/app.py`.
 
 ## Tests
 

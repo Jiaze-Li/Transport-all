@@ -5,7 +5,7 @@
 # Actions tab -> "PPMS Windows exe" -> Run workflow.  The .exe is attached to
 # the run as the artifact "Transport_PPMS-windows-x64".  A build of
 # Transport-PPMS also puts its files in the release "Transport_PPMS v<version>"
-# (tag ppms-v<version>; the version is APP_VERSION of tools/ppms_host.py), so they
+# (tag ppms-v<version>; the version is APP_VERSION of transport/ppms/app.py), so they
 # can be downloaded directly, without signing in: a release that is there
 # gets the new files, and a raised version starts a new release on the tag
 # the owner pushed for it (the repository lets only its owner make tags).
