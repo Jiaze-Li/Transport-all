@@ -230,6 +230,10 @@ class LabOneDotNetAdapter:
         self._daq.setInt(str(path), int(value))
     def getInt(self, path: str) -> int:
         return int(self._daq.getInt(str(path)))
+    def setDouble(self, path: str, value: float) -> None:
+        self._daq.setDouble(str(path), float(value))
+    def getDouble(self, path: str) -> float:
+        return float(self._daq.getDouble(str(path)))
     def sync(self) -> None:
         self._daq.sync()
     def getSample(self, path: str) -> dict[str, float]:
@@ -291,6 +295,10 @@ class LabOneCAPIAdapter:
         self._lib.ziAPISetValueI.restype = result
         self._lib.ziAPIGetValueI.argtypes = [connection, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int64)]
         self._lib.ziAPIGetValueI.restype = result
+        self._lib.ziAPISetValueD.argtypes = [connection, ctypes.c_char_p, ctypes.c_double]
+        self._lib.ziAPISetValueD.restype = result
+        self._lib.ziAPIGetValueD.argtypes = [connection, ctypes.c_char_p, ctypes.POINTER(ctypes.c_double)]
+        self._lib.ziAPIGetValueD.restype = result
         self._lib.ziAPISync.argtypes = [connection]
         self._lib.ziAPISync.restype = result
         self._lib.ziAPIGetDemodSample.argtypes = [connection, ctypes.c_char_p, ctypes.POINTER(self._DemodSample)]
@@ -364,6 +372,12 @@ class LabOneCAPIAdapter:
         value = ctypes.c_int64()
         self._check(self._lib.ziAPIGetValueI(self._connection, self._path(path), ctypes.byref(value)), f'getInt({path})')
         return int(value.value)
+    def setDouble(self, path: str, value: float) -> None:
+        self._check(self._lib.ziAPISetValueD(self._connection, self._path(path), float(value)), f'setDouble({path})')
+    def getDouble(self, path: str) -> float:
+        value = ctypes.c_double()
+        self._check(self._lib.ziAPIGetValueD(self._connection, self._path(path), ctypes.byref(value)), f'getDouble({path})')
+        return float(value.value)
     def sync(self) -> None:
         self._check(self._lib.ziAPISync(self._connection), "ziAPISync")
     def getSample(self, path: str) -> dict[str, float]:

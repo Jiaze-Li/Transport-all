@@ -44,6 +44,39 @@ class ConnectFailureMessageTests(unittest.TestCase):
         daq.getString.side_effect = RuntimeError("no string ABI")
         self.assertEqual(Controller._mfli_server_devices(daq), "")
 
+    def test_native_labone_adapters_implement_all_daq_methods(self):
+        import ctypes
+        import transport.ppms.controllers.zurich as zurich_ctrl
+
+        for adapter_cls in (zurich_ctrl.LabOneDotNetAdapter, zurich_ctrl.LabOneCAPIAdapter):
+            missing = [
+                name
+                for name in zurich_ctrl.NONLOCAL_MFLI_DAQ_METHODS
+                if not callable(getattr(adapter_cls, name, None))
+            ]
+            self.assertEqual(missing, [], f"{adapter_cls.__name__} missing {missing}")
+
+        dotnet = zurich_ctrl.LabOneDotNetAdapter.__new__(zurich_ctrl.LabOneDotNetAdapter)
+        dotnet._daq = Mock()
+        dotnet._daq.getDouble.return_value = 0.25
+        dotnet.setDouble("/dev4435/demods/0/rate", 10.5)
+        dotnet._daq.setDouble.assert_called_once_with("/dev4435/demods/0/rate", 10.5)
+        self.assertEqual(dotnet.getDouble("/dev4435/demods/0/rate"), 0.25)
+
+        capi = zurich_ctrl.LabOneCAPIAdapter.__new__(zurich_ctrl.LabOneCAPIAdapter)
+        capi._connection = ctypes.c_void_p(1)
+        capi._lib = Mock()
+        capi._lib.ziAPISetValueD.return_value = 0
+
+        def fake_get_d(_conn, _path, out_ptr):
+            out_ptr._obj.value = 1.25
+            return 0
+
+        capi._lib.ziAPIGetValueD.side_effect = fake_get_d
+        capi.setDouble("/dev4435/demods/0/timeconstant", 1.0)
+        capi._lib.ziAPISetValueD.assert_called_once()
+        self.assertEqual(capi.getDouble("/dev4435/demods/0/timeconstant"), 1.25)
+
 
 if __name__ == "__main__":
     unittest.main()
