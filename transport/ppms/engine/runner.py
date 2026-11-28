@@ -2214,7 +2214,10 @@ class PPMSScanRunner:
                 extras = []
                 if self.state.closed:
                     outcome, prefix = "stopped", "Stopped; "
-                    stop_reason = stop_reason or "the program closing"
+                    if not self.state.scan_stop_button:
+                        stop_reason = "the program closing"
+                    else:
+                        stop_reason = stop_reason or "the program closing"
                 elif stopped:
                     outcome, prefix = "stopped", "Stopped; "
                     if field_mode:

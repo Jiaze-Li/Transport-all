@@ -251,7 +251,7 @@ class ModeTests(unittest.TestCase):
         self.temperature_delay = "600"
         _obj, _sequence, settings = self.launch("Field+Temperature", (-100, 100, 100))
         self.assertEqual(settings["temperature_delay_s"], 600.0)
-        self.assertIn("Wait after each temperature is stable: 600 s, then the scan at it", self.last_question)
+        self.assertIn("Wait after each temperature is stable: 10 min 00 s, then the scan at it", self.last_question)
         self.assertAlmostEqual(max(self.durations) - without, 3 * 600)
         for typed, message in (("-1", "must be within 0–86400 s"), ("x", "must be a number")):
             self.temperature_delay = typed

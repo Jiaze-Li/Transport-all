@@ -170,6 +170,7 @@ class NestedTests(unittest.TestCase):
     def test_idle_reads_reference_not_xy(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
+        obj.shell = types.SimpleNamespace(closing=False)
         obj.runner = PPMSScanRunner(obj.state, post_ui=lambda cb: None)
         obj.state.ppms_environment_controller = types.SimpleNamespace(backend="fake", read_environment=lambda: {})
         obj.state.ppms_instrument_controllers = {k: types.SimpleNamespace(connected=True) for k in ("830_a", "830_b")}
@@ -217,14 +218,16 @@ class NestedTests(unittest.TestCase):
             obj._redraw_ppms_transport_plot()
         series = calls[-1][1]
         self.assertEqual(options[-1].get("angle_x_range"), (-5, 355))
-        self.assertEqual(len(series), 4)  # Two temperatures, X/Y each.
-        self.assertTrue(all(len(points) == 2 for points in series.values()))
+        self.assertEqual(len(calls[-2][1]) + len(calls[-1][1]), 4)  # Two temperatures, X/Y each.
+        for s in (calls[-2][1], calls[-1][1]):
+            self.assertTrue(all(len(points) == 2 for points in s.values()))
         self.assertTrue(any('300 K' in name for name in series))
         self.assertTrue(any('290 K' in name for name in series))
 
     def test_idle_autorange_requires_successful_current_setting(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
+        obj.shell = types.SimpleNamespace(closing=False)
         obj.runner = PPMSScanRunner(obj.state, post_ui=lambda cb: None)
         obj.state.ppms_environment_controller = types.SimpleNamespace(backend="fake", read_environment=lambda: {})
         # Idle ranging runs under the SR830's lock (user, 2026-10-14).
@@ -512,6 +515,7 @@ class NestedTests(unittest.TestCase):
                         scan_mode="Field+Temperature", temperature_delay_s=120.0)
         self.recording_stop(obj, events)
         logged = []
+        obj.shell.thread_log = logged.append
         obj.thread_log = logged.append
         set_temperature = obj.state.ppms_environment_controller.set_temperature
         obj.state.ppms_environment_controller.set_temperature = lambda target, *args: (

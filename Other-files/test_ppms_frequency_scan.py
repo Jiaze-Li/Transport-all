@@ -363,10 +363,25 @@ class Rig:
             estimated_seconds=1.0,
             sr830_tc_code=10,
         )
-        with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
-                mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
-                mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
-            self.page.runner.run(request, sink=self.page)
+        finished = {}
+        orig_finished = self.page.on_scan_finished
+
+        def capture_finished(**kwargs):
+            finished.update(kwargs)
+            return orig_finished(**kwargs)
+
+        self.page.on_scan_finished = capture_finished
+        try:
+            with mock.patch.object(runner_mod.time, "monotonic", self.clock), \
+                    mock.patch.object(runner_mod.time, "sleep", lambda _s: None), \
+                    mock.patch.object(runner_mod, "PPMSMotorDebug", Motor):
+                self.page.runner.run(request, sink=self.page)
+        finally:
+            self.page.on_scan_finished = orig_finished
+        if finished.get("error") is not None:
+            raise finished["error"]
+        if finished.get("outcome") == "stopped":
+            raise PPMSScanCancelled(finished.get("status", "Stopped"))
 
     def rows(self):
         with self.page.state.live_csv_path.open(encoding="utf-8-sig", newline="") as handle:

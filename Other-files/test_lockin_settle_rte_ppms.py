@@ -263,6 +263,8 @@ class PPMSWorkerTests(NoWindows):
 
     def run_scan(self, obj, sequence, settings):
         from transport.ppms.engine.runner import ScanRequest
+        if "harmonic_passes" not in settings:
+            settings = dict(settings, harmonic_passes=(dict(settings),))
         request = ScanRequest(
             mode=settings.get("scan_mode", "Field"),
             sequence=sequence,
@@ -423,7 +425,7 @@ class PPMSStartTests(NoWindows):
         obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(False)}
         obj.zurich_harmonic = Var("1")
         obj.zurich_reference = Var("Trigger In 1")
-        obj.zurich_timeconstant = Var("1")
+        obj.zurich_timeconstant = Var(f"{zurich_tau:g}" if zurich_tau is not None else "1")
         if zurich_tau is not None:
             obj.ppms_lockin_selection = {"830_a": Var(True), "zurich": Var(True)}
             obj.state.zurich_controller = types.SimpleNamespace(mfli_connected=True, mfli_has_multi_demod=lambda: True)

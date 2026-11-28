@@ -154,7 +154,7 @@ class RunFolderAndZeroTests(unittest.TestCase):
         self.assertTrue(any(text.startswith("Scan temperature segment: 300 K") for text in notes))
         self.assertIsNone(panel.state.run_recorder, "closed and released")
         # The Yes/No says how every end leaves the outputs.
-        question = page.ask.call_args.args[1]
+        question = page.ask.call_args.args[2]
         self.assertIn("At every end (completed, stopped or failed) the 6221 is switched off and read back as off.",
                       question)
         self.assertIn("the field is not commanded (the CSV's target_field_oe is the field read now, 1234 Oe)",
@@ -361,6 +361,7 @@ class FieldScanEndTests(unittest.TestCase):
         obj.ppms_field_scan_stop_button = mock.Mock()
         obj.ppms_field_scan_save_button = mock.Mock()
         obj.ppms_control_widgets = []
+        obj.ppms_macro_edit_buttons = []
         obj.state.ppms_environment_controller.connected = True
         obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.state.scan_outputs = {"6221": "zeroed"}
@@ -396,6 +397,7 @@ class FieldScanEndTests(unittest.TestCase):
         obj.ppms_field_scan_stop_button = mock.Mock()
         obj.ppms_field_scan_save_button = mock.Mock()
         obj.ppms_control_widgets = []
+        obj.ppms_macro_edit_buttons = []
         obj.state.ppms_environment_controller.connected = True
         obj.ppms_control_safety_var = mock.Mock(get=lambda: False)
         obj.ppms_field_scan_status_var, obj.ppms_field_scan_eta_var = Var(""), Var("")
@@ -444,7 +446,7 @@ class FieldScanEndTests(unittest.TestCase):
         remote.read_environment.side_effect = [{'field_oe': 0., 'field_status': 'StableDriven'},
                                                {'field_oe': 0., 'field_status': 'StablePersistent'}]
         runner.run(ScanRequest(mode="Field", sequence=[], rate_oe_s=100.0, stable_s=0.0, approach_code=1,
-                               transport_settings={}, total_points=0, estimated_seconds=1.0, sr830_tc_code=10))
+                               transport_settings={"harmonic_passes": ({},)}, total_points=0, estimated_seconds=1.0, sr830_tc_code=10))
         self.assertEqual(order, ["scan", "6221 zeroed", ("field", 1), ("field", 0)])
         self.assertTrue(state.zero_persist_completed)
 

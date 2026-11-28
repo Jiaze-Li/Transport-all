@@ -186,7 +186,7 @@ class ModeRegistrationTests(unittest.TestCase):
                        PPMSPanelView.on_scan_finished,
                        PPMSScanRunner.nested_scan_worker,
                        PPMSScanRunner.field_scan_worker,
-                       PPMSPanelView.safe_close_ppms,
+                       PPMSAppState.safe_close,
                        plan_ppms_scan_axes):
             with self.subTest(method=method.__name__):
                 if method is PPMSPanelView.on_scan_finished:
@@ -472,7 +472,7 @@ class SequenceTests(unittest.TestCase):
         self.assertTrue(events[0]["settings"]["field"]["commanded"])
         self.assertEqual(events[-1]["outcome"], "completed")
         self.assertEqual(events[-1]["status"], "Completed; 6221 zeroed")
-        self.assertTrue(panel.ppms_macro_scan_result)
+        self.assertTrue(panel.macro_runner.scan_result)
         with mock.patch.object(panel_mod.filedialog, "asksaveasfilename", return_value="") as save:
             panel.save_ppms_field_scan_csv()
         self.assertEqual(save.call_args.kwargs["initialdir"], str(panel.state.run_folder))
