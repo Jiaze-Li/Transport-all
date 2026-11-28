@@ -331,8 +331,9 @@ class TestDynamicMonkeypatchCompatibility(unittest.TestCase):
             self.assertEqual(res["current_rms_ma"], 30.0)
 
     def test_patch_compliance_limits(self):
-        with mock.patch.object(app, "K6221_MIN_COMPLIANCE_V", 1.0), \
-             mock.patch.object(app, "K6221_MAX_COMPLIANCE_V", 50.0):
+        import transport.ppms.engine.planning as planning
+        with mock.patch.object(planning, "K6221_MIN_COMPLIANCE_V", 1.0), \
+             mock.patch.object(planning, "K6221_MAX_COMPLIANCE_V", 50.0):
             with self.assertRaisesRegex(ValueError, "6221 compliance voltage must be within 1–50 V"):
                 app.validate_ppms_transport_scan_settings(1.0, 100.0, 0.5, 1, 1)
             with self.assertRaisesRegex(ValueError, "6221 compliance voltage must be within 1–50 V"):
@@ -341,7 +342,8 @@ class TestDynamicMonkeypatchCompatibility(unittest.TestCase):
             self.assertEqual(res["compliance_v"], 25.0)
 
     def test_patch_sr830_keys(self):
-        with mock.patch.object(app, "PPMS_SR830_KEYS", ("830_a",)):
+        import transport.ppms.engine.planning as planning
+        with mock.patch.object(planning, "PPMS_SR830_KEYS", ("830_a",)):
             # 830_b is now considered invalid
             with self.assertRaisesRegex(ValueError, "PPMS SR830 slot is invalid"):
                 app.validate_ppms_transport_scan_settings(1.0, 100.0, 10.0, 1, 1, ("830_a", "830_b"))
