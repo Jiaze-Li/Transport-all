@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T05:49:35.921Z",
+  "updatedAt": "2026-11-28T05:56:12.763Z",
   "task": {
     "id": "refactor/ppms-foundation-modularization",
     "branch": "refactor/ppms-foundation-modularization",
     "title": "refactor/ppms-foundation-modularization",
     "task": "Development branch: refactor/ppms-foundation-modularization",
     "started": "2026-11-28T10:59:05+08:00",
-    "status": "In progress",
+    "status": "Completed",
     "current": "fix(ppms): implement setDouble/getDouble on LabOne adapters and mark D1 §2 historical",
     "next": "Review passed (READY); authorize merge of PR #5",
     "history": [
@@ -62,13 +62,15 @@
     ],
     "pr": {
       "number": 5,
-      "state": "open",
+      "state": "closed",
       "title": "refactor(ppms): foundation modularization (D2 + M0 + M1 + independent M2)",
       "url": "https://github.com/Jiaze-Li/Transport-all/pull/5",
-      "merged": false,
-      "updatedAt": "2026-11-28T05:41:42Z"
+      "merged": true,
+      "mergedAt": "2026-11-28T05:56:01Z",
+      "closedAt": "2026-11-28T05:56:01Z",
+      "updatedAt": "2026-11-28T05:56:02Z"
     },
-    "completed": null,
-    "outcome": null
+    "completed": "2026-11-28T05:56:01Z",
+    "outcome": "Merged"
   }
 }
