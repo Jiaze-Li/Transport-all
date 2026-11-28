@@ -185,6 +185,7 @@ class MacroVsScanCancellationTests(unittest.TestCase):
             panel.ppms_macro_edit_buttons = []
             panel.ppms_macro_window = None
             panel._update_ppms_control_ui = mock.Mock()
+            panel._set_ppms_environment_ui = mock.Mock()
             panel.ppms_field_scan_status_var = mock.Mock()
             panel.ppms_field_scan_eta_var = mock.Mock()
             panel.stop_ppms_field_scan = mock.Mock()
@@ -311,7 +312,7 @@ class QueuedScanAndInflightShutdownTests(unittest.TestCase):
         disconnected = threading.Event()
         for key in ("6221", "830_a", "830_b", "830_c", "2400"):
             ctrl = state.ppms_instrument_controllers[key]
-            ctrl.connected = key in ("6221", "830_a")
+            ctrl.instrument = mock.Mock() if key in ("6221", "830_a") else None
             ctrl.resource_name = f"GPIB0::{key}::INSTR"
             ctrl.disconnect = lambda k=key: events.append(f"disconnect:{k}")
         state.ppms_environment_controller = types.SimpleNamespace(

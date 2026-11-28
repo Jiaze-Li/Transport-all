@@ -54,7 +54,6 @@ class DisplayTests(unittest.TestCase):
         for patcher in (mock.patch.object(visa_ctrl, "pyvisa", object()),
                         mock.patch.object(zurich_ctrl, "pyvisa", object()),
                         mock.patch.object(visa_ctrl, "acquire_shared_visa_manager", return_value=manager),
-                        mock.patch.object(zurich_ctrl, "acquire_shared_visa_manager", return_value=manager),
                         mock.patch.object(visa_ctrl, "release_shared_visa_manager"),
                         mock.patch.object(zurich_ctrl, "release_shared_visa_manager"),
                         mock.patch.object(visa_ctrl, "acquire_instrument_lease"),
