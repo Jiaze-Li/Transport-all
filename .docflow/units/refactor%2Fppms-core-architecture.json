@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T09:03:43.943Z",
+  "updatedAt": "2026-11-28T09:10:29.059Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Update remaining PPMS test harness mocks and on_scan_finished calls",
+    "current": "Finish migrating remaining PPMS test harness attributes and assertions",
     "next": "",
     "history": [
       {
@@ -66,6 +66,10 @@
       {
         "at": "2026-11-28T17:03:27+08:00",
         "text": "Fix _update_ppms_control_ui scoping and remaining test plot/live-var mocks"
+      },
+      {
+        "at": "2026-11-28T17:10:17+08:00",
+        "text": "Update remaining PPMS test harness mocks and on_scan_finished calls"
       }
     ],
     "commits": [
@@ -158,6 +162,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T17:03:27+08:00",
         "message": "Update remaining PPMS test harness mocks and on_scan_finished calls"
+      },
+      {
+        "sha": "677589dda17a4752eb42ef09ed3ef000f83cd7d7",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T17:10:17+08:00",
+        "message": "Finish migrating remaining PPMS test harness attributes and assertions"
       }
     ],
     "pr": {
