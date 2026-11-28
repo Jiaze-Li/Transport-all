@@ -384,6 +384,7 @@ class FieldScanEndTests(unittest.TestCase):
     def test_a_stopped_field_scan_says_what_its_field_did(self):
         obj = PPMSPanelView.__new__(PPMSPanelView)
         obj.state = PPMSAppState()
+        obj.state.ppms_environment_controller = types.SimpleNamespace(connected=True, backend="fake")
         obj.shell = types.SimpleNamespace(
             closing=False, root=types.SimpleNamespace(after=lambda _ms, show: show()), thread_log=mock.Mock()
         )

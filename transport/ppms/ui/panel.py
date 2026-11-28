@@ -3610,7 +3610,7 @@ class PPMSPanelView:
                 last_reading=dict(self.state.last_readback or {}),
             ),
             resources=resources,
-            safety_confirmed=bool(box(self.ppms_control_safety_var)),
+            safety_confirmed=bool(box(getattr(self, "ppms_control_safety_var", None))),
         )
 
     def start_ppms_field_scan(self) -> None:

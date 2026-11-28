@@ -298,14 +298,36 @@ class PersistentSetpointTests(unittest.TestCase):
         self.assertIsNone(panel.state.persistent_watch)
 
     def test_zero_and_persist_after_a_scan_ends_the_follow_up(self):
+        from transport.ppms.engine.runner import ScanRequest
+
         panel = self.make_panel()
         self.press(panel, panel.set_ppms_field, (0, "StablePersistent"))
         panel.ppms_field_scan_status_var = Var("")
-        panel.ppms_zero_persist_pending = True
-        panel._ppms_nested_scan_worker = Mock()
+        panel.ppms_field_scan_eta_var = Var("")
+        panel.macro_runner = Mock()
+        panel.ppms_field_scan_stop_button = Mock()
+        panel.ppms_field_scan_save_button = Mock()
+        panel.ppms_control_widgets = []
+        panel.ppms_control_safety_var = Var(True)
+        panel.state.zero_persist_pending = True
+        panel.runner.nested_scan_worker = Mock()
+        panel.state.ppms_environment_controller.connected = True
         panel.state.ppms_environment_controller.read_environment.side_effect = [
             reading(0, "StableDriven"), reading(0, "StablePersistent")]
-        panel._ppms_scan_with_final_field()
+        panel.runner.run(
+            ScanRequest(
+                mode="Field",
+                sequence=(),
+                rate_oe_s=100.0,
+                stable_s=0.0,
+                approach_code=0,
+                transport_settings={"harmonic_passes": ({"active_lockins": ()},)},
+                total_points=0,
+                estimated_seconds=0.0,
+                sr830_tc_code=10,
+            ),
+            sink=panel,
+        )
         self.assertEqual(panel.ppms_connection_var.get(),
                          "Zero + persist now sets the field; Persistent no longer followed")
         self.assertIsNone(panel.state.persistent_watch)

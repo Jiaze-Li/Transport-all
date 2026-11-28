@@ -279,7 +279,7 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
         setattr(page, name, Var(value))
     for key, value in zip(PPMS_SR830_KEYS, ("1", "2", "3")):
         setattr(page, PPMS_SR830_HARMONIC_ATTRS[key], Var(value))
-    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND)
+    page.state.ppms_environment_controller = types.SimpleNamespace(backend=PPMS_QDINSTRUMENT_BACKEND, connected=True)
     page.state.ppms_instrument_controllers = {
         key: types.SimpleNamespace(connected=True, resource_name=f"GPIB0::{address}::INSTR")
         for key, address in (("6221", 30), ("830_a", 8), ("830_b", 9), ("830_c", 10))}
@@ -290,11 +290,14 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
         setattr(page, name, mock.Mock())
     page.ppms_field_scan_status_var = Var("")
     estimates = []
-    format_duration = page._format_scan_duration
-    page._format_scan_duration = lambda seconds: estimates.append(seconds) or format_duration(seconds)
+    import transport.ppms.ui.dialogs as dialogs_mod
+
+    format_duration = panel_mod.format_scan_duration
     with tempfile.TemporaryDirectory() as folder, \
-            mock.patch.object(panel_mod.simpledialog, "askstring", return_value=""), \
-            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True) as ask, \
+            mock.patch.object(panel_mod, "format_scan_duration", lambda seconds: estimates.append(seconds) or format_duration(seconds)), \
+            mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""), \
+            mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True), \
+            mock.patch.object(panel_mod, "ask_scan_start", return_value=True) as ask, \
             mock.patch.object(panel_mod.filedialog, "askdirectory", return_value=folder), \
             mock.patch.object(panel_mod.messagebox, "showerror") as error:
         page.start_ppms_field_scan()
@@ -306,7 +309,7 @@ def launcher(test, main_row=("0", "10", "5"), outer=("0", "2000", "1000"), rate=
         # folder goes.
         page.run_log_text = page.state.run_recorder.log_path.read_text(encoding="utf-8")
     request = page.state.ppms_executor.submit.call_args.args[1]
-    return page, ask.call_args.args[1], request.sequence, request.transport_settings, estimates[0]
+    return page, ask.call_args.args[2], request.sequence, request.transport_settings, estimates[0]
 
 
 class StartTests(unittest.TestCase):

@@ -553,11 +553,11 @@ def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"),
         setattr(page, name, mock.Mock())
     page.ppms_field_scan_status_var = Var("")
     estimates = []
-    format_duration = page._format_scan_duration
-    page._format_scan_duration = lambda seconds: estimates.append(seconds) or format_duration(seconds)
+    format_duration = panel_mod.format_scan_duration
     import transport.ppms.ui.dialogs as dialogs_mod
 
     with tempfile.TemporaryDirectory() as folder, \
+            mock.patch.object(panel_mod, "format_scan_duration", lambda seconds: estimates.append(seconds) or format_duration(seconds)), \
             mock.patch.object(dialogs_mod.simpledialog, "askstring", return_value=""), \
             mock.patch.object(panel_mod.messagebox, "askyesno", return_value=True), \
             mock.patch.object(panel_mod, "ask_scan_start", return_value=True) as ask, \
@@ -569,7 +569,7 @@ def launcher(test, mode, main_row, outer=("7", "97"), harmonics=("1", "2", "3"),
             return error.call_args.args[1]
     test.assertTrue(page.state.scan_running)
     request = page.state.ppms_executor.submit.call_args.args[1]
-    return page, ask.call_args.args[1], request.transport_settings, estimates[0]
+    return page, ask.call_args.args[2], request.transport_settings, estimates[0]
 
 
 class StartTests(unittest.TestCase):

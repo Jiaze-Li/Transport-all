@@ -131,6 +131,7 @@ class NestedTests(unittest.TestCase):
             "830_a": types.SimpleNamespace(connected=True, resource_name="GPIB0::8::INSTR")
         }
         obj.ppms_plot_angle_range = None
+        obj.ppms_plot_addresses = {'830_a': 8}
         obj.state.scan_rows = [dict(sr830_8_r_v=1, sr830_8_x_v=2,
             sr830_8_y_v=3, measured_field_oe=10, temperature_k=300+i,
             measured_angle_deg=20+i, angle_index=1, temperature_index=i+1)
