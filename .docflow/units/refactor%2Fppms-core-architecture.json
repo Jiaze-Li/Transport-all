@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-28T10:11:21.627Z",
+  "updatedAt": "2026-11-28T10:14:52.137Z",
   "task": {
     "id": "refactor/ppms-core-architecture",
     "branch": "refactor/ppms-core-architecture",
@@ -8,7 +8,7 @@
     "task": "Development branch: refactor/ppms-core-architecture",
     "started": "2026-11-28T13:56:46+08:00",
     "status": "In progress",
-    "current": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)",
+    "current": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow",
     "next": "",
     "history": [
       {
@@ -106,6 +106,10 @@
       {
         "at": "2026-11-28T18:11:05+08:00",
         "text": "Fix final 4 PPMS test modules (messagebox mock, autorange sink kwargs, macro window)"
+      },
+      {
+        "at": "2026-11-28T18:14:38+08:00",
+        "text": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)"
       }
     ],
     "commits": [
@@ -258,6 +262,12 @@
         "branch": "refactor/ppms-core-architecture",
         "timestamp": "2026-11-28T18:11:05+08:00",
         "message": "Fix final 2 test assertions (state.scan_outputs and temperature plot grouping)"
+      },
+      {
+        "sha": "1c21a7d4fd8082b21566bb1f68543ed17f8ebe02",
+        "branch": "refactor/ppms-core-architecture",
+        "timestamp": "2026-11-28T18:14:38+08:00",
+        "message": "Fix APP_VERSION lookup path in Transport_PPMS.spec and Windows exe workflow"
       }
     ],
     "pr": {
